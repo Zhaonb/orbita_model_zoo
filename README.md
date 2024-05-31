@@ -3,7 +3,7 @@ onnx：预训练模型、测试图像
 projects：测试工程  
 # 支持的模型
 模型|模型类型|量化类型|预训练模型
-:---:|:---:|:---:|:---:
+:---:|:---:|:---:|:---:|:---:
 bvlc_googlenet|分类网络|UINT8|超链接
 inception_v3|分类网络|UINT8|超链接
 resnet_v1_50|分类网络|UINT8|超链接
@@ -12,6 +12,7 @@ rtmdet|检测网络|UINT8|超链接
 yolov5|检测网络|UINT8|超链接
 yolov8|检测网络|UINT8|超链接
 yolov8|检测网络|UINT8|*[yolov8s.onnx](https://github.com/Zhaonb/orbita_model_zoo/blob/main/onnx/yolov8s_onnx/yolov8s_test.onnx)*
+yolov8|检测网络|UINT8|*[yolov8s.onnx](https://pan.baidu.com/s/1XU6pNBz4LvyY7FGKhzp3WQ?pwd=j1qq)*
 yolov10|检测网络|UINT8|超链接
 SW_IR|超分网络|UINT8|超链接
 deeplabv3|分割网络|UINT8|超链接

@@ -1,0 +1,49 @@
+# !!!This file disallow TABs!!!
+# "category" allowed values: "image, frequency, undefined"
+# "database" allowed types: "TEXT, NPY, H5FS, SQLITE, LMDB, GENERATOR, ZIP"
+# "tensor_name" only support in H5FS database
+# "preproc_type" allowed types:"IMAGE_RGB, IMAGE_RGB888_PLANAR, IMAGE_RGB888_PLANAR_SEP, IMAGE_I420, 
+# IMAGE_NV12,IMAGE_NV21, IMAGE_YUV444, IMAGE_YUYV422, IMAGE_UYVY422, IMAGE_GRAY, IMAGE_BGRA, TENSOR"
+input_meta:
+  databases:
+  - path: dataset.txt
+    type: TEXT
+    ports:
+    - lid: images_215
+      category: image
+      dtype: float32
+      sparse: false
+      tensor_name:
+      layout: nchw
+      shape:
+      - 1
+      - 3
+      - 640
+      - 640
+      fitting: scale
+      preprocess:
+        reverse_channel: true
+        mean:
+        - 0
+        - 0
+        - 0
+        scale: 0.003921568627451
+        preproc_node_params:
+          add_preproc_node: false
+          preproc_type: IMAGE_RGB
+          preproc_image_size:
+          - 640
+          - 640
+          preproc_crop:
+            enable_preproc_crop: false
+            crop_rect:
+            - 0
+            - 0
+            - 640
+            - 640
+          preproc_perm:
+          - 0
+          - 1
+          - 2
+          - 3
+      redirect_to_output: false

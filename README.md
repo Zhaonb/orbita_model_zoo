@@ -1,9 +1,7 @@
-# orbita_model_zoo
-onnx：预训练模型、测试图像  
-projects：测试工程  
-# 支持的模型
-模型|模型类型|量化类型|预训练模型|Yulong810平台工程
-:---:|:---:|:---:|:---:|:---:
+# Model_Zoo
+
+模型|模型类型|量化类型|预训练模型|
+:---:|:---:|:---:|:---:|
 bvlc_googlenet|分类网络|UINT8|[bvlc_googlenet](https://pan.baidu.com/s/1KEbeTpKqGjho6UcGvHNzoQ?pwd=kcdz)
 inception_v3|分类网络|UINT8|[inception_v3](https://pan.baidu.com/s/1apNqNE1vSu9iFhxhEYr9Cg?pwd=7po8)
 resnet_v1_50|分类网络|UINT8|[resnet_v1_50](https://pan.baidu.com/s/18inGdun6o0dcaQP8xOb-Hw?pwd=5phx)

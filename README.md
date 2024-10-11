@@ -55,6 +55,12 @@ For Linux Yulong810A develop board:
         # Run YOLOv10s detection from the command line
         sh run.sh
         ```
+## Release Notes
 
+| Version |         Description          |
+|:-------:|:----------------------------:|
+|  1.0.0  | Yolo detection demo release. |
 
-
+## NPU Resource
+Yulong810A:https://seafile.myorbita.net/d/e101c7511f544d0fa375/  
+YLANNTools:https://seafile.myorbita.net/d/1df4a9c18aaf47538e7f/ 

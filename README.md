@@ -68,3 +68,6 @@ For Linux Yulong810A develop board:
 | Yulong810A | https://pan.baidu.com/s/1UJXPJVsUd6BK-Cz55td0kw?pwd=71A6 | obt@2024 |
 | YLANNTools | https://pan.baidu.com/s/1YtblDr1vxg_n_tzQgrk-IQ?pwd=aMt6 | obt@2024 |
 
+## License
+[Apache License 2.0](https://github.com/Zhaonb/orbita_model_zoo/blob/main/LICENSE) 
+

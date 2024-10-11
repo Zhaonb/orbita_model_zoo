@@ -62,5 +62,9 @@ For Linux Yulong810A develop board:
 |  1.0.0  | Yolo detection demo release. |
 
 ## NPU Resource
-Yulong810A:https://seafile.myorbita.net/d/e101c7511f544d0fa375/  
-YLANNTools:https://seafile.myorbita.net/d/1df4a9c18aaf47538e7f/ 
+
+| Version    | Description                                              | Passwd   |
+|:-----------|:---------------------------------------------------------|----------|
+| Yulong810A | https://pan.baidu.com/s/1UJXPJVsUd6BK-Cz55td0kw?pwd=71A6 | obt@2024 |
+| YLANNTools | https://pan.baidu.com/s/1YtblDr1vxg_n_tzQgrk-IQ?pwd=aMt6 | obt@2024 |
+

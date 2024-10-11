@@ -36,7 +36,6 @@ In addition to exporting the model from the corresponding respository.
 | Object Detection |     yolov8s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |     40     |
 | Object Detection |    yolov10s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |     55     |
 | Object Detection |     yolo11s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |     55     |
-| Object Detection |     yolo11s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |     55     |
 
 
 <ul>
@@ -44,6 +43,18 @@ In addition to exporting the model from the corresponding respository.
 <li>This performance data calculate the time-consuming of model inference. Does not include the time-consuming of pre-processing and post-processing if not specified.</li>
 </ul>
 
+## Make & Run Demo
+For Linux Yulong810A develop board:
+
+=== "CLI"
+
+        ```bash
+        # Make YOLOv10s detection from the command line
+        cd ~/root/workspace/01_Detection/yolov10s_shape_slim_uint8  # Adjust model  as needed
+        make
+        # Run YOLOv10s detection from the command line
+        sh run.sh
+        ```
 
 
 

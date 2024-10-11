@@ -13,12 +13,12 @@ Model Zoo relies on Toolkit for model conversion. The Linux compilation tool cha
 ## Model support
 In addition to exporting the model from the corresponding respository.
 
-|     Category     |     Name     |   Dtype   | Model Download Link | Support platform |
-|:----------------:|:------------:|:---------:|:-------------------:|:----------------:|
-|  Classification  | resnet_v1_50 | FP16/INT8 |                     |                  |
-| Object Detection |   yolov5s    | FP16/INT8 |                     |                  |
-| Object Detection |   yolov8s    | FP16/INT8 |                     |                  |
-| Object Detection |   yolov10s   | FP16/INT8 |                     |                  |
+|     Category     |     Name     |   Dtype   |                           Model Download Link                            | Support platform |
+|:----------------:|:------------:|:---------:|:------------------------------------------------------------------------:|:----------------:|
+|  Classification  | resnet_v1_50 | FP16/INT8 | [resnet_v1_50](https://pan.baidu.com/s/1ATmP4T9veiUCL_OG8nmnyA?pwd=r284) |    Yulong810A    |
+| Object Detection |   yolov5s    | FP16/INT8 |   [yolov5s](https://pan.baidu.com/s/1ATmP4T9veiUCL_OG8nmnyA?pwd=r284)    |    Yulong810A    |
+| Object Detection |   yolov8s    | FP16/INT8 |   [yolov8s](https://pan.baidu.com/s/1ATmP4T9veiUCL_OG8nmnyA?pwd=r284)    |    Yulong810A    |
+| Object Detection |   yolov10s   | FP16/INT8 |   [yolov10s](https://pan.baidu.com/s/1ATmP4T9veiUCL_OG8nmnyA?pwd=r284)   |    Yulong810A    |
 
 ## Model performance benchmark(FPS)
 

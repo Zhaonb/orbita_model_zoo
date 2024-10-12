@@ -13,12 +13,12 @@ Model Zoo relies on Toolkit for model conversion. The Linux compilation tool cha
 ## Model support
 In addition to exporting the model from the corresponding respository.
 
-|     Category     |     Name     |   Dtype   |                           Model Download Link                            | Support platform |
-|:----------------:|:------------:|:---------:|:------------------------------------------------------------------------:|:----------------:|
-|  Classification  | resnet_v1_50 | FP16/INT8 | [resnet_v1_50](https://pan.baidu.com/s/1ATmP4T9veiUCL_OG8nmnyA?pwd=r284) |    Yulong810A    |
-| Object Detection |   yolov5s    | FP16/INT8 |   [yolov5s](https://pan.baidu.com/s/1ATmP4T9veiUCL_OG8nmnyA?pwd=r284)    |    Yulong810A    |
-| Object Detection |   yolov8s    | FP16/INT8 |   [yolov8s](https://pan.baidu.com/s/1ATmP4T9veiUCL_OG8nmnyA?pwd=r284)    |    Yulong810A    |
-| Object Detection |   yolov10s   | FP16/INT8 |   [yolov10s](https://pan.baidu.com/s/1ATmP4T9veiUCL_OG8nmnyA?pwd=r284)   |    Yulong810A    |
+|     Category     |     Name     |   Dtype   |                                       Model Download Link                                        | Support platform |
+|:----------------:|:------------:|:---------:|:------------------------------------------------------------------------------------------------:|:----------------:|
+|  Classification  | resnet_v1_50 | FP16/INT8 | [resnet_v1_50](https://github.com/Zhaonb/orbita_model_zoo/tree/main/examples/resnet_v1_50/model) |    Yulong810A    |
+| Object Detection |   yolov5s    | FP16/INT8 |      [yolov5s](https://github.com/Zhaonb/orbita_model_zoo/tree/main/examples/yolov5s/model)      |    Yulong810A    |
+| Object Detection |   yolov8s    | FP16/INT8 |               [yolov8s](https://pan.baidu.com/s/1ATmP4T9veiUCL_OG8nmnyA?pwd=r284)                |    Yulong810A    |
+| Object Detection |   yolov10s   | FP16/INT8 |               [yolov10s](https://pan.baidu.com/s/1ATmP4T9veiUCL_OG8nmnyA?pwd=r284)               |    Yulong810A    |
 
 ## Model performance benchmark(FPS)
 

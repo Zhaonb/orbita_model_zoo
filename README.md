@@ -64,10 +64,10 @@ $ sh run.sh
 
 ## NPU Resource
 
-| Version    | Description                                              | Passwd   |
-|:-----------|:---------------------------------------------------------|----------|
-| Yulong810A | https://pan.baidu.com/s/1tOSytyp5UTcehBjmIfTU0w?pwd=pwux | pwux |
-| YLANNTools | https://pan.baidu.com/s/1D49hZQZYKiZzqp90Ey0_2w?pwd=tryx | tryx |
+| Version    | Description                                              | Passwd |
+|:-----------|:---------------------------------------------------------|--------|
+| Yulong810A | https://pan.baidu.com/s/1tOSytyp5UTcehBjmIfTU0w?pwd=pwux | pwux   |
+| YLANNTools | https://pan.baidu.com/s/1D49hZQZYKiZzqp90Ey0_2w?pwd=tryx | tryx   |
 
 ## License
 [Apache License 2.0](https://github.com/Zhaonb/orbita_model_zoo/blob/main/LICENSE) 

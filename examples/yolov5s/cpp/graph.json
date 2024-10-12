@@ -1,0 +1,1851 @@
+{
+	"MetaData":{
+		"Name": "Ovxlib_Debug_Graph",
+		"AcuityVersion": "UNKNOWN",
+		"Platform": "UNKNOWN",
+		"Org_Platform": "UNKNOWN"
+	},
+	"Layers":{
+		"uid_190":{
+			"op": "CONV2D",
+			"inputs": [ "@data_input_uid_143:out0", "@data_input_uid_144:out0", "@data_input_uid_145:out0" ],
+			"inut_shape": [ [ 640, 640, 3, 1 ],[ 6, 6, 3, 32 ],[ 32 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 320, 320, 32, 1 ] ]
+		},
+		"uid_175":{
+			"op": "SWISH",
+			"inputs": [ "@uid_190:out0" ],
+			"inut_shape": [ [ 320, 320, 32, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 320, 320, 32, 1 ] ]
+		},
+		"uid_174":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_175:out0", "@data_input_uid_146:out0", "@data_input_uid_147:out0" ],
+			"inut_shape": [ [ 320, 320, 32, 1 ],[ 3, 3, 32, 64 ],[ 64 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 64, 1 ] ]
+		},
+		"uid_159":{
+			"op": "SWISH",
+			"inputs": [ "@uid_174:out0" ],
+			"inut_shape": [ [ 160, 160, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 64, 1 ] ]
+		},
+		"uid_145":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_159:out0", "@data_input_uid_148:out0", "@data_input_uid_149:out0" ],
+			"inut_shape": [ [ 160, 160, 64, 1 ],[ 1, 1, 64, 32 ],[ 32 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 32, 1 ] ]
+		},
+		"uid_170":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_159:out0", "@data_input_uid_150:out0", "@data_input_uid_151:out0" ],
+			"inut_shape": [ [ 160, 160, 64, 1 ],[ 1, 1, 64, 32 ],[ 32 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 32, 1 ] ]
+		},
+		"uid_132":{
+			"op": "SWISH",
+			"inputs": [ "@uid_145:out0" ],
+			"inut_shape": [ [ 160, 160, 32, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 32, 1 ] ]
+		},
+		"uid_157":{
+			"op": "SWISH",
+			"inputs": [ "@uid_170:out0" ],
+			"inut_shape": [ [ 160, 160, 32, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 32, 1 ] ]
+		},
+		"uid_192":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_157:out0", "@data_input_uid_152:out0", "@data_input_uid_153:out0" ],
+			"inut_shape": [ [ 160, 160, 32, 1 ],[ 1, 1, 32, 32 ],[ 32 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 32, 1 ] ]
+		},
+		"uid_188":{
+			"op": "SWISH",
+			"inputs": [ "@uid_192:out0" ],
+			"inut_shape": [ [ 160, 160, 32, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 32, 1 ] ]
+		},
+		"uid_172":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_188:out0", "@data_input_uid_154:out0", "@data_input_uid_155:out0" ],
+			"inut_shape": [ [ 160, 160, 32, 1 ],[ 3, 3, 32, 32 ],[ 32 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 32, 1 ] ]
+		},
+		"uid_158":{
+			"op": "SWISH",
+			"inputs": [ "@uid_172:out0" ],
+			"inut_shape": [ [ 160, 160, 32, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 32, 1 ] ]
+		},
+		"uid_144":{
+			"op": "ADD",
+			"inputs": [ "@uid_157:out0", "@uid_158:out0" ],
+			"inut_shape": [ [ 160, 160, 32, 1 ],[ 160, 160, 32, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 32, 1 ] ]
+		},
+		"uid_131":{
+			"op": "CONCAT",
+			"inputs": [ "@uid_144:out0", "@uid_132:out0" ],
+			"inut_shape": [ [ 160, 160, 32, 1 ],[ 160, 160, 32, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 64, 1 ] ]
+		},
+		"uid_116":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_131:out0", "@data_input_uid_156:out0", "@data_input_uid_157:out0" ],
+			"inut_shape": [ [ 160, 160, 64, 1 ],[ 1, 1, 64, 64 ],[ 64 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 64, 1 ] ]
+		},
+		"uid_106":{
+			"op": "SWISH",
+			"inputs": [ "@uid_116:out0" ],
+			"inut_shape": [ [ 160, 160, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 160, 160, 64, 1 ] ]
+		},
+		"uid_104":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_106:out0", "@data_input_uid_158:out0", "@data_input_uid_159:out0" ],
+			"inut_shape": [ [ 160, 160, 64, 1 ],[ 3, 3, 64, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 128, 1 ] ]
+		},
+		"uid_93":{
+			"op": "SWISH",
+			"inputs": [ "@uid_104:out0" ],
+			"inut_shape": [ [ 80, 80, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 128, 1 ] ]
+		},
+		"uid_80":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_93:out0", "@data_input_uid_160:out0", "@data_input_uid_161:out0" ],
+			"inut_shape": [ [ 80, 80, 128, 1 ],[ 1, 1, 128, 64 ],[ 64 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_125":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_93:out0", "@data_input_uid_162:out0", "@data_input_uid_163:out0" ],
+			"inut_shape": [ [ 80, 80, 128, 1 ],[ 1, 1, 128, 64 ],[ 64 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_76":{
+			"op": "SWISH",
+			"inputs": [ "@uid_80:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_112":{
+			"op": "SWISH",
+			"inputs": [ "@uid_125:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_142":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_112:out0", "@data_input_uid_164:out0", "@data_input_uid_165:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ],[ 1, 1, 64, 64 ],[ 64 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_130":{
+			"op": "SWISH",
+			"inputs": [ "@uid_142:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_127":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_130:out0", "@data_input_uid_166:out0", "@data_input_uid_167:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ],[ 3, 3, 64, 64 ],[ 64 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_113":{
+			"op": "SWISH",
+			"inputs": [ "@uid_127:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_101":{
+			"op": "ADD",
+			"inputs": [ "@uid_112:out0", "@uid_113:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ],[ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_129":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_101:out0", "@data_input_uid_168:out0", "@data_input_uid_169:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ],[ 1, 1, 64, 64 ],[ 64 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_114":{
+			"op": "SWISH",
+			"inputs": [ "@uid_129:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_102":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_114:out0", "@data_input_uid_170:out0", "@data_input_uid_171:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ],[ 3, 3, 64, 64 ],[ 64 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_92":{
+			"op": "SWISH",
+			"inputs": [ "@uid_102:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_91":{
+			"op": "ADD",
+			"inputs": [ "@uid_101:out0", "@uid_92:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ],[ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_75":{
+			"op": "CONCAT",
+			"inputs": [ "@uid_91:out0", "@uid_76:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ],[ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 128, 1 ] ]
+		},
+		"uid_58":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_75:out0", "@data_input_uid_172:out0", "@data_input_uid_173:out0" ],
+			"inut_shape": [ [ 80, 80, 128, 1 ],[ 1, 1, 128, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 128, 1 ] ]
+		},
+		"uid_44":{
+			"op": "SWISH",
+			"inputs": [ "@uid_58:out0" ],
+			"inut_shape": [ [ 80, 80, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 128, 1 ] ]
+		},
+		"uid_156":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_44:out0", "@data_input_uid_174:out0", "@data_input_uid_175:out0" ],
+			"inut_shape": [ [ 80, 80, 128, 1 ],[ 3, 3, 128, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 256, 1 ] ]
+		},
+		"uid_154":{
+			"op": "SWISH",
+			"inputs": [ "@uid_156:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 256, 1 ] ]
+		},
+		"uid_141":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_154:out0", "@data_input_uid_176:out0", "@data_input_uid_177:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ],[ 1, 1, 256, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_201":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_154:out0", "@data_input_uid_178:out0", "@data_input_uid_179:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ],[ 1, 1, 256, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_139":{
+			"op": "SWISH",
+			"inputs": [ "@uid_141:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_196":{
+			"op": "SWISH",
+			"inputs": [ "@uid_201:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_204":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_196:out0", "@data_input_uid_180:out0", "@data_input_uid_181:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 1, 1, 128, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_200":{
+			"op": "SWISH",
+			"inputs": [ "@uid_204:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_199":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_200:out0", "@data_input_uid_182:out0", "@data_input_uid_183:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 3, 3, 128, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_197":{
+			"op": "SWISH",
+			"inputs": [ "@uid_199:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_182":{
+			"op": "ADD",
+			"inputs": [ "@uid_196:out0", "@uid_197:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_195":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_182:out0", "@data_input_uid_184:out0", "@data_input_uid_185:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 1, 1, 128, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_187":{
+			"op": "SWISH",
+			"inputs": [ "@uid_195:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_186":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_187:out0", "@data_input_uid_186:out0", "@data_input_uid_187:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 3, 3, 128, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_183":{
+			"op": "SWISH",
+			"inputs": [ "@uid_186:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_165":{
+			"op": "ADD",
+			"inputs": [ "@uid_182:out0", "@uid_183:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_184":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_165:out0", "@data_input_uid_188:out0", "@data_input_uid_189:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 1, 1, 128, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_168":{
+			"op": "SWISH",
+			"inputs": [ "@uid_184:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_166":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_168:out0", "@data_input_uid_190:out0", "@data_input_uid_191:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 3, 3, 128, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_153":{
+			"op": "SWISH",
+			"inputs": [ "@uid_166:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_152":{
+			"op": "ADD",
+			"inputs": [ "@uid_165:out0", "@uid_153:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_138":{
+			"op": "CONCAT",
+			"inputs": [ "@uid_152:out0", "@uid_139:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 256, 1 ] ]
+		},
+		"uid_123":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_138:out0", "@data_input_uid_192:out0", "@data_input_uid_193:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ],[ 1, 1, 256, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 256, 1 ] ]
+		},
+		"uid_111":{
+			"op": "SWISH",
+			"inputs": [ "@uid_123:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 256, 1 ] ]
+		},
+		"uid_163":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_111:out0", "@data_input_uid_194:out0", "@data_input_uid_195:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ],[ 3, 3, 256, 512 ],[ 512 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 512, 1 ] ]
+		},
+		"uid_151":{
+			"op": "SWISH",
+			"inputs": [ "@uid_163:out0" ],
+			"inut_shape": [ [ 20, 20, 512, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 512, 1 ] ]
+		},
+		"uid_148":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_151:out0", "@data_input_uid_196:out0", "@data_input_uid_197:out0" ],
+			"inut_shape": [ [ 20, 20, 512, 1 ],[ 1, 1, 512, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_176":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_151:out0", "@data_input_uid_198:out0", "@data_input_uid_199:out0" ],
+			"inut_shape": [ [ 20, 20, 512, 1 ],[ 1, 1, 512, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_134":{
+			"op": "SWISH",
+			"inputs": [ "@uid_148:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_161":{
+			"op": "SWISH",
+			"inputs": [ "@uid_176:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_194":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_161:out0", "@data_input_uid_200:out0", "@data_input_uid_201:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ],[ 1, 1, 256, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_180":{
+			"op": "SWISH",
+			"inputs": [ "@uid_194:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_178":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_180:out0", "@data_input_uid_202:out0", "@data_input_uid_203:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ],[ 3, 3, 256, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_162":{
+			"op": "SWISH",
+			"inputs": [ "@uid_178:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_147":{
+			"op": "ADD",
+			"inputs": [ "@uid_161:out0", "@uid_162:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ],[ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_133":{
+			"op": "CONCAT",
+			"inputs": [ "@uid_147:out0", "@uid_134:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ],[ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 512, 1 ] ]
+		},
+		"uid_118":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_133:out0", "@data_input_uid_204:out0", "@data_input_uid_205:out0" ],
+			"inut_shape": [ [ 20, 20, 512, 1 ],[ 1, 1, 512, 512 ],[ 512 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 512, 1 ] ]
+		},
+		"uid_107":{
+			"op": "SWISH",
+			"inputs": [ "@uid_118:out0" ],
+			"inut_shape": [ [ 20, 20, 512, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 512, 1 ] ]
+		},
+		"uid_97":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_107:out0", "@data_input_uid_206:out0", "@data_input_uid_207:out0" ],
+			"inut_shape": [ [ 20, 20, 512, 1 ],[ 1, 1, 512, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_94":{
+			"op": "SWISH",
+			"inputs": [ "@uid_97:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_95":{
+			"op": "POOL",
+			"inputs": [ "@uid_94:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_86":{
+			"op": "POOL",
+			"inputs": [ "@uid_95:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_85":{
+			"op": "POOL",
+			"inputs": [ "@uid_86:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_82":{
+			"op": "CONCAT",
+			"inputs": [ "@uid_94:out0", "@uid_95:out0", "@uid_86:out0", "@uid_85:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ],[ 20, 20, 256, 1 ],[ 20, 20, 256, 1 ],[ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 1024, 1 ] ]
+		},
+		"uid_81":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_82:out0", "@data_input_uid_208:out0", "@data_input_uid_209:out0" ],
+			"inut_shape": [ [ 20, 20, 1024, 1 ],[ 1, 1, 1024, 512 ],[ 512 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 512, 1 ] ]
+		},
+		"uid_64":{
+			"op": "SWISH",
+			"inputs": [ "@uid_81:out0" ],
+			"inut_shape": [ [ 20, 20, 512, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 512, 1 ] ]
+		},
+		"uid_48":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_64:out0", "@data_input_uid_210:out0", "@data_input_uid_211:out0" ],
+			"inut_shape": [ [ 20, 20, 512, 1 ],[ 1, 1, 512, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_36":{
+			"op": "SWISH",
+			"inputs": [ "@uid_48:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_122":{
+			"op": "RESIZE",
+			"inputs": [ "@uid_36:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 256, 1 ] ]
+		},
+		"uid_110":{
+			"op": "CONCAT",
+			"inputs": [ "@uid_122:out0", "@uid_111:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ],[ 40, 40, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 512, 1 ] ]
+		},
+		"uid_99":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_110:out0", "@data_input_uid_212:out0", "@data_input_uid_213:out0" ],
+			"inut_shape": [ [ 40, 40, 512, 1 ],[ 1, 1, 512, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_150":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_110:out0", "@data_input_uid_214:out0", "@data_input_uid_215:out0" ],
+			"inut_shape": [ [ 40, 40, 512, 1 ],[ 1, 1, 512, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_90":{
+			"op": "SWISH",
+			"inputs": [ "@uid_99:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_136":{
+			"op": "SWISH",
+			"inputs": [ "@uid_150:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_135":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_136:out0", "@data_input_uid_216:out0", "@data_input_uid_217:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 1, 1, 128, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_120":{
+			"op": "SWISH",
+			"inputs": [ "@uid_135:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_108":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_120:out0", "@data_input_uid_218:out0", "@data_input_uid_219:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 3, 3, 128, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_98":{
+			"op": "SWISH",
+			"inputs": [ "@uid_108:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_88":{
+			"op": "CONCAT",
+			"inputs": [ "@uid_98:out0", "@uid_90:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 256, 1 ] ]
+		},
+		"uid_87":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_88:out0", "@data_input_uid_220:out0", "@data_input_uid_221:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ],[ 1, 1, 256, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 256, 1 ] ]
+		},
+		"uid_70":{
+			"op": "SWISH",
+			"inputs": [ "@uid_87:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 256, 1 ] ]
+		},
+		"uid_53":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_70:out0", "@data_input_uid_222:out0", "@data_input_uid_223:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ],[ 1, 1, 256, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_40":{
+			"op": "SWISH",
+			"inputs": [ "@uid_53:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_57":{
+			"op": "RESIZE",
+			"inputs": [ "@uid_40:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 128, 1 ] ]
+		},
+		"uid_43":{
+			"op": "CONCAT",
+			"inputs": [ "@uid_57:out0", "@uid_44:out0" ],
+			"inut_shape": [ [ 80, 80, 128, 1 ],[ 80, 80, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 256, 1 ] ]
+		},
+		"uid_31":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_43:out0", "@data_input_uid_224:out0", "@data_input_uid_225:out0" ],
+			"inut_shape": [ [ 80, 80, 256, 1 ],[ 1, 1, 256, 64 ],[ 64 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_89":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_43:out0", "@data_input_uid_226:out0", "@data_input_uid_227:out0" ],
+			"inut_shape": [ [ 80, 80, 256, 1 ],[ 1, 1, 256, 64 ],[ 64 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_23":{
+			"op": "SWISH",
+			"inputs": [ "@uid_31:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_73":{
+			"op": "SWISH",
+			"inputs": [ "@uid_89:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_72":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_73:out0", "@data_input_uid_228:out0", "@data_input_uid_229:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ],[ 1, 1, 64, 64 ],[ 64 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_55":{
+			"op": "SWISH",
+			"inputs": [ "@uid_72:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_41":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_55:out0", "@data_input_uid_230:out0", "@data_input_uid_231:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ],[ 3, 3, 64, 64 ],[ 64 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_30":{
+			"op": "SWISH",
+			"inputs": [ "@uid_41:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 64, 1 ] ]
+		},
+		"uid_22":{
+			"op": "CONCAT",
+			"inputs": [ "@uid_30:out0", "@uid_23:out0" ],
+			"inut_shape": [ [ 80, 80, 64, 1 ],[ 80, 80, 64, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 128, 1 ] ]
+		},
+		"uid_16":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_22:out0", "@data_input_uid_232:out0", "@data_input_uid_233:out0" ],
+			"inut_shape": [ [ 80, 80, 128, 1 ],[ 1, 1, 128, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 128, 1 ] ]
+		},
+		"uid_11":{
+			"op": "SWISH",
+			"inputs": [ "@uid_16:out0" ],
+			"inut_shape": [ [ 80, 80, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 128, 1 ] ]
+		},
+		"uid_8":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_11:out0", "@data_input_uid_234:out0", "@data_input_uid_235:out0" ],
+			"inut_shape": [ [ 80, 80, 128, 1 ],[ 1, 1, 128, 255 ],[ 255 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 80, 80, 255, 1 ] ]
+		},
+		"uid_68":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_11:out0", "@data_input_uid_236:out0", "@data_input_uid_237:out0" ],
+			"inut_shape": [ [ 80, 80, 128, 1 ],[ 3, 3, 128, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_52":{
+			"op": "SWISH",
+			"inputs": [ "@uid_68:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_39":{
+			"op": "CONCAT",
+			"inputs": [ "@uid_52:out0", "@uid_40:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 256, 1 ] ]
+		},
+		"uid_28":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_39:out0", "@data_input_uid_238:out0", "@data_input_uid_239:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ],[ 1, 1, 256, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_83":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_39:out0", "@data_input_uid_240:out0", "@data_input_uid_241:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ],[ 1, 1, 256, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_21":{
+			"op": "SWISH",
+			"inputs": [ "@uid_28:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_67":{
+			"op": "SWISH",
+			"inputs": [ "@uid_83:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_66":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_67:out0", "@data_input_uid_242:out0", "@data_input_uid_243:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 1, 1, 128, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_50":{
+			"op": "SWISH",
+			"inputs": [ "@uid_66:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_37":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_50:out0", "@data_input_uid_244:out0", "@data_input_uid_245:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 3, 3, 128, 128 ],[ 128 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_27":{
+			"op": "SWISH",
+			"inputs": [ "@uid_37:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 128, 1 ] ]
+		},
+		"uid_20":{
+			"op": "CONCAT",
+			"inputs": [ "@uid_27:out0", "@uid_21:out0" ],
+			"inut_shape": [ [ 40, 40, 128, 1 ],[ 40, 40, 128, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 256, 1 ] ]
+		},
+		"uid_14":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_20:out0", "@data_input_uid_246:out0", "@data_input_uid_247:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ],[ 1, 1, 256, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 256, 1 ] ]
+		},
+		"uid_10":{
+			"op": "SWISH",
+			"inputs": [ "@uid_14:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 256, 1 ] ]
+		},
+		"uid_7":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_10:out0", "@data_input_uid_248:out0", "@data_input_uid_249:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ],[ 1, 1, 256, 255 ],[ 255 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 40, 40, 255, 1 ] ]
+		},
+		"uid_62":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_10:out0", "@data_input_uid_250:out0", "@data_input_uid_251:out0" ],
+			"inut_shape": [ [ 40, 40, 256, 1 ],[ 3, 3, 256, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_47":{
+			"op": "SWISH",
+			"inputs": [ "@uid_62:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_35":{
+			"op": "CONCAT",
+			"inputs": [ "@uid_47:out0", "@uid_36:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ],[ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 512, 1 ] ]
+		},
+		"uid_25":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_35:out0", "@data_input_uid_252:out0", "@data_input_uid_253:out0" ],
+			"inut_shape": [ [ 20, 20, 512, 1 ],[ 1, 1, 512, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_77":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_35:out0", "@data_input_uid_254:out0", "@data_input_uid_255:out0" ],
+			"inut_shape": [ [ 20, 20, 512, 1 ],[ 1, 1, 512, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_19":{
+			"op": "SWISH",
+			"inputs": [ "@uid_25:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_61":{
+			"op": "SWISH",
+			"inputs": [ "@uid_77:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_60":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_61:out0", "@data_input_uid_256:out0", "@data_input_uid_257:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ],[ 1, 1, 256, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_45":{
+			"op": "SWISH",
+			"inputs": [ "@uid_60:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_33":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_45:out0", "@data_input_uid_258:out0", "@data_input_uid_259:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ],[ 3, 3, 256, 256 ],[ 256 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_24":{
+			"op": "SWISH",
+			"inputs": [ "@uid_33:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 256, 1 ] ]
+		},
+		"uid_18":{
+			"op": "CONCAT",
+			"inputs": [ "@uid_24:out0", "@uid_19:out0" ],
+			"inut_shape": [ [ 20, 20, 256, 1 ],[ 20, 20, 256, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 512, 1 ] ]
+		},
+		"uid_12":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_18:out0", "@data_input_uid_260:out0", "@data_input_uid_261:out0" ],
+			"inut_shape": [ [ 20, 20, 512, 1 ],[ 1, 1, 512, 512 ],[ 512 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 512, 1 ] ]
+		},
+		"uid_9":{
+			"op": "SWISH",
+			"inputs": [ "@uid_12:out0" ],
+			"inut_shape": [ [ 20, 20, 512, 1 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 512, 1 ] ]
+		},
+		"uid_6":{
+			"op": "CONV2D",
+			"inputs": [ "@uid_9:out0", "@data_input_uid_262:out0", "@data_input_uid_263:out0" ],
+			"inut_shape": [ [ 20, 20, 512, 1 ],[ 1, 1, 512, 255 ],[ 255 ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ 20, 20, 255, 1 ] ]
+		},
+		"data_input_uid_143":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_144":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_145":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_146":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_147":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_148":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_149":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_150":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_151":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_152":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_153":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_154":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_155":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_156":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_157":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_158":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_159":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_160":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_161":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_162":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_163":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_164":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_165":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_166":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_167":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_168":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_169":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_170":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_171":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_172":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_173":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_174":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_175":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_176":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_177":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_178":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_179":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_180":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_181":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_182":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_183":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_184":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_185":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_186":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_187":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_188":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_189":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_190":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_191":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_192":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_193":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_194":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_195":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_196":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_197":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_198":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_199":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_200":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_201":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_202":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_203":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_204":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_205":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_206":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_207":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_208":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_209":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_210":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_211":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_212":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_213":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_214":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_215":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_216":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_217":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_218":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_219":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_220":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_221":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_222":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_223":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_224":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_225":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_226":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_227":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_228":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_229":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_230":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_231":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_232":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_233":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_234":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_235":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_236":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_237":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_238":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_239":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_240":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_241":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_242":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_243":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_244":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_245":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_246":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_247":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_248":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_249":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_250":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_251":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_252":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_253":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_254":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_255":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_256":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_257":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_258":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_259":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_260":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_261":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_262":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		},
+		"data_input_uid_263":{
+			"op": "DATA_INPUT",
+			"inputs": [ ],
+			"inut_shape": [ [ ] ],
+			"outputs": [ "out0" ],
+			"output_shape": [ [ ] ]
+		}
+	}
+}

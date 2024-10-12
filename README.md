@@ -46,15 +46,16 @@ In addition to exporting the model from the corresponding respository.
 ## Make & Run Demo
 For Linux Yulong810A develop board:
 
-=== "CLI"
+```bash
+# Make YOLOv10s detection from the command line
+$ cd ~/root/workspace/01_Detection/yolov10s_shape_slim_uint8  # Adjust model  as needed
+$ make
+# Run YOLOv10s detection from the command line
+$ sh run.sh
+```
 
-        ```bash
-        # Make YOLOv10s detection from the command line
-        cd ~/root/workspace/01_Detection/yolov10s_shape_slim_uint8  # Adjust model  as needed
-        make
-        # Run YOLOv10s detection from the command line
-        sh run.sh
-        ```
+![这是图片](assets/img/yolov10_result.jpg "yolov10_result.jpg")</p></center>
+
 ## Release Notes
 
 | Version |         Description          |

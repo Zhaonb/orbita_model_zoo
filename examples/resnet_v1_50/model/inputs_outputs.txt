@@ -1,0 +1,1 @@
+--inputs input --outputs resnet_v1_50/SpatialSqueeze --input-size-list 224,224,3

@@ -1,0 +1,22 @@
+%YAML 1.2
+---
+# "acuity_postprocs" allowed types: "detection_validate, classification_validate, print_topn, mute_built_in_actions, classification_classic, dump_results"
+postprocess:
+  acuity_postprocs:
+    print_topn:
+      topn: 5
+    dump_results:
+      file_type: TENSOR
+      fmt: nchw
+    # mute_built_in_actions: true
+    # python:
+    # - file_path: postprocess.py
+    #   output_tensors:
+    #   - '@xxxx:out0'
+  app_postprocs:
+  - lid: attach_resnet_v1_50/SpatialSqueeze/out0_0
+    postproc_params:
+      add_postproc_node: true
+      perm:
+      - 0
+      - 1

@@ -1,0 +1,2777 @@
+{
+    "MetaData": {
+        "Name": "resnet_v1_50",
+        "AcuityVersion": "2.0",
+        "Platform": "caffe",
+        "Org_Platform": "tensorflow"
+    },
+    "InputMeta": {
+        "databases": [
+            {
+                "path": "dataset.txt",
+                "type": "TEXT",
+                "ports": [
+                    {
+                        "lid": "attach_input/out0_1",
+                        "category": "image",
+                        "dtype": "float32",
+                        "sparse": false,
+                        "tensor_name": null,
+                        "layout": "nhwc",
+                        "shape": [
+                            1,
+                            224,
+                            224,
+                            3
+                        ],
+                        "fitting": "scale",
+                        "preprocess": {
+                            "reverse_channel": false,
+                            "mean": [
+                                123.68,
+                                116.78,
+                                103.94
+                            ],
+                            "scale": 1.0,
+                            "preproc_node_params": {
+                                "add_preproc_node": true,
+                                "preproc_type": "IMAGE_RGB",
+                                "preproc_perm": [
+                                    0,
+                                    1,
+                                    2,
+                                    3
+                                ]
+                            }
+                        },
+                        "redirect_to_output": false
+                    }
+                ]
+            }
+        ]
+    },
+    "postprocess": {
+        "acuity_postprocs": {
+            "print_topn": {
+                "topn": 5
+            },
+            "dump_results": {
+                "file_type": "TENSOR",
+                "fmt": "nchw"
+            }
+        },
+        "app_postprocs": [
+            {
+                "lid": "attach_resnet_v1_50/SpatialSqueeze/out0_0",
+                "postproc_params": {
+                    "add_postproc_node": true,
+                    "perm": [
+                        0,
+                        1
+                    ]
+                }
+            }
+        ]
+    },
+    "Layers": {
+        "attach_resnet_v1_50/SpatialSqueeze/out0_0": {
+            "name": "attach_resnet_v1_50/SpatialSqueeze/out0",
+            "op": "output",
+            "inputs": [
+                "@resnet_v1_50/SpatialSqueeze_2:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "attach_input/out0_1": {
+            "name": "attach_input/out0",
+            "op": "input",
+            "parameters": {
+                "size": "",
+                "channels": 1,
+                "shape": [
+                    1,
+                    224,
+                    224,
+                    3
+                ],
+                "type": "float32"
+            },
+            "inputs": [],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/SpatialSqueeze_2": {
+            "name": "resnet_v1_50/SpatialSqueeze",
+            "op": "reshape",
+            "parameters": {
+                "shape": [
+                    1000,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/SpatialSqueeze_2_acuity_mark_perm_12:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/logits/BiasAdd_3": {
+            "name": "resnet_v1_50/logits/BiasAdd",
+            "op": "convolution",
+            "parameters": {
+                "weights": 1000,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/pool5_4:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/pool5_4": {
+            "name": "resnet_v1_50/pool5",
+            "op": "pooling",
+            "parameters": {
+                "padding": "VALID",
+                "type": "AVG",
+                "ksize_h": 7,
+                "ksize_w": 7,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "round_type": "floor",
+                "pad_method": "auto",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block4/unit_3/bottleneck_v1/Relu_5:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_3/bottleneck_v1/Relu_5": {
+            "name": "resnet_v1_50/block4/unit_3/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block4/unit_3/bottleneck_v1/add_6:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_3/bottleneck_v1/add_6": {
+            "name": "resnet_v1_50/block4/unit_3/bottleneck_v1/add",
+            "op": "add",
+            "inputs": [
+                "@resnet_v1_50/block4/unit_2/bottleneck_v1/Relu_8:out0",
+                "@resnet_v1_50/block4/unit_3/bottleneck_v1/conv3/Conv2D_9:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_2/bottleneck_v1/Relu_8": {
+            "name": "resnet_v1_50/block4/unit_2/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block4/unit_2/bottleneck_v1/add_10:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_3/bottleneck_v1/conv3/Conv2D_9": {
+            "name": "resnet_v1_50/block4/unit_3/bottleneck_v1/conv3/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 2048,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block4/unit_3/bottleneck_v1/conv2/Relu_11:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_2/bottleneck_v1/add_10": {
+            "name": "resnet_v1_50/block4/unit_2/bottleneck_v1/add",
+            "op": "add",
+            "inputs": [
+                "@resnet_v1_50/block4/unit_1/bottleneck_v1/Relu_13:out0",
+                "@resnet_v1_50/block4/unit_2/bottleneck_v1/conv3/Conv2D_15:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_3/bottleneck_v1/conv2/Relu_11": {
+            "name": "resnet_v1_50/block4/unit_3/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block4/unit_3/bottleneck_v1/conv2/Conv2D_17:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_1/bottleneck_v1/Relu_13": {
+            "name": "resnet_v1_50/block4/unit_1/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block4/unit_1/bottleneck_v1/add_16_conv_181:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_2/bottleneck_v1/conv3/Conv2D_15": {
+            "name": "resnet_v1_50/block4/unit_2/bottleneck_v1/conv3/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 2048,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block4/unit_2/bottleneck_v1/conv2/Relu_18:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_3/bottleneck_v1/conv2/Conv2D_17": {
+            "name": "resnet_v1_50/block4/unit_3/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 512,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block4/unit_3/bottleneck_v1/conv1/Relu_21:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_2/bottleneck_v1/conv2/Relu_18": {
+            "name": "resnet_v1_50/block4/unit_2/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block4/unit_2/bottleneck_v1/conv2/Conv2D_26:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_3/bottleneck_v1/conv1/Relu_21": {
+            "name": "resnet_v1_50/block4/unit_3/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block4/unit_3/bottleneck_v1/conv1/Conv2D_29:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_2/bottleneck_v1/conv2/Conv2D_26": {
+            "name": "resnet_v1_50/block4/unit_2/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 512,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block4/unit_2/bottleneck_v1/conv1/Relu_30:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_1/bottleneck_v1/conv2/Relu_27": {
+            "name": "resnet_v1_50/block4/unit_1/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block4/unit_1/bottleneck_v1/conv2/Conv2D_34:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_6/bottleneck_v1/Relu_28": {
+            "name": "resnet_v1_50/block3/unit_6/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_6/bottleneck_v1/add_32:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_3/bottleneck_v1/conv1/Conv2D_29": {
+            "name": "resnet_v1_50/block4/unit_3/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 512,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block4/unit_2/bottleneck_v1/Relu_8:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_2/bottleneck_v1/conv1/Relu_30": {
+            "name": "resnet_v1_50/block4/unit_2/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block4/unit_2/bottleneck_v1/conv1/Conv2D_37:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_6/bottleneck_v1/add_32": {
+            "name": "resnet_v1_50/block3/unit_6/bottleneck_v1/add",
+            "op": "add",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_6/bottleneck_v1/shortcut/MaxPool_36:out0",
+                "@resnet_v1_50/block3/unit_6/bottleneck_v1/conv3/Conv2D_39:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_1/bottleneck_v1/conv2/Conv2D_34": {
+            "name": "resnet_v1_50/block4/unit_1/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 512,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block4/unit_1/bottleneck_v1/conv1/Relu_38:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_6/bottleneck_v1/shortcut/MaxPool_36": {
+            "name": "resnet_v1_50/block3/unit_6/bottleneck_v1/shortcut/MaxPool",
+            "op": "pooling",
+            "parameters": {
+                "padding": "SAME",
+                "type": "MAX",
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 2,
+                "stride_w": 2,
+                "pad_h": 0,
+                "pad_w": 0,
+                "round_type": "floor",
+                "pad_method": "auto",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_5/bottleneck_v1/Relu_40:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_2/bottleneck_v1/conv1/Conv2D_37": {
+            "name": "resnet_v1_50/block4/unit_2/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 512,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block4/unit_1/bottleneck_v1/Relu_13:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_1/bottleneck_v1/conv1/Relu_38": {
+            "name": "resnet_v1_50/block4/unit_1/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block4/unit_1/bottleneck_v1/conv1/Conv2D_44:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_6/bottleneck_v1/conv3/Conv2D_39": {
+            "name": "resnet_v1_50/block3/unit_6/bottleneck_v1/conv3/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 1024,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_6/bottleneck_v1/conv2/Relu_42:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_5/bottleneck_v1/Relu_40": {
+            "name": "resnet_v1_50/block3/unit_5/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_5/bottleneck_v1/add_43:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_6/bottleneck_v1/conv2/Relu_42": {
+            "name": "resnet_v1_50/block3/unit_6/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_6/bottleneck_v1/conv2/Conv2D_48:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_5/bottleneck_v1/add_43": {
+            "name": "resnet_v1_50/block3/unit_5/bottleneck_v1/add",
+            "op": "add",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_4/bottleneck_v1/Relu_47:out0",
+                "@resnet_v1_50/block3/unit_5/bottleneck_v1/conv3/Conv2D_49:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_1/bottleneck_v1/conv1/Conv2D_44": {
+            "name": "resnet_v1_50/block4/unit_1/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 512,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_6/bottleneck_v1/Relu_28:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_4/bottleneck_v1/Relu_47": {
+            "name": "resnet_v1_50/block3/unit_4/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_4/bottleneck_v1/add_50:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_6/bottleneck_v1/conv2/Conv2D_48": {
+            "name": "resnet_v1_50/block3/unit_6/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "VALID",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 2,
+                "stride_w": 2,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_6/bottleneck_v1/conv1/Relu_51:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_5/bottleneck_v1/conv3/Conv2D_49": {
+            "name": "resnet_v1_50/block3/unit_5/bottleneck_v1/conv3/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 1024,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_5/bottleneck_v1/conv2/Relu_52:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_4/bottleneck_v1/add_50": {
+            "name": "resnet_v1_50/block3/unit_4/bottleneck_v1/add",
+            "op": "add",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_3/bottleneck_v1/Relu_54:out0",
+                "@resnet_v1_50/block3/unit_4/bottleneck_v1/conv3/Conv2D_57:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_6/bottleneck_v1/conv1/Relu_51": {
+            "name": "resnet_v1_50/block3/unit_6/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_6/bottleneck_v1/conv1/Conv2D_59:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_5/bottleneck_v1/conv2/Relu_52": {
+            "name": "resnet_v1_50/block3/unit_5/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_5/bottleneck_v1/conv2/Conv2D_60:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_3/bottleneck_v1/Relu_54": {
+            "name": "resnet_v1_50/block3/unit_3/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_3/bottleneck_v1/add_58:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_4/bottleneck_v1/conv3/Conv2D_57": {
+            "name": "resnet_v1_50/block3/unit_4/bottleneck_v1/conv3/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 1024,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_4/bottleneck_v1/conv2/Relu_61:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_3/bottleneck_v1/add_58": {
+            "name": "resnet_v1_50/block3/unit_3/bottleneck_v1/add",
+            "op": "add",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_2/bottleneck_v1/Relu_63:out0",
+                "@resnet_v1_50/block3/unit_3/bottleneck_v1/conv3/Conv2D_66:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_6/bottleneck_v1/conv1/Conv2D_59": {
+            "name": "resnet_v1_50/block3/unit_6/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_5/bottleneck_v1/Relu_40:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_5/bottleneck_v1/conv2/Conv2D_60": {
+            "name": "resnet_v1_50/block3/unit_5/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_5/bottleneck_v1/conv1/Relu_64:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_4/bottleneck_v1/conv2/Relu_61": {
+            "name": "resnet_v1_50/block3/unit_4/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_4/bottleneck_v1/conv2/Conv2D_69:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_2/bottleneck_v1/Relu_63": {
+            "name": "resnet_v1_50/block3/unit_2/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_2/bottleneck_v1/add_67:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_5/bottleneck_v1/conv1/Relu_64": {
+            "name": "resnet_v1_50/block3/unit_5/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_5/bottleneck_v1/conv1/Conv2D_73:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_3/bottleneck_v1/conv3/Conv2D_66": {
+            "name": "resnet_v1_50/block3/unit_3/bottleneck_v1/conv3/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 1024,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_3/bottleneck_v1/conv2/Relu_70:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_2/bottleneck_v1/add_67": {
+            "name": "resnet_v1_50/block3/unit_2/bottleneck_v1/add",
+            "op": "add",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_1/bottleneck_v1/Relu_72:out0",
+                "@resnet_v1_50/block3/unit_2/bottleneck_v1/conv3/Conv2D_76:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_4/bottleneck_v1/conv2/Conv2D_69": {
+            "name": "resnet_v1_50/block3/unit_4/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_4/bottleneck_v1/conv1/Relu_74:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_3/bottleneck_v1/conv2/Relu_70": {
+            "name": "resnet_v1_50/block3/unit_3/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_3/bottleneck_v1/conv2/Conv2D_79:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_1/bottleneck_v1/Relu_72": {
+            "name": "resnet_v1_50/block3/unit_1/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_1/bottleneck_v1/add_77_conv_183:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_5/bottleneck_v1/conv1/Conv2D_73": {
+            "name": "resnet_v1_50/block3/unit_5/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_4/bottleneck_v1/Relu_47:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_4/bottleneck_v1/conv1/Relu_74": {
+            "name": "resnet_v1_50/block3/unit_4/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_4/bottleneck_v1/conv1/Conv2D_83:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_2/bottleneck_v1/conv3/Conv2D_76": {
+            "name": "resnet_v1_50/block3/unit_2/bottleneck_v1/conv3/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 1024,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_2/bottleneck_v1/conv2/Relu_80:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_3/bottleneck_v1/conv2/Conv2D_79": {
+            "name": "resnet_v1_50/block3/unit_3/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_3/bottleneck_v1/conv1/Relu_84:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_2/bottleneck_v1/conv2/Relu_80": {
+            "name": "resnet_v1_50/block3/unit_2/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_2/bottleneck_v1/conv2/Conv2D_89:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_4/bottleneck_v1/conv1/Conv2D_83": {
+            "name": "resnet_v1_50/block3/unit_4/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_3/bottleneck_v1/Relu_54:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_3/bottleneck_v1/conv1/Relu_84": {
+            "name": "resnet_v1_50/block3/unit_3/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_3/bottleneck_v1/conv1/Conv2D_92:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_2/bottleneck_v1/conv2/Conv2D_89": {
+            "name": "resnet_v1_50/block3/unit_2/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_2/bottleneck_v1/conv1/Relu_93:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_1/bottleneck_v1/conv2/Relu_90": {
+            "name": "resnet_v1_50/block3/unit_1/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_1/bottleneck_v1/conv2/Conv2D_97:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_4/bottleneck_v1/Relu_91": {
+            "name": "resnet_v1_50/block2/unit_4/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_4/bottleneck_v1/add_95:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_3/bottleneck_v1/conv1/Conv2D_92": {
+            "name": "resnet_v1_50/block3/unit_3/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_2/bottleneck_v1/Relu_63:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_2/bottleneck_v1/conv1/Relu_93": {
+            "name": "resnet_v1_50/block3/unit_2/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_2/bottleneck_v1/conv1/Conv2D_100:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_4/bottleneck_v1/add_95": {
+            "name": "resnet_v1_50/block2/unit_4/bottleneck_v1/add",
+            "op": "add",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_4/bottleneck_v1/shortcut/MaxPool_99:out0",
+                "@resnet_v1_50/block2/unit_4/bottleneck_v1/conv3/Conv2D_102:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_1/bottleneck_v1/conv2/Conv2D_97": {
+            "name": "resnet_v1_50/block3/unit_1/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_1/bottleneck_v1/conv1/Relu_101:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_4/bottleneck_v1/shortcut/MaxPool_99": {
+            "name": "resnet_v1_50/block2/unit_4/bottleneck_v1/shortcut/MaxPool",
+            "op": "pooling",
+            "parameters": {
+                "padding": "SAME",
+                "type": "MAX",
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 2,
+                "stride_w": 2,
+                "pad_h": 0,
+                "pad_w": 0,
+                "round_type": "floor",
+                "pad_method": "auto",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_3/bottleneck_v1/Relu_103:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_2/bottleneck_v1/conv1/Conv2D_100": {
+            "name": "resnet_v1_50/block3/unit_2/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_1/bottleneck_v1/Relu_72:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_1/bottleneck_v1/conv1/Relu_101": {
+            "name": "resnet_v1_50/block3/unit_1/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block3/unit_1/bottleneck_v1/conv1/Conv2D_107:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_4/bottleneck_v1/conv3/Conv2D_102": {
+            "name": "resnet_v1_50/block2/unit_4/bottleneck_v1/conv3/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 512,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_4/bottleneck_v1/conv2/Relu_105:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_3/bottleneck_v1/Relu_103": {
+            "name": "resnet_v1_50/block2/unit_3/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_3/bottleneck_v1/add_106:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_4/bottleneck_v1/conv2/Relu_105": {
+            "name": "resnet_v1_50/block2/unit_4/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_4/bottleneck_v1/conv2/Conv2D_111:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_3/bottleneck_v1/add_106": {
+            "name": "resnet_v1_50/block2/unit_3/bottleneck_v1/add",
+            "op": "add",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_2/bottleneck_v1/Relu_110:out0",
+                "@resnet_v1_50/block2/unit_3/bottleneck_v1/conv3/Conv2D_112:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_1/bottleneck_v1/conv1/Conv2D_107": {
+            "name": "resnet_v1_50/block3/unit_1/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_4/bottleneck_v1/Relu_91:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_2/bottleneck_v1/Relu_110": {
+            "name": "resnet_v1_50/block2/unit_2/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_2/bottleneck_v1/add_113:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_4/bottleneck_v1/conv2/Conv2D_111": {
+            "name": "resnet_v1_50/block2/unit_4/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 128,
+                "padding": "VALID",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 2,
+                "stride_w": 2,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_4/bottleneck_v1/conv1/Relu_114:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_3/bottleneck_v1/conv3/Conv2D_112": {
+            "name": "resnet_v1_50/block2/unit_3/bottleneck_v1/conv3/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 512,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_3/bottleneck_v1/conv2/Relu_115:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_2/bottleneck_v1/add_113": {
+            "name": "resnet_v1_50/block2/unit_2/bottleneck_v1/add",
+            "op": "add",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_1/bottleneck_v1/Relu_117:out0",
+                "@resnet_v1_50/block2/unit_2/bottleneck_v1/conv3/Conv2D_120:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_4/bottleneck_v1/conv1/Relu_114": {
+            "name": "resnet_v1_50/block2/unit_4/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_4/bottleneck_v1/conv1/Conv2D_122:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_3/bottleneck_v1/conv2/Relu_115": {
+            "name": "resnet_v1_50/block2/unit_3/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_3/bottleneck_v1/conv2/Conv2D_123:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_1/bottleneck_v1/Relu_117": {
+            "name": "resnet_v1_50/block2/unit_1/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_1/bottleneck_v1/add_121_conv_185:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_2/bottleneck_v1/conv3/Conv2D_120": {
+            "name": "resnet_v1_50/block2/unit_2/bottleneck_v1/conv3/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 512,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_2/bottleneck_v1/conv2/Relu_124:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_4/bottleneck_v1/conv1/Conv2D_122": {
+            "name": "resnet_v1_50/block2/unit_4/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 128,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_3/bottleneck_v1/Relu_103:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_3/bottleneck_v1/conv2/Conv2D_123": {
+            "name": "resnet_v1_50/block2/unit_3/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 128,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_3/bottleneck_v1/conv1/Relu_127:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_2/bottleneck_v1/conv2/Relu_124": {
+            "name": "resnet_v1_50/block2/unit_2/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_2/bottleneck_v1/conv2/Conv2D_132:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_3/bottleneck_v1/conv1/Relu_127": {
+            "name": "resnet_v1_50/block2/unit_3/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_3/bottleneck_v1/conv1/Conv2D_135:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_2/bottleneck_v1/conv2/Conv2D_132": {
+            "name": "resnet_v1_50/block2/unit_2/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 128,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_2/bottleneck_v1/conv1/Relu_136:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_1/bottleneck_v1/conv2/Relu_133": {
+            "name": "resnet_v1_50/block2/unit_1/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_1/bottleneck_v1/conv2/Conv2D_140:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_3/bottleneck_v1/Relu_134": {
+            "name": "resnet_v1_50/block1/unit_3/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block1/unit_3/bottleneck_v1/add_138:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_3/bottleneck_v1/conv1/Conv2D_135": {
+            "name": "resnet_v1_50/block2/unit_3/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 128,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_2/bottleneck_v1/Relu_110:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_2/bottleneck_v1/conv1/Relu_136": {
+            "name": "resnet_v1_50/block2/unit_2/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_2/bottleneck_v1/conv1/Conv2D_143:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_3/bottleneck_v1/add_138": {
+            "name": "resnet_v1_50/block1/unit_3/bottleneck_v1/add",
+            "op": "add",
+            "inputs": [
+                "@resnet_v1_50/block1/unit_3/bottleneck_v1/shortcut/MaxPool_142:out0",
+                "@resnet_v1_50/block1/unit_3/bottleneck_v1/conv3/Conv2D_145:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_1/bottleneck_v1/conv2/Conv2D_140": {
+            "name": "resnet_v1_50/block2/unit_1/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 128,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_1/bottleneck_v1/conv1/Relu_144:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_3/bottleneck_v1/shortcut/MaxPool_142": {
+            "name": "resnet_v1_50/block1/unit_3/bottleneck_v1/shortcut/MaxPool",
+            "op": "pooling",
+            "parameters": {
+                "padding": "SAME",
+                "type": "MAX",
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 2,
+                "stride_w": 2,
+                "pad_h": 0,
+                "pad_w": 0,
+                "round_type": "floor",
+                "pad_method": "auto",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block1/unit_2/bottleneck_v1/Relu_146:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_2/bottleneck_v1/conv1/Conv2D_143": {
+            "name": "resnet_v1_50/block2/unit_2/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 128,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_1/bottleneck_v1/Relu_117:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_1/bottleneck_v1/conv1/Relu_144": {
+            "name": "resnet_v1_50/block2/unit_1/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block2/unit_1/bottleneck_v1/conv1/Conv2D_150:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_3/bottleneck_v1/conv3/Conv2D_145": {
+            "name": "resnet_v1_50/block1/unit_3/bottleneck_v1/conv3/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block1/unit_3/bottleneck_v1/conv2/Relu_148:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_2/bottleneck_v1/Relu_146": {
+            "name": "resnet_v1_50/block1/unit_2/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block1/unit_2/bottleneck_v1/add_149:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_3/bottleneck_v1/conv2/Relu_148": {
+            "name": "resnet_v1_50/block1/unit_3/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block1/unit_3/bottleneck_v1/conv2/Conv2D_154:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_2/bottleneck_v1/add_149": {
+            "name": "resnet_v1_50/block1/unit_2/bottleneck_v1/add",
+            "op": "add",
+            "inputs": [
+                "@resnet_v1_50/block1/unit_1/bottleneck_v1/Relu_153:out0",
+                "@resnet_v1_50/block1/unit_2/bottleneck_v1/conv3/Conv2D_155:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_1/bottleneck_v1/conv1/Conv2D_150": {
+            "name": "resnet_v1_50/block2/unit_1/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 128,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block1/unit_3/bottleneck_v1/Relu_134:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_1/bottleneck_v1/Relu_153": {
+            "name": "resnet_v1_50/block1/unit_1/bottleneck_v1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block1/unit_1/bottleneck_v1/add_156_conv_187:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_3/bottleneck_v1/conv2/Conv2D_154": {
+            "name": "resnet_v1_50/block1/unit_3/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 64,
+                "padding": "VALID",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 2,
+                "stride_w": 2,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block1/unit_3/bottleneck_v1/conv1/Relu_157:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_2/bottleneck_v1/conv3/Conv2D_155": {
+            "name": "resnet_v1_50/block1/unit_2/bottleneck_v1/conv3/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block1/unit_2/bottleneck_v1/conv2/Relu_158:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_3/bottleneck_v1/conv1/Relu_157": {
+            "name": "resnet_v1_50/block1/unit_3/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block1/unit_3/bottleneck_v1/conv1/Conv2D_165:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_2/bottleneck_v1/conv2/Relu_158": {
+            "name": "resnet_v1_50/block1/unit_2/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block1/unit_2/bottleneck_v1/conv2/Conv2D_166:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_3/bottleneck_v1/conv1/Conv2D_165": {
+            "name": "resnet_v1_50/block1/unit_3/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 64,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block1/unit_2/bottleneck_v1/Relu_146:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_2/bottleneck_v1/conv2/Conv2D_166": {
+            "name": "resnet_v1_50/block1/unit_2/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 64,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block1/unit_2/bottleneck_v1/conv1/Relu_169:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_1/bottleneck_v1/conv2/Relu_167": {
+            "name": "resnet_v1_50/block1/unit_1/bottleneck_v1/conv2/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block1/unit_1/bottleneck_v1/conv2/Conv2D_173:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/pool1/MaxPool_168": {
+            "name": "resnet_v1_50/pool1/MaxPool",
+            "op": "pooling",
+            "parameters": {
+                "padding": "SAME",
+                "type": "MAX",
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 2,
+                "stride_w": 2,
+                "pad_h": 0,
+                "pad_w": 0,
+                "round_type": "floor",
+                "pad_method": "auto",
+                "pad": [
+                    0,
+                    1,
+                    0,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/conv1/Relu_171:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_2/bottleneck_v1/conv1/Relu_169": {
+            "name": "resnet_v1_50/block1/unit_2/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block1/unit_2/bottleneck_v1/conv1/Conv2D_175:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/conv1/Relu_171": {
+            "name": "resnet_v1_50/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/conv1/Conv2D_177:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_1/bottleneck_v1/conv2/Conv2D_173": {
+            "name": "resnet_v1_50/block1/unit_1/bottleneck_v1/conv2/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 64,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 3,
+                "ksize_w": 3,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 1,
+                "pad_w": 1,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    1,
+                    1,
+                    1,
+                    1
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block1/unit_1/bottleneck_v1/conv1/Relu_176:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_2/bottleneck_v1/conv1/Conv2D_175": {
+            "name": "resnet_v1_50/block1/unit_2/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 64,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block1/unit_1/bottleneck_v1/Relu_153:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_1/bottleneck_v1/conv1/Relu_176": {
+            "name": "resnet_v1_50/block1/unit_1/bottleneck_v1/conv1/Relu",
+            "op": "relu",
+            "inputs": [
+                "@resnet_v1_50/block1/unit_1/bottleneck_v1/conv1/Conv2D_179:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/conv1/Conv2D_177": {
+            "name": "resnet_v1_50/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 64,
+                "padding": "VALID",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 7,
+                "ksize_w": 7,
+                "stride_h": 2,
+                "stride_w": 2,
+                "pad_h": 3,
+                "pad_w": 3,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    3,
+                    3,
+                    3,
+                    3
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/conv1/Conv2D_177_acuity_mark_perm_7:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_1/bottleneck_v1/conv1/Conv2D_179": {
+            "name": "resnet_v1_50/block1/unit_1/bottleneck_v1/conv1/Conv2D",
+            "op": "convolution",
+            "parameters": {
+                "weights": 64,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/pool1/MaxPool_168:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_1/bottleneck_v1/add_16_concat_180": {
+            "name": "resnet_v1_50/block4/unit_1/bottleneck_v1/add_16_concat",
+            "op": "concat",
+            "parameters": {
+                "dim": 2
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_6/bottleneck_v1/Relu_28:out0",
+                "@resnet_v1_50/block4/unit_1/bottleneck_v1/conv2/Relu_27:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block4/unit_1/bottleneck_v1/add_16_conv_181": {
+            "name": "resnet_v1_50/block4/unit_1/bottleneck_v1/add_16_conv",
+            "op": "convolution",
+            "parameters": {
+                "weights": 2048,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block4/unit_1/bottleneck_v1/add_16_concat_180:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_1/bottleneck_v1/add_77_concat_182": {
+            "name": "resnet_v1_50/block3/unit_1/bottleneck_v1/add_77_concat",
+            "op": "concat",
+            "parameters": {
+                "dim": 2
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_4/bottleneck_v1/Relu_91:out0",
+                "@resnet_v1_50/block3/unit_1/bottleneck_v1/conv2/Relu_90:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block3/unit_1/bottleneck_v1/add_77_conv_183": {
+            "name": "resnet_v1_50/block3/unit_1/bottleneck_v1/add_77_conv",
+            "op": "convolution",
+            "parameters": {
+                "weights": 1024,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block3/unit_1/bottleneck_v1/add_77_concat_182:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_1/bottleneck_v1/add_121_concat_184": {
+            "name": "resnet_v1_50/block2/unit_1/bottleneck_v1/add_121_concat",
+            "op": "concat",
+            "parameters": {
+                "dim": 2
+            },
+            "inputs": [
+                "@resnet_v1_50/block1/unit_3/bottleneck_v1/Relu_134:out0",
+                "@resnet_v1_50/block2/unit_1/bottleneck_v1/conv2/Relu_133:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block2/unit_1/bottleneck_v1/add_121_conv_185": {
+            "name": "resnet_v1_50/block2/unit_1/bottleneck_v1/add_121_conv",
+            "op": "convolution",
+            "parameters": {
+                "weights": 512,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block2/unit_1/bottleneck_v1/add_121_concat_184:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_1/bottleneck_v1/add_156_concat_186": {
+            "name": "resnet_v1_50/block1/unit_1/bottleneck_v1/add_156_concat",
+            "op": "concat",
+            "parameters": {
+                "dim": 2
+            },
+            "inputs": [
+                "@resnet_v1_50/pool1/MaxPool_168:out0",
+                "@resnet_v1_50/block1/unit_1/bottleneck_v1/conv2/Relu_167:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/block1/unit_1/bottleneck_v1/add_156_conv_187": {
+            "name": "resnet_v1_50/block1/unit_1/bottleneck_v1/add_156_conv",
+            "op": "convolution",
+            "parameters": {
+                "weights": 256,
+                "padding": "SAME",
+                "bias": true,
+                "group_number": 1,
+                "regularize": false,
+                "ksize_h": 1,
+                "ksize_w": 1,
+                "stride_h": 1,
+                "stride_w": 1,
+                "pad_h": 0,
+                "pad_w": 0,
+                "dilation": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "pad_method": "padding_const",
+                "pad": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/block1/unit_1/bottleneck_v1/add_156_concat_186:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/conv1/Conv2D_177_acuity_mark_perm_7": {
+            "name": "resnet_v1_50/conv1/Conv2D_177_acuity_mark_perm",
+            "op": "permute",
+            "parameters": {
+                "perm": [
+                    1,
+                    2,
+                    0,
+                    3
+                ]
+            },
+            "inputs": [
+                "@attach_input/out0_1:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        },
+        "resnet_v1_50/SpatialSqueeze_2_acuity_mark_perm_12": {
+            "name": "resnet_v1_50/SpatialSqueeze_2_acuity_mark_perm",
+            "op": "permute",
+            "parameters": {
+                "perm": [
+                    2,
+                    0,
+                    1,
+                    3
+                ]
+            },
+            "inputs": [
+                "@resnet_v1_50/logits/BiasAdd_3:out0"
+            ],
+            "outputs": [
+                "out0"
+            ]
+        }
+    }
+}

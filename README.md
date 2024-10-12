@@ -66,8 +66,8 @@ $ sh run.sh
 
 | Version    | Description                                              | Passwd   |
 |:-----------|:---------------------------------------------------------|----------|
-| Yulong810A | https://pan.baidu.com/s/1UJXPJVsUd6BK-Cz55td0kw?pwd=71A6 | obt@2024 |
-| YLANNTools | https://pan.baidu.com/s/1YtblDr1vxg_n_tzQgrk-IQ?pwd=aMt6 | obt@2024 |
+| Yulong810A | https://pan.baidu.com/s/1tOSytyp5UTcehBjmIfTU0w?pwd=pwux | pwux |
+| YLANNTools | https://pan.baidu.com/s/1D49hZQZYKiZzqp90Ey0_2w?pwd=tryx | tryx |
 
 ## License
 [Apache License 2.0](https://github.com/Zhaonb/orbita_model_zoo/blob/main/LICENSE) 

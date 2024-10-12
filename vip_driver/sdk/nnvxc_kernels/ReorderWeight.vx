@@ -1,0 +1,353 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int nZP;
+_viv_uniform int zp_coef;
+_viv_uniform VXC_512Bits uniDataAccum_16x1;
+
+typedef struct {
+    int k_idx;
+    int k_offset;
+    int stride;
+    int b_offset;
+} reorder_stream_offset_s;
+
+_viv_uniform VXC_512Bits uniDataConvBin8_16x1;
+_viv_uniform int aligned_9x;
+_viv_uniform int aligned_9x_remain;
+__kernel void reorder_weight_U8toU8_noBias
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(0, get_global_id(0));
+
+    Image wb_offset = create_image_from_image2d(input1, 4);
+    Image o_img = create_image_from_image2d(output, 1);
+
+    uchar* offset_ptr = get_image_ptr_from_coord(wb_offset, coord.yx);
+
+    int2 sum = 0;
+
+    uint4 offset = ((uint4 *)offset_ptr)[0];
+    uint bias_oft = offset.w;
+
+    uchar *output_ptr = o_img.ptr + offset.y;
+    coord.y = offset.x;
+    for (; coord.x < aligned_9x; )
+    {
+        vxc_uchar16 data;
+        VXC_ReadImage(data, input0, coord.xy, 0, VXC_MODIFIER(0, 8, 0, VXC_RM_TowardZero, 0));
+        coord.x += 9;
+
+        uchar pixel;
+        VXC_DP16x1(sum, data, data, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniDataAccum_16x1);
+        VXC_DP16x1(pixel, data, data, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniDataConvBin8_16x1);
+
+        sum.y = sum.y + sum.x;
+        VXC_Vstore8((vxc_uchar8 *)output_ptr, 0, data.lo);
+
+
+        output_ptr[8] = pixel;
+
+        output_ptr += offset.z;
+    }
+
+    for (int j = 0; j < aligned_9x_remain; j++)
+    {
+        uchar data;
+        VXC_ReadImage(data, input0, coord.xy, 0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        coord.x ++;
+        sum.y = sum.y + convert_uint(data);
+        output_ptr[j] = data;
+    }
+
+    sum.y = sum.y * zp_coef - nZP;
+
+    output_ptr = o_img.ptr + bias_oft;
+    ((int *)output_ptr)[0] = sum.y;
+}
+__kernel void reorder_weight_U8toU8
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output,
+    __read_only  image2d_t bias
+    )
+{
+    int2 coord = (int2)(0, get_global_id(0));
+
+    Image wb_offset = create_image_from_image2d(input1, 4);
+    Image o_img = create_image_from_image2d(output, 1);
+    Image b_img = create_image_from_image2d(bias, 4);
+
+    uchar* offset_ptr = get_image_ptr_from_coord(wb_offset, coord.yx);
+
+    int* bias_ptr = get_image_ptr_from_coord(b_img, (int2)(coord.y >> 2, 0));
+
+    int2 sum = 0;
+
+    uint4 offset = ((uint4 *)offset_ptr)[0];
+    uint bias_oft = offset.w;
+
+    uchar *output_ptr = o_img.ptr + offset.y;
+    coord.y = offset.x;
+    int bias_data = bias_ptr[0];
+    for (; coord.x < aligned_9x; )
+    {
+        vxc_uchar16 data;
+        VXC_ReadImage(data, input0, coord.xy, 0, VXC_MODIFIER(0, 8, 0, VXC_RM_TowardZero, 0));
+        coord.x += 9;
+
+        uchar pixel;
+        VXC_DP16x1(sum, data, data, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniDataAccum_16x1);
+        VXC_DP16x1(pixel, data, data, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniDataConvBin8_16x1);
+
+        sum.y = sum.y + sum.x;
+        VXC_Vstore8((vxc_uchar8 *)output_ptr, 0, data.lo);
+
+        output_ptr[8] = pixel;
+
+        output_ptr += offset.z;
+    }
+
+    for (int j = 0; j < aligned_9x_remain; j++)
+    {
+        uchar data;
+        VXC_ReadImage(data, input0, coord.xy, 0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        coord.x ++;
+        sum.y = sum.y + convert_uint(data);
+        output_ptr[j] = data;
+    }
+
+    sum.y = sum.y * zp_coef - nZP + bias_data;
+
+    output_ptr = o_img.ptr + bias_oft;
+    ((int *)output_ptr)[0] = sum.y;
+}
+
+//typedef struct {
+//    int k_idx;
+//    int k_offset;
+//    int stride;
+//    int b_offset;
+//    int last_idx;
+//} reorder_stream_offset_s;
+__kernel void reorder_weight_F16toF16_noBias
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(0, get_global_id(0));
+
+    Image wb_offset = create_image_from_image2d(input1, 4);
+    Image o_img = create_image_from_image2d(output, 1);
+
+    uchar* offset_ptr = get_image_ptr_from_coord(wb_offset, (int2)(coord.y * 5, coord.x));
+
+    int2 sum = 0;
+
+    uint4 offset = ((uint4 *)offset_ptr)[0];
+    uint last_oft = ((uint *)offset_ptr)[4];
+    uint bias_oft = offset.w;
+
+    uchar *output_ptr = o_img.ptr + offset.y;
+    coord.y = offset.x;
+    for (; coord.x < aligned_9x; )
+    {
+        vxc_ushort8 data0;
+        ushort data1;
+        VXC_ReadImage(data0, input0, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(data1, input0, coord.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        coord.x += 9;
+
+        uchar *reorder_ptr = output_ptr;
+
+        uint4 data;
+        _viv_asm(COPY, data, data0, 16);
+        ((uint4 *)reorder_ptr)[0] = data;
+        ((ushort *)reorder_ptr)[8] = data1;
+
+        output_ptr += offset.z;
+    }
+
+    ushort *last_w_ptr = (ushort *)(o_img.ptr + last_oft);
+    for (int j = 0; j < aligned_9x_remain; j++)
+    {
+        ushort data;
+        VXC_ReadImage(data, input0, coord.xy, 0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        coord.x ++;
+        last_w_ptr[j] = data;
+    }
+}
+
+__kernel void reorder_weight_F16toF16
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output,
+    __read_only  image2d_t bias
+    )
+{
+    int2 coord = (int2)(0, get_global_id(0));
+
+    Image wb_offset = create_image_from_image2d(input1, 4);
+    Image o_img = create_image_from_image2d(output, 1);
+    Image b_img = create_image_from_image2d(bias, 4);
+
+    uchar* offset_ptr = get_image_ptr_from_coord(wb_offset, (int2)(coord.y * 5, coord.x));
+    uint* bias_ptr = (uint*)get_image_ptr_from_coord(b_img, coord.yx);
+    int2 sum = 0;
+
+    uint4 offset = ((uint4 *)offset_ptr)[0];
+    uint last_oft = ((uint *)offset_ptr)[4];
+    uint bias_oft = offset.w;
+
+    uchar *output_ptr = o_img.ptr + offset.y;
+    coord.y = offset.x;
+    uint biasData = bias_ptr[0];
+    for (; coord.x < aligned_9x; )
+    {
+        vxc_ushort8 data0;
+        ushort data1;
+        VXC_ReadImage(data0, input0, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(data1, input0, coord.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        coord.x += 9;
+
+        uchar *reorder_ptr = output_ptr;
+
+        uint4 data;
+        _viv_asm(COPY, data, data0, 16);
+        ((uint4 *)reorder_ptr)[0] = data;
+        ((ushort *)reorder_ptr)[8] = data1;
+
+        output_ptr += offset.z;
+    }
+
+    ushort *last_w_ptr = (ushort *)(o_img.ptr + last_oft);
+    for (int j = 0; j < aligned_9x_remain; j++)
+    {
+        ushort data;
+        VXC_ReadImage(data, input0, coord.xy, 0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        coord.x ++;
+        last_w_ptr[j] = data;
+    }
+
+    output_ptr = o_img.ptr + bias_oft;
+
+    //process bias, ref CalculateNewBiasForBF16FP16 function
+    ushort biasL = 0;
+    ushort expL = 0;
+    ushort mantissaL = 0;
+    uchar exp;
+    uint mantissa;
+    uchar signedBit;
+    ushort mantissaM;
+    ushort expM;
+    ushort biasM;
+    ushort biasH = 0;
+    ushort expH = 0;
+    uchar shift = 0;
+    uint i = 0;
+
+    exp = (uchar)((biasData & 0x7F800000) >> 23);
+    mantissa = biasData & 0x7FFFFF;
+    signedBit = (biasData & 0x80000000) >> 31;
+    /*biasH is the high 16 bit of orginal 32 bit bias*/
+    biasH = biasData >> 16;
+    expH = (biasH & 0x7F80) >> 7;
+    /* convert -zero to +zero*/
+    if (exp == 0)
+    {
+        signedBit = 0;
+        mantissa = 0;
+    }
+    /*biasM contain 8 bit mantissa[15:8]*/
+    mantissaM = (mantissa & 0xFF00) >> 8;
+    expM = exp;
+    shift = 0;
+
+    if (mantissaM == 0)
+    {
+        biasM = 0;
+        expM = 0;
+        signedBit = 0;
+    }
+    else
+    {
+        signedBit = (biasData & 0x80000000) >> 31;
+        /*if find the most left 1 of manitssa, will set it as hidden bit*/
+        for (i = 0; i < 8; i++)
+        {
+            uchar temp = mantissaM & 0x80;
+            mantissaM = mantissaM << 1;
+
+            if (temp != 0)
+            {
+                mantissaM &= 0xFF;
+                break;
+            }
+
+            shift++;
+        }
+        expM -= shift;
+        /*newCoef [15:0] = {~OrgValue[14],OrgValue[13:0], OrgValue[15]}*/
+    }
+
+    if ((ushort)expM <= 0)
+    {
+        signedBit = 0;
+        expM = 0;
+        mantissaM = 0;
+    }
+
+    biasM = (expM << 7) | (mantissaM >> 1) | ((ushort)signedBit << 15);
+
+    /*biasL contain 8 bit mantissa[7:0]*/
+    mantissaL = mantissa & 0xFF;
+    expL = exp;
+    shift = 0;
+    if (mantissaL == 0)
+    {
+        biasL = 0;
+        expL = 0;
+        signedBit = 0;
+    }
+    else
+    {
+        signedBit = (biasData & 0x80000000) >> 31;
+        /*if find the most left 1 of manitssa, will set it as hidden bit*/
+        for (i = 0; i < 8; i++)
+        {
+            uchar temp = mantissaL & 0x80;
+            mantissaL = mantissaL << 1;
+
+            if (temp != 0)
+            {
+                mantissaL &= 0xFF;
+                break;
+            }
+
+            shift++;
+        }
+        expL -= shift;
+        /*newCoef [15:0] = {~OrgValue[14],OrgValue[13:0], OrgValue[15]}*/
+    }
+
+    if ((ushort)expL <= 0)
+    {
+        signedBit = 0;
+        expL = 0;
+        mantissaL = 0;
+    }
+
+    biasL = (expL << 7) | (mantissaL >> 1) | ((ushort)signedBit << 15);
+    ((ushort *)output_ptr)[0] = biasH;
+    ((ushort *)output_ptr)[1] = biasM;
+    ((ushort *)output_ptr)[2] = biasL;
+}

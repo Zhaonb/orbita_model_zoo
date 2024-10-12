@@ -1,0 +1,73 @@
+__kernel void tensorexpand_FP32
+    (
+        image2d_array_t input,
+        image2d_array_t output,
+        int             upsample_x,
+        int             upsample_y,
+        int             input_width,
+        int             input_height
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inx = ((short)x) / ((short)upsample_x);
+    int iny = ((short)y) / ((short)upsample_y);
+    int modx = ((short)x) % ((short)upsample_x);
+    int mody = ((short)y) % ((short)upsample_y);
+    int4 coord_out = (int4)(x, y, z, 0);
+    float4 pixel;
+    int is_mod_enable = ((0 == modx) && (0 == mody));
+    int is_index_enable = ((inx < input_width) && (iny < input_height));
+
+    if (is_mod_enable && is_index_enable)
+    {
+        int4 coord_in  = (int4)(inx, iny, z, 0);
+        pixel = read_imagef(input, coord_in);
+        write_imagef(output, coord_out, pixel);
+    }
+    else
+    {
+        pixel = 0.0f;
+        write_imagef(output, coord_out, pixel);
+    }
+}
+
+
+__kernel void tensorexpand_Quant8
+    (
+        image2d_array_t input,
+        image2d_array_t output,
+        int             upsample_x,
+        int             upsample_y,
+        int             input_width,
+        int             input_height,
+        int             expand_val
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inx = ((short)x) / ((short)upsample_x);
+    int iny = ((short)y) / ((short)upsample_y);
+    int modx = ((short)x) % ((short)upsample_x);
+    int mody = ((short)y) % ((short)upsample_y);
+    int4 coord_out = (int4)(x, y, z, 0);
+    uint4 pixel;
+    int is_mod_enable = ((0 == modx) && (0 == mody));
+    int is_index_enable = ((inx < input_width) && (iny < input_height));
+
+    if (is_mod_enable && is_index_enable)
+    {
+        int4 coord_in  = (int4)(inx, iny, z, 0);
+        pixel = read_imageui(input, coord_in);
+        write_imageui(output, coord_out, pixel);
+    }
+    else
+    {
+        pixel = (uint)expand_val;
+        write_imageui(output, coord_out, pixel);
+    }
+}
+
+

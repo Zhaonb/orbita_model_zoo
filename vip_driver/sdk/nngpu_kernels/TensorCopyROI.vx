@@ -1,0 +1,458 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+typedef _viv_uchar16_packed   vxc_uchar16;
+typedef _viv_uchar8_packed    vxc_uchar8;
+typedef _viv_uchar4_packed    vxc_uchar4;
+typedef _viv_uchar3_packed    vxc_uchar3;
+
+__kernel void gpuTensorCopyROI_FP32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int inputXOffset,
+    int inputYOffset,
+    int outputXOffset,
+    int outputYOffset
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0) + inputXOffset, get_global_id(1) + inputYOffset, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0) + outputXOffset, get_global_id(1) + outputYOffset, get_global_id(2), 0);
+    float4 tmp = {0};
+    tmp = read_imagef(input, coord_in);
+    write_imagef(output, coord_out, tmp);
+}
+
+__kernel void gpuTensorCopyROI_Quant8
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int inputXOffset,
+    int inputYOffset,
+    int outputXOffset,
+    int outputYOffset
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0) + inputXOffset, get_global_id(1) + inputYOffset, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0) + outputXOffset, get_global_id(1) + outputYOffset, get_global_id(2), 0);
+    uint4 tmp = {0};
+    tmp = read_imageui(input, coord_in);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTensorCopyROI_Quant8_4X
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int inputXOffset,
+    int inputYOffset,
+    int outputXOffset,
+    int outputYOffset
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0) + inputXOffset, get_global_id(1) + inputYOffset, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0) + outputXOffset, get_global_id(1) + outputYOffset, get_global_id(2), 0);
+    Tensor i_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *src_ptr = get_tensor_ptr_from_coord(i_tensor, coord_in);
+    vxc_uchar4 src = vload4(0, (_viv_uchar_packed *)src_ptr);
+    Tensor o_tensor = create_tensor_from_image2d_array(output, 1);
+    uchar *dst_ptr = get_tensor_ptr_from_coord(o_tensor, coord_out);
+    vstore4(src, 0, (_viv_uchar_packed *)dst_ptr);
+}
+
+__kernel void gpuTensorCopyROI_Quant8_Pad1
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0) + 1, get_global_id(1) + 1, get_global_id(2), 0);
+    uint4 tmp = {0};
+    tmp = read_imageui(input, coord_in);
+    write_imageui(output, coord_out, tmp);
+}
+
+
+__kernel void gpuTensorCopyROI_Quant8_Pad1_4X
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0) + 1, get_global_id(1) + 1, get_global_id(2), 0);
+
+    Tensor i_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *src_ptr = get_tensor_ptr_from_coord(i_tensor, coord_in);
+    vxc_uchar4 src = vload4(0, (_viv_uchar_packed *)src_ptr);
+    Tensor o_tensor = create_tensor_from_image2d_array(output, 1);
+    uchar *dst_ptr = get_tensor_ptr_from_coord(o_tensor, coord_out);
+    vstore4(src, 0, (_viv_uchar_packed *)dst_ptr);
+}
+
+__kernel void gpuTensorCopyROI_Quant8_Pad1_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+    int                    input_height,
+    int                    height_diff
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int depth = convert_int(convert_short(y)/convert_short(input_height));
+    int out_y  = depth * height_diff + y + 1;
+    int2 coord_in   = (int2)(x, y);
+    int2 coord_out  = (int2)(x + 1, out_y);
+    uint4 tmp = {0};
+    tmp = read_imageui(input, coord_in);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTensorCopyROI_Quant8_Pad1_4X_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+    int                    input_height,
+    int                    height_diff
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int depth = convert_int(convert_short(y)/convert_short(input_height));
+    int out_y  = depth * height_diff + y + 1;
+    int2 coord_in   = (int2)(x, y);
+    int2 coord_out  = (int2)(x + 1, out_y);
+
+    Image i_tensor = create_image_from_image2d(input, 1);
+    uchar *src_ptr = get_image_ptr_from_coord(i_tensor, coord_in.xy);
+    vxc_uchar4 src = vload4(0, (_viv_uchar_packed *)src_ptr);
+    Image o_tensor = create_image_from_image2d(output, 1);
+    uchar *dst_ptr = get_image_ptr_from_coord(o_tensor, coord_out.xy);
+    vstore4(src, 0, (_viv_uchar_packed *)dst_ptr);
+
+}
+
+
+__kernel void gpuTensorCopyROI_Quant8_NoPad
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    uint4 tmp = {0};
+    tmp = read_imageui(input, coord_in);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTensorCopyROI_Quant8_NoPad_4X
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    Tensor i_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *src_ptr = get_tensor_ptr_from_coord(i_tensor, coord_in);
+    vxc_uchar4 src = vload4(0, (_viv_uchar_packed *)src_ptr);
+    Tensor o_tensor = create_tensor_from_image2d_array(output, 1);
+    uchar *dst_ptr = get_tensor_ptr_from_coord(o_tensor, coord_out);
+    vstore4(src, 0, (_viv_uchar_packed *)dst_ptr);
+}
+
+__kernel void gpuTensorCopyROI_Quant8_NoPad_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+    int                    input_height,
+    int                    height_diff
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int depth = convert_int(convert_short(y)/convert_short(input_height));
+    int out_y  = depth * height_diff + y;
+    int2 coord_in   = (int2)(x, y);
+    int2 coord_out  = (int2)(x, out_y);
+    uint4 tmp = {0};
+    tmp = read_imageui(input, coord_in);
+    write_imageui(output, coord_out, tmp);
+}
+
+
+__kernel void gpuTensorCopyROI_Quant8_NoPad_4X_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+    int                    input_height,
+    int                    height_diff
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int depth = convert_int(convert_short(y)/convert_short(input_height));
+    int out_y  = depth * height_diff + y;
+    int2 coord_in   = (int2)(x, y);
+    int2 coord_out  = (int2)(x, out_y);
+
+    Image i_tensor = create_image_from_image2d(input, 1);
+    uchar *src_ptr = get_image_ptr_from_coord(i_tensor, coord_in.xy);
+    vxc_uchar4 src = vload4(0, (_viv_uchar_packed *)src_ptr);
+    Image o_tensor = create_image_from_image2d(output, 1);
+    uchar *dst_ptr = get_image_ptr_from_coord(o_tensor, coord_out.xy);
+    vstore4(src, 0, (_viv_uchar_packed *)dst_ptr);
+}
+
+__kernel void gpuTensorCopyROI_Quant8_Pad1_2D_x8
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+    int                    input_height,
+    int                    height_diff
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int depth = convert_int(convert_short(y)/convert_short(input_height));
+    int out_y  = depth * height_diff + y + 1;
+    int2 coord_in   = (int2)(x, y);
+
+    Image i_tensor = create_image_from_image2d(input, 1);
+    uchar *src_ptr = get_image_ptr_from_coord(i_tensor, coord_in.xy);
+    vxc_uchar8 src = vload8(0, (_viv_uchar_packed *)src_ptr);
+    Image o_tensor = create_image_from_image2d(output, 1);
+    int2 coord_out  = (int2)(x + 1, out_y);
+    uchar *dst_ptr = get_image_ptr_from_coord(o_tensor, coord_out.xy);
+    vstore8(src, 0, (_viv_uchar_packed *)dst_ptr);
+}
+
+
+__kernel void gpuTensorCopyROI_Quant8_Pad1_2D_x16
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+    int                    input_height,
+    int                    height_diff
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+
+    int2 coord_in   = (int2)(x, y);
+    Image i_tensor = create_image_from_image2d(input, 1);
+    uchar *src_ptr = get_image_ptr_from_coord(i_tensor, coord_in.xy);
+    vxc_uchar16 src = vload16(0, (_viv_uchar_packed *)src_ptr);
+
+    int depth = convert_int(convert_short(y)/convert_short(input_height));
+    int out_y  = depth * height_diff + y + 1;
+    int2 coord_out  = (int2)(x + 1, out_y);
+    Image o_tensor = create_image_from_image2d(output, 1);
+    uchar *dst_ptr = get_image_ptr_from_coord(o_tensor, coord_out.xy);
+    vstore16(src, 0, (_viv_uchar_packed *)dst_ptr);
+}
+
+__kernel void gpuTensorCopyROI_Quant8_Pad1_x7 (__read_only image2d_array_t  input,
+                                               __write_only image2d_array_t output
+                                              )
+{
+    int4 coord_in   = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out  = (int4)(get_global_id(0) + 1, get_global_id(1) + 1, get_global_id(2), 0);
+    Tensor i_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *src_ptr = get_tensor_ptr_from_coord(i_tensor, coord_in);
+    vxc_uchar8 src = vload8(0, (_viv_uchar_packed *)src_ptr);
+    Tensor o_tensor = create_tensor_from_image2d_array(output, 1);
+    uchar *dst_ptr = get_tensor_ptr_from_coord(o_tensor, coord_out);
+    vxc_uchar4 dst0 = src.s0123;
+    vxc_uchar3 dst1 = src.s456;
+    vstore4(dst0, 0, (_viv_uchar_packed *)dst_ptr);
+    dst_ptr += 4;
+    vstore3(dst1, 0, (_viv_uchar_packed *)dst_ptr);
+}
+
+__kernel void gpuTensorCopyROI_Quant8_Pad1_2D_x7
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+    int   input_height,
+    int   height_diff
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int depth = convert_int(convert_short(y)/convert_short(input_height));
+    int out_y  = depth * height_diff + y + 1;
+    int4 coord_in   = (int4)(x, y, x + 4, out_y);
+
+    Image i_tensor = create_image_from_image2d(input, 1);
+    uchar *src_ptr = get_image_ptr_from_coord(i_tensor, coord_in.xy);
+    vxc_uchar8 src = vload8(0, (_viv_uchar_packed *)src_ptr);
+    int4 coord_out  = (int4)(x + 1, out_y, x + 2, x + 3);
+
+    Image o_tensor = create_image_from_image2d(output, 1);
+    uchar *dst_ptr = get_image_ptr_from_coord(o_tensor, coord_out.xy);
+    vxc_uchar4 dst0 = src.s0123;
+    vxc_uchar3 dst1 = src.s456;
+    vstore4(dst0, 0, (_viv_uchar_packed *)dst_ptr);
+    dst_ptr += 4;
+    vstore3(dst1, 0, (_viv_uchar_packed *)dst_ptr);
+}
+
+
+__kernel void gpuTensorCopyROI_Quant8_Pad1_2D_x14
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+    int   input_height,
+    int   height_diff
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int depth = convert_int(convert_short(y)/convert_short(input_height));
+    int out_y  = depth * height_diff + y + 1;
+    int4 coord_in   = (int4)(x, y, x + 4, out_y);
+
+    Image i_tensor = create_image_from_image2d(input, 1);
+    uchar *src_ptr = get_image_ptr_from_coord(i_tensor, coord_in.xy);
+    vxc_uchar16 src = vload16(0, (_viv_uchar_packed *)src_ptr);
+
+    int4 coord_out  = (int4)(x + 1, out_y, x + 3, x + 5);
+    Image o_tensor = create_image_from_image2d(output, 1);
+    uchar *dst_ptr = get_image_ptr_from_coord(o_tensor, coord_out.xy);
+    vxc_uchar8 dst0 = src.s01234567;
+    vxc_uchar8 dst1 = src.s6789abcd;
+    vstore8(dst0, 0, (_viv_uchar_packed *)dst_ptr);
+    dst_ptr += 6;
+    vstore8(dst1, 0, (_viv_uchar_packed *)dst_ptr);
+
+}
+
+__kernel void gpuTensorCopyROI_Quant8_NoPad_2D_x8
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+    int   input_height,
+    int   height_diff
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int depth = convert_int(convert_short(y)/convert_short(input_height));
+
+
+    int2 coord_in   = (int2)(x, y);
+    Image i_tensor = create_image_from_image2d(input, 1);
+    uchar *src_ptr = get_image_ptr_from_coord(i_tensor, coord_in.xy);
+    vxc_uchar8 src = vload8(0, (_viv_uchar_packed *)src_ptr);
+
+    int out_y  = depth * height_diff + y;
+    int2 coord_out   = (int2)(x, out_y);
+    Image o_tensor = create_image_from_image2d(output, 1);
+    uchar *dst_ptr = get_image_ptr_from_coord(o_tensor, coord_out.xy);
+    vstore8(src, 0, (_viv_uchar_packed *)dst_ptr);
+}
+
+
+__kernel void gpuTensorCopyROI_Quant8_NoPad_2D_x16
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+    int   input_height,
+    int   height_diff
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int depth = convert_int(convert_short(y)/convert_short(input_height));
+
+    int2 coord_in   = (int2)(x, y);
+    Image i_tensor = create_image_from_image2d(input, 1);
+    uchar *src_ptr = get_image_ptr_from_coord(i_tensor, coord_in.xy);
+    vxc_uchar16 src = vload16(0, (_viv_uchar_packed *)src_ptr);
+
+    int out_y  = depth * height_diff + y;
+    int2 coord_out   = (int2)(x, out_y);
+
+    Image o_tensor = create_image_from_image2d(output, 1);
+    uchar *dst_ptr = get_image_ptr_from_coord(o_tensor, coord_out.xy);
+    vstore16(src, 0, (_viv_uchar_packed *)dst_ptr);
+}
+
+__kernel void gpuTensorCopyROI_Quant8_NoPad_x7
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_array_t output
+     )
+{
+    int4 coord_in   = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out  = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+
+    Tensor i_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *src_ptr = get_tensor_ptr_from_coord(i_tensor, coord_in);
+    vxc_uchar8 src = vload8(0, (_viv_uchar_packed *)src_ptr);
+    Tensor o_tensor = create_tensor_from_image2d_array(output, 1);
+    uchar *dst_ptr = get_tensor_ptr_from_coord(o_tensor, coord_out);
+    vxc_uchar4 dst0 = src.s0123;
+    vxc_uchar3 dst1 = src.s456;
+    vstore4(dst0, 0, (_viv_uchar_packed *)dst_ptr);
+    dst_ptr += 4;
+    vstore3(dst1, 0, (_viv_uchar_packed *)dst_ptr);
+}
+
+__kernel void gpuTensorCopyROI_Quant8_NoPad_2D_x7
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+    int   input_height,
+    int   height_diff
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int depth = convert_int(convert_short(y)/convert_short(input_height));
+    int out_y  = depth * height_diff + y;
+    int4 coord_in   = (int4)(x, y, x + 4, out_y);
+    int4 coord_out  = (int4)(x, out_y, x + 1, x + 2);
+
+    Image i_tensor = create_image_from_image2d(input, 1);
+    uchar *src_ptr = get_image_ptr_from_coord(i_tensor, coord_in.xy);
+    vxc_uchar8 src = vload8(0, (_viv_uchar_packed *)src_ptr);
+    Image o_tensor = create_image_from_image2d(output, 1);
+    uchar *dst_ptr = get_image_ptr_from_coord(o_tensor, coord_out.xy);
+    vxc_uchar4 dst0 = src.s0123;
+    vxc_uchar3 dst1 = src.s456;
+    vstore4(dst0, 0, (_viv_uchar_packed *)dst_ptr);
+    dst_ptr += 4;
+    vstore3(dst1, 0, (_viv_uchar_packed *)dst_ptr);
+}
+
+
+__kernel void gpuTensorCopyROI_Quant8_NoPad_2D_x14
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+    int   input_height,
+    int   height_diff
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int depth = convert_int(convert_short(y)/convert_short(input_height));
+    int out_y  = depth * height_diff + y;
+    int4 coord_in   = (int4)(x, y, x + 4, out_y);
+    int4 coord_out  = (int4)(x, out_y, x + 2, x + 4);
+
+    Image i_tensor = create_image_from_image2d(input, 1);
+    uchar *src_ptr = get_image_ptr_from_coord(i_tensor, coord_in.xy);
+    vxc_uchar16 src = vload16(0, (_viv_uchar_packed *)src_ptr);
+    Image o_tensor = create_image_from_image2d(output, 1);
+    uchar *dst_ptr = get_image_ptr_from_coord(o_tensor, coord_out.xy);
+    vxc_uchar8 dst0 = src.s01234567;
+    vxc_uchar8 dst1 = src.s6789abcd;
+    vstore8(dst0, 0, (_viv_uchar_packed *)dst_ptr);
+    dst_ptr += 6;
+    vstore8(dst1, 0, (_viv_uchar_packed *)dst_ptr);
+}

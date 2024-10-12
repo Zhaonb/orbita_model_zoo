@@ -1,0 +1,14 @@
+__kernel void equalizehistogram_min(
+        __read_only  image2d_t input,
+        __write_only image2d_t output,
+        __global int* out_min)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src0 = read_imageui(input, coord);
+
+    Image img1 = create_image_from_image2d(output, 4);
+    __global uint* out_hist = (__global uint*)img1.ptr;
+
+    atomic_inc(out_hist + src0.x);
+    atom_min(out_min, src0.x);
+}

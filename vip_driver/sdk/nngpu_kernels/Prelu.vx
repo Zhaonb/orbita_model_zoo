@@ -1,0 +1,99 @@
+__kernel void gpuPrelu_FP32
+    (
+    image2d_array_t input,
+    image2d_array_t alpha,
+    image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    float4 data, para, dst = {0.0};
+
+    data = read_imagef(input, coord);
+    para = read_imagef(alpha, coord.zwww);
+
+    float maxData = data.x >= 0 ? data.x : 0;
+    float minData = data.x <  0 ? data.x : 0;
+    dst.x = minData * para.x + maxData;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuPrelu_Quant8
+    (
+    image2d_array_t input,
+    image2d_array_t alpha,
+    float scaleIn,
+    float scaleOut,
+    int zpIn,
+    int zpOut,
+    image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    uint4 tmp, dst = {0.0};
+    float data;
+    float4 para;
+
+    tmp = read_imageui(input, coord);
+    para = read_imagef(alpha, coord.zwww);
+    data = (convert_int(tmp.x-zpIn))*scaleIn;
+
+    float maxData = data >= 0 ? data : 0;
+    float minData = data <  0 ? data : 0;
+    data = minData * para.x + maxData;
+
+    dst.x = floor(data * scaleOut + zpOut + 0.5);
+
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuPrelu_VecFP32
+    (
+    image2d_array_t input,
+    image2d_array_t alpha,
+    image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    float4 data, para, dst = {0.0};
+
+    data = read_imagef(input, coord);
+    para = read_imagef(alpha, coord.zwww);
+
+    float4 maxData = data >= 0 ? data : 0;
+    float4 minData = data  < 0 ? data : 0;
+    dst = minData * para.x + maxData;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuPrelu_VecQuant8
+    (
+    image2d_array_t input,
+    image2d_array_t alpha,
+    float scaleIn,
+    float scaleOut,
+    int zpIn,
+    int zpOut,
+    image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    uint4 tmp, dst = {0.0};
+    float4 data;
+    float4 para;
+    int4 tmpData;
+
+    tmp = read_imageui(input, coord);
+    para = read_imagef(alpha, coord.zwww);
+    tmpData = convert_int4(tmp);
+    data = (convert_float4(tmpData-zpIn))*scaleIn;
+
+    float4 maxData = data >= 0 ? data : 0;
+    float4 minData = data  < 0 ? data : 0;
+    data = minData * para.x + maxData;
+
+    dst = convert_uint4(data * scaleOut + zpOut + 0.5);
+
+    write_imageui(output, coord, dst);
+}

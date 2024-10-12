@@ -1,0 +1,365 @@
+#define epsilon 0.000000000001f
+
+__kernel void gpu_l2norm_axis0_F32toF32
+    (
+    __read_only   image2d_array_t input,
+    __write_only  image2d_array_t output,
+                            int   axis_size,
+                            float zpIn,
+                            float scaleOut,
+                            float zpOut
+    )
+{
+    int y = get_global_id(0);
+    int z = get_global_id(1);
+    int4 coord_in = (int4)(0, y, z, 0);
+    float sum = 0;
+    float4 src, dst = {0.0};
+    float4 one = (float4)(1.0f, 1.0f, 1.0f, 1.0f);
+
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = read_imagef(input, coord_in);
+        coord_in.x ++;
+
+        sum = src.x * src.x + sum;
+    }
+
+    sum = sum > epsilon ? sum : epsilon;
+    float l2_norm = rsqrt(sum);
+
+    // Compute result.
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = read_imagef(input, coord_in);
+
+        dst.x = src.x * l2_norm;
+        write_imagef(output, coord_in, dst);
+        coord_in.x++;
+    }
+}
+
+__kernel void gpu_l2norm_axis0_F32toF32_2D
+    (
+    __read_only   image2d_t input,
+    __write_only  image2d_t output,
+                      int   axis_size,
+                      float zpIn,
+                      float scaleOut,
+                      float zpOut
+    )
+{
+    int y = get_global_id(0);
+    int2 coord_in = (int2)(0, y);
+    float sum = 0;
+    float4 src, dst = {0.0};
+    float4 one = (float4)(1.0f, 1.0f, 1.0f, 1.0f);
+
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = read_imagef(input, coord_in);
+        coord_in.x ++;
+
+        sum = src.x * src.x + sum;
+    }
+
+    sum = sum > epsilon ? sum : epsilon;
+    float l2_norm = rsqrt(sum);
+
+    // Compute result.
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = read_imagef(input, coord_in);
+
+        dst.x = src.x * l2_norm;
+        write_imagef(output, coord_in, dst);
+        coord_in.x++;
+    }
+}
+
+__kernel void gpu_l2norm_axis0_F32toF32_2D_ALN4
+    (
+    __read_only   image2d_t input,
+    __write_only  image2d_t output,
+                      int   axis_size,
+                      float zpIn,
+                      float scaleOut,
+                      float zpOut
+    )
+{
+    int y = get_global_id(0);
+    int2 coord_in = (int2)(0, y);
+    float4 sum = 0;
+    float4 src, dst = {0.0};
+
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = read_imagef(input, coord_in);
+        coord_in.x++;
+
+        sum = src * src + sum;
+    }
+
+    float4 one = (float4)(1.0f, 1.0f, 1.0f, 1.0f);
+    sum.x = dot(sum, one);
+    sum.x = sum.x > epsilon ? sum.x : epsilon;
+    float l2_norm = rsqrt(sum.x);
+
+    // Compute result.
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = read_imagef(input, coord_in);
+
+        dst = src * l2_norm;
+        write_imagef(output, coord_in, dst);
+        coord_in.x++;
+    }
+}
+
+__kernel void gpu_l2norm_axis0_U8toU8
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                           int   axis_size,
+                           float zpIn,
+                           float scaleOut,
+                           float zpOut
+    )
+{
+    int y = get_global_id(0);
+    int z = get_global_id(1);
+
+    int4 coord_in = (int4)(0, y, z, 0);
+    float sum = 0;
+    float4 src;
+    uint4 dst = {0};
+
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = convert_float4(read_imageui(input, coord_in));
+        coord_in.x++;
+
+        sum = (src.x - zpIn) * (src.x - zpIn) + sum;
+    }
+
+    sum = sum > epsilon ? sum : epsilon;
+    float l2_norm = scaleOut * rsqrt(sum);
+
+    // Compute result.
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = convert_float4(read_imageui(input, coord_in));
+
+        dst.x = convert_uint((src.x - zpIn) * l2_norm + zpOut);
+
+        write_imageui(output, coord_in, dst);
+        coord_in.x++;
+    }
+}
+
+__kernel void gpu_l2norm_axis0_U8toU8_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                     int   axis_size,
+                     float zpIn,
+                     float scaleOut,
+                     float zpOut
+    )
+{
+    int y = get_global_id(0);
+
+    int2 coord_in = (int2)(0, y);
+    float sum = 0;
+    float4 src;
+    uint4 dst = {0};
+
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = convert_float4(read_imageui(input, coord_in));
+        coord_in.x++;
+
+        sum = (src.x - zpIn) * (src.x - zpIn) + sum;
+    }
+
+    sum = sum > epsilon ? sum : epsilon;
+    float l2_norm = scaleOut * rsqrt(sum);
+
+    // Compute result.
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = convert_float4(read_imageui(input, coord_in));
+
+        dst.x = convert_uint((src.x - zpIn) * l2_norm + zpOut);
+
+        write_imageui(output, coord_in, dst);
+        coord_in.x++;
+    }
+}
+
+__kernel void gpu_l2norm_axis0_U8toU8_2D_ALN4
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                     int   axis_size,
+                     float zpIn,
+                     float scaleOut,
+                     float zpOut
+    )
+{
+    int y = get_global_id(0);
+
+    int2 coord_in = (int2)(0, y);
+    float4 sum = 0;
+    float4 src;
+    uint4 dst = {0};
+
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = convert_float4(read_imageui(input, coord_in));
+        coord_in.x++;
+
+        sum = (src - zpIn) * (src - zpIn) + sum;
+    }
+
+    float4 one = (float4)(1.0f, 1.0f, 1.0f, 1.0f);
+    sum.x = dot(sum, one);
+    sum.x = sum.x > epsilon ? sum.x : epsilon;
+    float l2_norm = rsqrt(sum.x) * scaleOut;
+
+    // Compute result.
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = convert_float4(read_imageui(input, coord_in));
+
+        dst = convert_uint4((src - zpIn) * l2_norm + zpOut);
+
+        write_imageui(output, coord_in, dst);
+        coord_in.x++;
+    }
+}
+
+__kernel void gpu_l2norm_axis0_I8toI8
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                           int   axis_size,
+                           float zpIn,
+                           float scaleOut,
+                           float zpOut
+    )
+{
+    int y = get_global_id(0);
+    int z = get_global_id(1);
+
+    int4 coord_in = (int4)(0, y, z, 0);
+    float sum = 0;
+    float4 src;
+    int4 dst = {0};
+
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = convert_float4(read_imagei(input, coord_in));
+        coord_in.x++;
+
+        sum = (src.x - zpIn) * (src.x - zpIn) + sum;
+    }
+
+    sum = sum > epsilon ? sum : epsilon;
+    float l2_norm = scaleOut * rsqrt(sum);
+
+    // Compute result.
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = convert_float4(read_imagei(input, coord_in));
+
+        dst.x = convert_int((src.x - zpIn) * l2_norm + zpOut);
+
+        write_imagei(output, coord_in, dst);
+        coord_in.x++;
+    }
+}
+
+__kernel void gpu_l2norm_axis0_I8toI8_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                     int   axis_size,
+                     float zpIn,
+                     float scaleOut,
+                     float zpOut
+    )
+{
+    int y = get_global_id(0);
+
+    int2 coord_in = (int2)(0, y);
+    float sum = 0;
+    float4 src;
+    int4 dst = {0};
+
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = convert_float4(read_imagei(input, coord_in));
+        coord_in.x++;
+
+        sum = (src.x - zpIn) * (src.x - zpIn) + sum;
+    }
+
+    sum = sum > epsilon ? sum : epsilon;
+    float l2_norm = scaleOut * rsqrt(sum);
+
+    // Compute result.
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = convert_float4(read_imagei(input, coord_in));
+
+        dst.x = convert_int((src.x - zpIn) * l2_norm + zpOut);
+
+        write_imagei(output, coord_in, dst);
+        coord_in.x++;
+    }
+}
+
+__kernel void gpu_l2norm_axis0_I8toI8_2D_ALN4
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                     int   axis_size,
+                     float zpIn,
+                     float scaleOut,
+                     float zpOut
+    )
+{
+    int y = get_global_id(0);
+
+    int2 coord_in = (int2)(0, y);
+    float4 sum = 0;
+    float4 src;
+    int4 dst = {0};
+
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = convert_float4(read_imagei(input, coord_in));
+        coord_in.x++;
+
+        sum = (src - zpIn) * (src - zpIn) + sum;
+    }
+
+    float4 one = (float4)(1.0f, 1.0f, 1.0f, 1.0f);
+    sum.x = dot(sum, one);
+    sum.x = sum.x > epsilon ? sum.x : epsilon;
+    float l2_norm = rsqrt(sum.x) * scaleOut;
+
+    // Compute result.
+    for (coord_in.x = 0; coord_in.x < axis_size; )
+    {
+        src = convert_float4(read_imagei(input, coord_in));
+
+        dst = convert_int4((src - zpIn) * l2_norm + zpOut);
+
+        write_imagei(output, coord_in, dst);
+        coord_in.x++;
+    }
+}
+#undef epsilon
+

@@ -1,0 +1,204 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+__kernel void gpuL2Pooling_NoPadFP16
+    (
+    __read_only     image2d_array_t input,
+    int             kernelX,
+    int             kernelY,
+    int             strideX,
+    int             strideY,
+    __write_only    image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    float sum = 0.0;
+    float4 tmp = {0.0};
+    int i, j, count = 0;
+
+    for (j = 0; j < kernelY; j++)
+    {
+        for (i = 0; i < kernelX; i++)
+        {
+            tmp = read_imagef(input, (int4)(x*strideX+i, y*strideY+j, z, 0));
+            sum += tmp.x * tmp.x;
+            count++;
+        }
+    }
+
+    float result = sqrt(sum/convert_float(count));
+
+    half dst0;
+    Tensor out_tensor = create_tensor_from_image2d_array(output, 2);
+    uchar *dst_ptr = get_tensor_ptr_from_coord(out_tensor, (int4)(x, y, z, 0));
+
+    ushort dst;
+    _viv_asm(CONV, dst0, result);
+    _viv_asm(COPY, dst, dst0, 4);
+
+    ((ushort*)dst_ptr)[0] = dst;
+}
+
+__kernel void gpuL2Pooling_NoPadFP32
+    (
+    __read_only     image2d_array_t input,
+    int             kernelX,
+    int             kernelY,
+    int             strideX,
+    int             strideY,
+    __write_only    image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    float sum = 0.0;
+    float4 tmp = {0.0}, dst = {0.0};
+    int i, j, count = 0;
+
+    for (j = 0; j < kernelY; j++)
+    {
+        for (i = 0; i < kernelX; i++)
+        {
+            tmp = read_imagef(input, (int4)(x*strideX+i, y*strideY+j, z, 0));
+            sum += tmp.x * tmp.x;
+            count++;
+        }
+    }
+
+    dst.x = sqrt(sum/convert_float(count));
+    write_imagef(output, (int4)(x, y, z, 0), dst);
+}
+
+__kernel void gpuL2Pooling_NoPadQuant8
+    (
+    __read_only     image2d_array_t input,
+    int             kernelX,
+    int             kernelY,
+    int             strideX,
+    int             strideY,
+    float           scaleIn,
+    float           scaleOut,
+    int             zpIn,
+    int             zpOut,
+    __write_only    image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    float sum = 0.0, tmpOut = 0.0;
+    uint4 tmp = {0.0}, dst = {0.0};
+    int i, j, count = 0;
+
+    for (j = 0; j < kernelY; j++)
+    {
+        for (i = 0; i < kernelX; i++)
+        {
+            tmp = read_imageui(input, (int4)(x*strideX+i, y*strideY+j, z, 0));
+            tmpOut = (convert_int(tmp.x-zpIn))*scaleIn;
+            sum += tmpOut * tmpOut;
+            count++;
+        }
+    }
+
+    sum = sqrt(sum/convert_float(count));
+    dst.x = floor(sum*scaleOut + zpOut + 0.5);
+    write_imageui(output, (int4)(x, y, z, 0), dst);
+}
+
+__kernel void gpuL2Pooling_FP32
+    (
+    __read_only     image2d_array_t input,
+    int             kernelX,
+    int             kernelY,
+    int             strideX,
+    int             strideY,
+    int             padX,
+    int             padY,
+    __write_only    image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int coordinX = x * strideX - padX;
+    int coordinY = y * strideY - padY;
+    int inWidth = get_image_width(input);
+    int inHeight = get_image_height(input);
+    float sum = 0.0;
+    float4 tmp = {0.0}, dst = {0.0};
+    int iStart, iEnd, jStart, jEnd;
+    int w, h, count = 0;
+
+    iStart = max(coordinX, 0);
+    iEnd   = min(coordinX + kernelX, inWidth);
+    jStart = max(coordinY, 0);
+    jEnd   = min(coordinY + kernelY, inHeight);
+
+    for(h = jStart; h < jEnd; h++)
+    {
+        for(w = iStart; w < iEnd; w++)
+        {
+            tmp = read_imagef(input, (int4)(w, h, z, 0));
+            sum += tmp.x * tmp.x;
+            count ++;
+        }
+    }
+
+    dst.x = count == 0 ? 0 : sqrt(sum/convert_float(count));
+
+    write_imagef(output, (int4)(x, y, z, 0), dst);
+}
+
+
+__kernel void gpuL2Pooling_Quant8
+    (
+    __read_only     image2d_array_t input,
+    int             kernelX,
+    int             kernelY,
+    int             strideX,
+    int             strideY,
+    int             padX,
+    int             padY,
+    float           scaleIn,
+    float           scaleOut,
+    int             zpIn,
+    int             zpOut,
+    __write_only    image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    float sum = 0.0, tmpOut = 0.0;
+    uint4 tmp = {0.0}, dst = {0.0};
+    int i, j, count = 0;
+    int coordinX = x * strideX - padX;
+    int coordinY = y * strideY - padY;
+    int inWidth = get_image_width(input);
+    int inHeight = get_image_height(input);
+    int w, h;
+    int iStart, iEnd, jStart, jEnd;
+
+    iStart = max(coordinX, 0);
+    iEnd   = min(coordinX + kernelX, inWidth);
+    jStart = max(coordinY, 0);
+    jEnd   = min(coordinY + kernelY, inHeight);
+
+    for(h = jStart; h < jEnd; h++)
+    {
+        for(w = iStart; w < iEnd; w++)
+        {
+            tmp = read_imageui(input, (int4)(w, h, z, 0));
+            tmpOut = (convert_int(tmp.x-zpIn))*scaleIn;
+            sum += tmpOut * tmpOut;
+            count ++;
+        }
+    }
+
+    dst.x = count == 0 ? 0 : sqrt(sum/convert_float(count));
+    dst.x = floor(sum * scaleOut + zpOut + 0.5);
+    write_imageui(output, (int4)(x, y, z, 0), dst);
+}

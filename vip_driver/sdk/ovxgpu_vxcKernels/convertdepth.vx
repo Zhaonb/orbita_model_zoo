@@ -1,0 +1,175 @@
+#define UINT8_MAX 255
+#define INT16_MIN -32768
+#define INT16_MAX 32767
+#define UINT16_MAX 65535
+#define UINT32_MAX 4294967295
+
+__kernel void convertdepth_U8toS16
+(
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 int       policy,
+                 int       shift
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src = read_imageui(input, coord);
+    int4  dst;
+    dst = convert_int4(src << shift);
+    write_imagei(output, coord, dst);
+}
+
+#define CONVERT_DEPTH_8OR16BIT_TO_16OR32BIT(name0, name1, dst_type, read_func, write_func) \
+__kernel void convertdepth_##name0##to##name1  \
+( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 int       policy, \
+                 int       shift \
+) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    dst_type src = read_func(input, coord); \
+    dst_type dst; \
+    dst = src << shift; \
+    write_func(output, coord, dst); \
+}
+CONVERT_DEPTH_8OR16BIT_TO_16OR32BIT(U8  ,U16, uint4, read_imageui, write_imageui)
+CONVERT_DEPTH_8OR16BIT_TO_16OR32BIT(U8  ,U32, uint4, read_imageui, write_imageui)
+CONVERT_DEPTH_8OR16BIT_TO_16OR32BIT(U16 ,U32, uint4, read_imageui, write_imageui)
+CONVERT_DEPTH_8OR16BIT_TO_16OR32BIT(S16 ,S32, int4,  read_imagei,  write_imagei)
+
+__kernel void convertdepth_S16toU8_warp
+(
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 int       policy,
+                 int       shift
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4 src = read_imagei(input, coord);
+    uchar4 dst0;
+    dst0 = convert_uchar4(src >> shift);
+    uint4 dst = convert_uint4(dst0);
+    write_imageui(output, coord, dst);
+}
+
+#define CONVERT_DEPTH_16OR32BIT_TO_8OR16BIT_WARP(name0, name1, src_type, dst_type, readtype_to_srctype, srctype_to_dsttype, read_func, write_func) \
+__kernel void convertdepth_##name0##to##name1##_warp \
+( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 int       policy, \
+                 int       shift \
+) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    src_type src = readtype_to_srctype(read_func(input, coord)); \
+    src = src >> shift; \
+    dst_type dst = srctype_to_dsttype(src); \
+    write_func(output, coord, dst); \
+}
+CONVERT_DEPTH_16OR32BIT_TO_8OR16BIT_WARP(U16 ,U8,  ushort4, uint4, convert_ushort4, convert_uint4, read_imageui, write_imageui)
+CONVERT_DEPTH_16OR32BIT_TO_8OR16BIT_WARP(U32 ,U8,  uint4,   uint4, convert_uint4,   convert_uint4, read_imageui, write_imageui)
+CONVERT_DEPTH_16OR32BIT_TO_8OR16BIT_WARP(U32 ,U16, uint4,   uint4, convert_uint4,   convert_uint4, read_imageui, write_imageui)
+CONVERT_DEPTH_16OR32BIT_TO_8OR16BIT_WARP(S32 ,S16, int4,    int4,  convert_int4,    convert_int4,  read_imagei,  write_imagei)
+
+__kernel void convertdepth_S16toU8_sat
+(
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 int       policy,
+                 int       shift
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4 src = read_imagei(input, coord);
+    uint4 dst0;
+    src = src >> shift;
+    src.x = clamp(src.x, 0, 255);
+    dst0 = convert_uint4(src);
+    write_imageui(output, coord, dst0);
+}
+
+#define CONVERT_DEPTH_16OR32BIT_TO_8OR16BIT_SAT(name0, name1, src_type, dst_type, readtype_to_srctype, srctype_to_dsttype, read_func, write_func, Min, Max) \
+__kernel void convertdepth_##name0##to##name1##_sat \
+( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 int       policy, \
+                 int       shift \
+) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    src_type src = readtype_to_srctype(read_func(input, coord)); \
+    src = src >> shift; \
+    src.x = clamp(src.x, Min, Max); \
+    dst_type dst = srctype_to_dsttype(src); \
+    write_func(output, coord, dst); \
+}
+
+CONVERT_DEPTH_16OR32BIT_TO_8OR16BIT_SAT(U16 ,U8,  ushort4, uint4, convert_ushort4, convert_uint4, read_imageui, write_imageui, 0, UINT8_MAX)
+CONVERT_DEPTH_16OR32BIT_TO_8OR16BIT_SAT(U32 ,U8,  uint4,   uint4, convert_uint4,   convert_uint4, read_imageui, write_imageui, 0, UINT8_MAX)
+CONVERT_DEPTH_16OR32BIT_TO_8OR16BIT_SAT(U32 ,U16, uint4,   uint4, convert_uint4,   convert_uint4, read_imageui, write_imageui, 0, UINT16_MAX)
+CONVERT_DEPTH_16OR32BIT_TO_8OR16BIT_SAT(S32 ,S16, int4,    int4,  convert_int4,    convert_int4,  read_imagei,  write_imagei,  INT16_MIN, INT16_MAX)
+
+#define CONVERT_DEPTH_U1_TO_8OR16OR32BIT(name0, Max, dst_type, srctype_to_dsttype, write_func) \
+__kernel void convertdepth_U1to##name0 \
+( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 int       policy, \
+                 int       shift \
+) \
+{ \
+    int pix = get_global_id(0); \
+    int piy = get_global_id(1); \
+    uint4 src = read_imageui(input, (int2)(pix >> 3, piy)); \
+    dst_type  dst0; \
+    uchar get_bit = 1; \
+    uint  bit_data = 0; \
+    for (int i = 0; i < 8; i++) \
+    { \
+        dst0 = srctype_to_dsttype(((src.x >> i) & 1) * Max); \
+        write_func(output, (int2)(pix + i, piy), dst0); \
+    } \
+}
+
+CONVERT_DEPTH_U1_TO_8OR16OR32BIT(U8,  UINT8_MAX,  uint4, convert_uint4, write_imageui)
+CONVERT_DEPTH_U1_TO_8OR16OR32BIT(U16, UINT16_MAX, uint4, convert_uint4, write_imageui)
+CONVERT_DEPTH_U1_TO_8OR16OR32BIT(S16, -1,         int4,  convert_int4,  write_imagei)
+CONVERT_DEPTH_U1_TO_8OR16OR32BIT(U32, UINT32_MAX, uint4, convert_uint4, write_imageui)
+
+
+#define CONVERT_DEPTH_8OR16OR32BIT_TO_U1(name0, src_type, readtype_to_srctype, read_func) \
+__kernel void convertdepth_##name0##toU1 \
+( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 int       policy, \
+                 int       shift \
+) \
+{ \
+    int pix = get_global_id(0); \
+    int piy = get_global_id(1); \
+    src_type src[8]; \
+    src_type src0; \
+    for (int i = 0; i < 8; i++) \
+    { \
+        src0 = readtype_to_srctype(read_func(input, (int2)(pix + i, piy)).x); \
+        if (src0 != 0) src[i] = 1; \
+        else src[i] = 0; \
+    } \
+    uint4 dst = (uint4)(0,0,0,0); \
+    for (int i = 0; i < 8; i++) \
+    { \
+        dst.x += exp2(i) * src[i]; \
+    } \
+    write_imageui(output, (int2)(pix >> 3, piy), dst); \
+}
+
+CONVERT_DEPTH_8OR16OR32BIT_TO_U1(U8,  uint, convert_uchar,  read_imageui)
+CONVERT_DEPTH_8OR16OR32BIT_TO_U1(U16, uint, convert_ushort, read_imageui)
+CONVERT_DEPTH_8OR16OR32BIT_TO_U1(S16, int,  convert_short,  read_imageui)
+CONVERT_DEPTH_8OR16OR32BIT_TO_U1(U32, uint, convert_uint,   read_imageui)

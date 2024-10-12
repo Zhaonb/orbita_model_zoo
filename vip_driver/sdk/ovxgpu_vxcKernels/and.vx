@@ -1,0 +1,21 @@
+
+__kernel void and_U8_U8toU8
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+    )
+{
+    int offset = get_global_id(0);
+
+    Image in0 = create_image_from_image2d(input0, U8_ELEMENT_SIZE);
+    Image in1 = create_image_from_image2d(input1, U8_ELEMENT_SIZE);
+
+    uchar4 src0 = vload4(offset, in0.ptr);
+    uchar4 src1 = vload4(offset, in1.ptr);
+    uchar4 dst = src0 & src1;
+
+    Image out = create_image_from_image2d(output, U8_ELEMENT_SIZE);
+
+    vstore4(dst, offset, out.ptr);
+}

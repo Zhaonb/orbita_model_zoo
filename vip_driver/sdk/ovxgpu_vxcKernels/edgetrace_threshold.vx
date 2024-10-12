@@ -1,0 +1,37 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int upper;
+_viv_uniform int lower;
+_viv_uniform int height;
+
+/* output width extend [1, 1], border set to 0 */
+__kernel void edgetrace_threshold
+(
+    __read_only image2d_t  input,
+    __global int*  threshold,
+    __write_only image2d_t mcOutput,
+    __write_only image2d_t output,
+    __global int* count
+)
+{
+    int4 coord = (int4)(get_global_id(0) - 1, 0, get_global_id(0), 0);
+    uint preVal = 0;
+    uint4 dst = (uint4)(0);
+
+    for(; coord.y < height; coord.y++)
+    {
+        uint4 src0 = read_imageui(input, coord.xy);
+
+        dst.x = src0.x <= lower ? 0 : 127;
+        if((src0.x > upper) || (src0.x > lower && preVal == 255))
+        {
+            atom_inc(count);
+            dst.x = 255;
+        }
+        preVal = dst.x;
+
+        write_imageui(output, coord.zy, dst);
+    }
+}

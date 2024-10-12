@@ -1,0 +1,623 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int         axisSize;
+_viv_uniform float       scaleLogE;
+_viv_uniform float       output_scale;
+_viv_uniform float       output_zp;
+_viv_uniform VXC_512Bits uniConvertInt32toUint8_2x8;
+
+_viv_uniform int         inputWidth;
+_viv_uniform float4      one_coef4;
+_viv_uniform VXC_512Bits uniGetSubData0to3_4x4;
+_viv_uniform VXC_512Bits uniGetSubData4to7_4x4;
+_viv_uniform VXC_512Bits uniPackMaxData_2x8;
+
+float4 exponential(float4 x, float coeff)
+{
+    x = x * coeff;
+    return exp2(x);
+}
+
+#define SOFTMAX_PROCESS_AXIS0(read_fun, vert_max_fun, horz_max_fun) \
+    read_fun(val0, input,  coord, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    _viv_asm(COPY, val, val0, 16); \
+    coord.x += 8; \
+    do \
+    { \
+        read_fun(val0, input,  coord, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        _viv_asm(COPY, img_val0, val0, 16); \
+        read_fun(val1, input,  coord, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        _viv_asm(COPY, img_val1, val1, 16); \
+        read_fun(val2, input,  coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        _viv_asm(COPY, img_val2, val2, 16); \
+        read_fun(val3, input,  coord, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        _viv_asm(COPY, img_val3, val3, 16); \
+        coord.x += 32; \
+        vert_max_fun(val, img_val0, img_val1, val, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        vert_max_fun(val, img_val2, img_val3, val, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    } \
+    while(coord.x < (axisSize + 16)); \
+    horz_max_fun(val, val, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0)); \
+    VXC_DP2x8(val, val, val, VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0), uniPackMaxData_2x8); \
+    horz_max_fun(val, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0)); \
+ \
+    vxc_float4 prob; \
+    float fProbSum = 0; \
+    const float4 one4 = (float4)(1.0, 1.0, 1.0, 1.0); \
+    for (coord.x = 0; coord.x < inputWidth; ) \
+    { \
+        read_fun(val0, input,  coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+        _viv_asm(COPY, img_val0, val0, 16); \
+        coord.x += 4; \
+        VXC_DP4x4(prob, img_val0, val, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetSubData0to3_4x4); \
+        prob *= scaleLogE; \
+        prob = exp2(prob); \
+        fProbSum += dot(prob, one4); \
+    } \
+    read_fun(val0, input,  coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+    _viv_asm(COPY, img_val0, val0, 16); \
+    VXC_DP4x4(prob, img_val0, val, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetSubData0to3_4x4); \
+    prob *= scaleLogE; \
+    prob.x = exp2(prob.x); \
+    prob.y = exp2(prob.y); \
+    prob.z = exp2(prob.z); \
+    fProbSum += dot(prob, one_coef4); \
+    vxc_float4 probSum_log; \
+    probSum_log.x = 1.0f / fProbSum;
+
+#define SOFTMAX_PROCESS_AXIS0_SAVE(dst_type, save_type, conv_mode, OUT_SCALE, OUT_OFFSET, read_fun, write_fun) \
+    for (coord.x = 0; coord.x < axisSize; ) \
+    { \
+        dst_type vec0, vec1; \
+        save_type dst; \
+        read_fun(val0, input,  coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        _viv_asm(COPY, img_val0, val0, 16); \
+        VXC_DP4x4(prob, img_val0, val, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetSubData0to3_4x4); \
+        prob = exponential(prob, scaleLogE) * probSum_log.xxxx; \
+        prob = prob * OUT_SCALE + OUT_OFFSET; \
+        _viv_asm(conv_mode, vec0, prob); \
+        VXC_DP4x4(prob, img_val0, val, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetSubData4to7_4x4); \
+        prob = exponential(prob, scaleLogE) * probSum_log.xxxx; \
+        prob = prob * OUT_SCALE + OUT_OFFSET; \
+        _viv_asm(conv_mode, vec1, prob); \
+        VXC_DP2x8(dst, vec0, vec1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvertInt32toUint8_2x8); \
+        write_fun(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        coord.x += 8; \
+    }
+
+#define SOFTMAX_AXIS0_SH_IMPL(src_name, dst_name, src_type, copy_type, dst_type,\
+                        save_type, conv_mode, OUT_SCALE, OUT_OFFSET, vert_max_fun, horz_max_fun) \
+__kernel void softmax_axis0_##src_name##to##dst_name \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output) \
+{ \
+    int4 coord = (int4)(16, get_global_id(0), get_global_id(1), 0); \
+    src_type img_val0, img_val1, img_val2, img_val3; \
+    copy_type val0, val1, val2, val3; \
+    src_type val; \
+    SOFTMAX_PROCESS_AXIS0(VXC_ReadImage2DArray, vert_max_fun, horz_max_fun) \
+    SOFTMAX_PROCESS_AXIS0_SAVE(dst_type, save_type, conv_mode,\
+    OUT_SCALE, OUT_OFFSET, VXC_ReadImage2DArray, VXC_WriteImage2DArray); \
+}
+
+SOFTMAX_AXIS0_SH_IMPL(F16, F16, vxc_half8, vxc_short8, half4,  vxc_short8,\
+CONV, 1, 0, VXC_VertMax3_Half, VXC_HorzMax3_Half)
+SOFTMAX_AXIS0_SH_IMPL(F16, I16, vxc_half8, vxc_short8, short4, vxc_short8,\
+CONV_SAT_RTE, output_scale, output_zp, VXC_VertMax3_Half, VXC_HorzMax3_Half)
+SOFTMAX_AXIS0_SH_IMPL(F16, I8,  vxc_half8, vxc_short8, char4,  vxc_char8,\
+CONV_SAT_RTE, output_scale, output_zp, VXC_VertMax3_Half, VXC_HorzMax3_Half)
+SOFTMAX_AXIS0_SH_IMPL(F16, U8,  vxc_half8, vxc_short8, uchar4, vxc_uchar8,\
+CONV_SAT_RTE, output_scale, output_zp, VXC_VertMax3_Half, VXC_HorzMax3_Half)
+SOFTMAX_AXIS0_SH_IMPL(I16, I16, vxc_short8, vxc_short8, short4, vxc_short8,\
+CONV_SAT_RTE, output_scale, output_zp, VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+SOFTMAX_AXIS0_SH_IMPL(I16, F16, vxc_short8, vxc_short8, half4,  vxc_short8,\
+CONV, 1, 0, VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+SOFTMAX_AXIS0_SH_IMPL(I8, I8,  vxc_char16, vxc_char16, char4,  vxc_char8,\
+CONV_SAT_RTE, output_scale, output_zp, VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+SOFTMAX_AXIS0_SH_IMPL(I8, F16, vxc_char16, vxc_char16, half4,  vxc_short8,\
+CONV, 1, 0, VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+SOFTMAX_AXIS0_SH_IMPL(U8, U8,  vxc_uchar16, vxc_uchar16, uchar4, vxc_uchar8,\
+CONV_SAT_RTE, output_scale, output_zp, VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+SOFTMAX_AXIS0_SH_IMPL(U8, F16, vxc_uchar16, vxc_uchar16, half4,  vxc_short8,\
+CONV, 1, 0, VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+SOFTMAX_AXIS0_SH_IMPL(I16, U8, vxc_short8, vxc_short8, uchar4, vxc_uchar8,\
+CONV_SAT_RTE, output_scale, output_zp, VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+
+#define SOFTMAX_AXIS0_2D_SH_IMPL(src_name, dst_name, src_type, copy_type,\
+                           dst_type, save_type, conv_mode, OUT_SCALE, OUT_OFFSET, vert_max_fun, horz_max_fun) \
+__kernel void softmax_axis0_##src_name##to##dst_name##_2D \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output) \
+{ \
+    int2 coord = (int2)(16, get_global_id(0)); \
+    src_type img_val0, img_val1, img_val2, img_val3; \
+    copy_type val0, val1, val2, val3; \
+    src_type val; \
+    SOFTMAX_PROCESS_AXIS0(VXC_ReadImage, vert_max_fun, horz_max_fun) \
+    SOFTMAX_PROCESS_AXIS0_SAVE(dst_type, save_type, conv_mode,\
+    OUT_SCALE, OUT_OFFSET, VXC_ReadImage, VXC_WriteImage); \
+}
+
+SOFTMAX_AXIS0_2D_SH_IMPL(F16, F16, vxc_half8, vxc_short8, half4,  vxc_short8,\
+CONV, 1, 0, VXC_VertMax3_Half, VXC_HorzMax3_Half)
+SOFTMAX_AXIS0_2D_SH_IMPL(F16, I16, vxc_half8, vxc_short8, short4, vxc_short8,\
+CONV_SAT_RTE, output_scale, output_zp, VXC_VertMax3_Half, VXC_HorzMax3_Half)
+SOFTMAX_AXIS0_2D_SH_IMPL(F16, I8,  vxc_half8, vxc_short8, char4,  vxc_char8, \
+CONV_SAT_RTE, output_scale, output_zp, VXC_VertMax3_Half, VXC_HorzMax3_Half)
+SOFTMAX_AXIS0_2D_SH_IMPL(F16, U8,  vxc_half8, vxc_short8, uchar4, vxc_uchar8,\
+CONV_SAT_RTE, output_scale, output_zp, VXC_VertMax3_Half, VXC_HorzMax3_Half)
+SOFTMAX_AXIS0_2D_SH_IMPL(I16, I16, vxc_short8, vxc_short8, short4, vxc_short8,\
+CONV_SAT_RTE, output_scale, output_zp, VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+SOFTMAX_AXIS0_2D_SH_IMPL(I16, F16, vxc_short8, vxc_short8, half4,  vxc_short8,\
+CONV, 1, 0, VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+SOFTMAX_AXIS0_2D_SH_IMPL(I16, U8, vxc_short8, vxc_short8, uchar4, vxc_uchar8,\
+CONV_SAT_RTE, output_scale, output_zp, VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+
+
+#define SOFTMAX_PROCESS_AXIS0_TOF32_SAVE(read_fun, write_func) \
+    for (coord.x = 0; coord.x < axisSize; ) \
+    { \
+        read_fun(val0, input,  coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        _viv_asm(COPY, img_val0, val0, 16); \
+        coord_out.x = coord.x << 1; \
+        VXC_DP4x4(prob, img_val0, val, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniGetSubData0to3_4x4); \
+        prob = exponential(prob, scaleLogE) * probSum_log.xxxx; \
+        vxc_ushort8 result; \
+        _viv_asm(COPY, result, prob, 16); \
+        write_func(output, coord_out, result, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+        coord_out.x += 8; \
+        VXC_DP4x4(prob, img_val0, val, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniGetSubData4to7_4x4); \
+        prob = exponential(prob, scaleLogE) * probSum_log.xxxx; \
+        _viv_asm(COPY, result, prob, 16); \
+        write_func(output, coord_out, result, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+        coord.x += 8; \
+    }
+
+#define SOFTMAX_AXIS0_F32_SH_IMPL(src_name, src_type, copy_type, vert_max_fun, horz_max_fun) \
+__kernel void softmax_axis0_##src_name##toF32 \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output, \
+    float input_Scale, \
+    int   axisVal \
+    ) \
+{ \
+    int4 coord = (int4)(16, get_global_id(0), get_global_id(1), 0); \
+    int4 coord_out = coord; \
+    src_type img_val0, img_val1, img_val2, img_val3; \
+    copy_type val0, val1, val2, val3; \
+    src_type val; \
+    SOFTMAX_PROCESS_AXIS0(VXC_ReadImage2DArray, vert_max_fun, horz_max_fun) \
+    SOFTMAX_PROCESS_AXIS0_TOF32_SAVE(VXC_ReadImage2DArray, VXC_WriteImage2DArray) \
+}
+
+SOFTMAX_AXIS0_F32_SH_IMPL(F16, vxc_half8,   vxc_short8,  VXC_VertMax3_Half,    VXC_HorzMax3_Half)
+SOFTMAX_AXIS0_F32_SH_IMPL(I16, vxc_short8,  vxc_short8,  VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+SOFTMAX_AXIS0_F32_SH_IMPL(I8,  vxc_char16,  vxc_char16,  VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+SOFTMAX_AXIS0_F32_SH_IMPL(U8,  vxc_uchar16, vxc_uchar16, VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+
+#define SOFTMAX_AXIS0_F32_2D_SH_IMPL(src_name, src_type, copy_type, vert_max_fun, horz_max_fun) \
+__kernel void softmax_axis0_##src_name##toF32_2D \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_t       output) \
+{ \
+    int2 coord = (int2)(16, get_global_id(0)); \
+    int2 coord_out = coord; \
+    src_type img_val0, img_val1, img_val2, img_val3; \
+    copy_type val0, val1, val2, val3; \
+    src_type val; \
+    SOFTMAX_PROCESS_AXIS0(VXC_ReadImage, vert_max_fun, horz_max_fun) \
+    SOFTMAX_PROCESS_AXIS0_TOF32_SAVE(VXC_ReadImage, VXC_WriteImage) \
+}
+
+SOFTMAX_AXIS0_F32_2D_SH_IMPL(F16, vxc_half8,   vxc_short8,  VXC_VertMax3_Half,    VXC_HorzMax3_Half)
+SOFTMAX_AXIS0_F32_2D_SH_IMPL(I16, vxc_short8,  vxc_short8,  VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+SOFTMAX_AXIS0_F32_2D_SH_IMPL(I8,  vxc_char16,  vxc_char16,  VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+SOFTMAX_AXIS0_F32_2D_SH_IMPL(U8,  vxc_uchar16, vxc_uchar16, VXC_VertMax3_Integer, VXC_HorzMax3_Integer)
+
+_viv_uniform VXC_512Bits uniConvBF16toF32_Part0_2x8;
+_viv_uniform VXC_512Bits uniExtractHalf4_4x4;
+
+#define SOFTMAX_AXIS0_BF16(read_fun) \
+    vxc_half8 img_val0, img_val1, img_val2, img_val3; \
+    vxc_short8 val0, val1, val2, val3; \
+    vxc_half8 val; \
+    read_fun(val0, input,  coord, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    _viv_asm(COPY, val, val0, 16); \
+    coord.x += 8; \
+    do \
+    { \
+        read_fun(val0, input,  coord, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        _viv_asm(COPY, img_val0, val0, 16); \
+        read_fun(val1, input,  coord, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        _viv_asm(COPY, img_val1, val1, 16); \
+        read_fun(val2, input,  coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        _viv_asm(COPY, img_val2, val2, 16); \
+        read_fun(val3, input,  coord, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        _viv_asm(COPY, img_val3, val3, 16); \
+        coord.x += 32; \
+        VXC_VertMax3_Half(val, img_val0, img_val1, val, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        VXC_VertMax3_Half(val, img_val2, img_val3, val, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    } \
+    while(coord.x < (axisSize + 16)); \
+    VXC_HorzMax3_Half(val, val, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0)); \
+    VXC_DP2x8(val, val, val, VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0), uniPackMaxData_2x8); \
+    VXC_HorzMax3_Half(val, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0)); \
+ \
+    vxc_short8 zero = (vxc_short8)(0, 0, 0, 0, 0, 0, 0, 0); \
+    vxc_ushort8   bf_val_tmp; \
+    vxc_float4 vecA; \
+    _viv_asm(COPY, bf_val_tmp, val, 16); \
+    VXC_DP2x8(bf_val_tmp, bf_val_tmp, zero,\
+    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8); \
+    _viv_asm(COPY, vecA, bf_val_tmp, 16); \
+    vxc_float4 prob; \
+    float fProbSum = 0; \
+    const float4 one4 = (float4)(1.0, 1.0, 1.0, 1.0); \
+    float max_value = vecA.x * scaleLogE; \
+    float max_value_orig = vecA.x; \
+    for (coord.x = 0; coord.x < inputWidth; ) \
+    { \
+        read_fun(val0, input,  coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+        VXC_DP2x8(bf_val_tmp, val0, zero,\
+        VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8); \
+        _viv_asm(COPY, prob, bf_val_tmp, 16); \
+        prob = prob * scaleLogE - max_value; \
+        prob = exp2(prob); \
+        fProbSum += dot(prob, one4); \
+        coord.x += 4; \
+    } \
+    read_fun(val0, input,  coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+    VXC_DP2x8(bf_val_tmp, val0, zero,\
+    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8); \
+    _viv_asm(COPY, prob, bf_val_tmp, 16); \
+    prob = prob * scaleLogE - max_value; \
+    prob.x = exp2(prob.x); \
+    prob.y = exp2(prob.y); \
+    prob.z = exp2(prob.z); \
+    fProbSum += dot(prob, one_coef4); \
+    vxc_float4 probSum_log; \
+    probSum_log.x = 1.0f / fProbSum;
+
+#define SOFTMAX_AXIS0_BF16TOBF16_SAVE(read_fun, write_fun) \
+    for (coord.x = 0; coord.x < axisSize; ) \
+    { \
+        read_fun(val0, input,  coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+        VXC_DP2x8(bf_val_tmp, val0, zero,\
+        VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8); \
+        _viv_asm(COPY, prob, bf_val_tmp, 16); \
+        prob = prob - max_value_orig; \
+        prob = exponential(prob, scaleLogE) * probSum_log.xxxx; \
+        vxc_ushort8 tmp; \
+        vxc_ushort4 dst; \
+        _viv_asm(COPY, tmp, prob, 16); \
+        dst.s0123 = tmp.s1357; \
+        write_fun(output, coord, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+        coord.x += 4; \
+    }
+
+#define SOFTMAX_AXIS0_BF16TOF16_SAVE(read_fun, write_fun) \
+    for (coord.x = 0; coord.x < axisSize; ) \
+    { \
+        read_fun(val0, input,  coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+        VXC_DP2x8(bf_val_tmp, val0, zero,\
+        VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8); \
+        _viv_asm(COPY, prob, bf_val_tmp, 16); \
+        prob = prob - max_value_orig; \
+        prob = exponential(prob, scaleLogE) * probSum_log.xxxx; \
+        half4 vec; \
+        vxc_half4 tmp; \
+        vxc_short4 dst; \
+        _viv_asm(CONV, vec, prob); \
+        VXC_DP4x4(tmp, vec, vec, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniExtractHalf4_4x4); \
+        _viv_asm(COPY, dst, tmp, 8); \
+        write_fun(output, coord, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+        coord.x += 4; \
+    }
+
+#define SOFTMAX_AXIS0_BF16TOF32_SAVE(read_fun, write_func) \
+    for (coord.x = 0; coord.x < axisSize; ) \
+    { \
+        read_fun(val0, input,  coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+        coord_out.x = coord.x << 1; \
+        VXC_DP2x8(bf_val_tmp, val0, zero,\
+        VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8); \
+        _viv_asm(COPY, prob, bf_val_tmp, 16); \
+        prob = prob - max_value_orig; \
+        prob = exponential(prob, scaleLogE) * probSum_log.xxxx; \
+        vxc_ushort8 result; \
+        _viv_asm(COPY, result, prob, 16); \
+        write_func(output, coord_out, result, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+        coord.x += 4; \
+    }
+
+__kernel void softmax_axis0_BF16toBF16(
+    __read_only image2d_array_t   input,
+    __write_only image2d_array_t  output
+    )
+{
+    int4 coord = (int4)(16, get_global_id(0), get_global_id(1), 0);
+    SOFTMAX_AXIS0_BF16(VXC_ReadImage2DArray)
+    SOFTMAX_AXIS0_BF16TOBF16_SAVE(VXC_ReadImage2DArray, VXC_WriteImage2DArray)
+}
+__kernel void softmax_axis0_BF16toF16(
+    __read_only image2d_array_t   input,
+    __write_only image2d_array_t  output
+    )
+{
+    int4 coord = (int4)(16, get_global_id(0), get_global_id(1), 0);
+    SOFTMAX_AXIS0_BF16(VXC_ReadImage2DArray)
+    SOFTMAX_AXIS0_BF16TOF16_SAVE(VXC_ReadImage2DArray, VXC_WriteImage2DArray)
+}
+__kernel void softmax_axis0_BF16toF32(
+    __read_only image2d_array_t   input,
+    __write_only image2d_array_t  output
+    )
+{
+    int4 coord = (int4)(16, get_global_id(0), get_global_id(1), 0);
+    int4 coord_out = coord;
+    SOFTMAX_AXIS0_BF16(VXC_ReadImage2DArray)
+    SOFTMAX_AXIS0_BF16TOF32_SAVE(VXC_ReadImage2DArray, VXC_WriteImage2DArray)
+}
+__kernel void softmax_axis0_BF16toBF16_2D(
+    __read_only image2d_array_t   input,
+    __write_only image2d_array_t  output
+    )
+{
+    int2 coord = (int2)(16, get_global_id(0));
+    SOFTMAX_AXIS0_BF16(VXC_ReadImage)
+    SOFTMAX_AXIS0_BF16TOBF16_SAVE(VXC_ReadImage, VXC_WriteImage)
+}
+__kernel void softmax_axis0_BF16toF16_2D(
+    __read_only image2d_array_t   input,
+    __write_only image2d_array_t  output
+    )
+{
+    int2 coord = (int2)(16, get_global_id(0));
+    SOFTMAX_AXIS0_BF16(VXC_ReadImage)
+    SOFTMAX_AXIS0_BF16TOF16_SAVE(VXC_ReadImage, VXC_WriteImage)
+}
+__kernel void softmax_axis0_BF16toF32_2D(
+    __read_only image2d_array_t   input,
+    __write_only image2d_t        output
+    )
+{
+    int2 coord = (int2)(16, get_global_id(0));
+    int2 coord_out = coord;
+    SOFTMAX_AXIS0_BF16(VXC_ReadImage)
+    SOFTMAX_AXIS0_BF16TOF32_SAVE(VXC_ReadImage, VXC_WriteImage)
+}
+
+#define SOFTMAX_PROCESS_AXIS0_8BITS(read_fun, vert_max_fun, horz_max_fun) \
+    read_fun(val, input,  coord, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+    coord.x += 16; \
+    do \
+    { \
+        read_fun(img_val0, input,  coord, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+        read_fun(img_val1, input,  coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+        coord.x += 32; \
+        vert_max_fun(val, img_val0, img_val1, val, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+    } \
+    while(coord.x < (axisSize + 16)); \
+    horz_max_fun(val, val, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0)); \
+    val.s01234567 = val.s0369cfff; \
+    horz_max_fun(val, val, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+    horz_max_fun(val, val, VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0)); \
+    horz_max_fun(val, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0)); \
+ \
+    vxc_float4 prob; \
+    float fProbSum = 0; \
+    const float4 one4 = (float4)(1.0, 1.0, 1.0, 1.0); \
+    for (coord.x = 0; coord.x < inputWidth; ) \
+    { \
+        read_fun(img_val0, input,  coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+        coord.x += 4; \
+        VXC_DP4x4(prob, img_val0, val, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetSubData0to3_4x4); \
+        prob *= scaleLogE; \
+        prob = exp2(prob); \
+        fProbSum += dot(prob, one4); \
+    } \
+    read_fun(img_val0, input,  coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+    VXC_DP4x4(prob, img_val0, val, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetSubData0to3_4x4); \
+    prob *= scaleLogE; \
+    prob.x = exp2(prob.x); \
+    prob.y = exp2(prob.y); \
+    prob.z = exp2(prob.z); \
+    fProbSum += dot(prob, one_coef4); \
+    vxc_float4 probSum_log; \
+    probSum_log.x = 1.0f / fProbSum;
+
+#define SOFTMAX_AXIS0_2D_SH_IMPL_8BITS(src_name, dst_name, src_type,\
+                           dst_type, save_type, conv_mode, OUT_SCALE, OUT_OFFSET) \
+__kernel void softmax_axis0_##src_name##to##dst_name##_2D \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output) \
+{ \
+    int2 coord = (int2)(16, get_global_id(0)); \
+    src_type img_val0, img_val1, val0; \
+    src_type val; \
+    SOFTMAX_PROCESS_AXIS0_8BITS(VXC_ReadImage, VXC_VertMax3_Integer, VXC_HorzMax3_Integer) \
+    SOFTMAX_PROCESS_AXIS0_SAVE(dst_type, save_type, conv_mode,\
+    OUT_SCALE, OUT_OFFSET, VXC_ReadImage, VXC_WriteImage); \
+}
+SOFTMAX_AXIS0_2D_SH_IMPL_8BITS(I8, I8,  vxc_char16,  char4,  vxc_char8,  CONV_SAT_RTE, output_scale, output_zp)
+SOFTMAX_AXIS0_2D_SH_IMPL_8BITS(I8, F16, vxc_char16,  half4,  vxc_short8, CONV,         1,           0)
+SOFTMAX_AXIS0_2D_SH_IMPL_8BITS(U8, U8,  vxc_uchar16, uchar4, vxc_uchar8, CONV_SAT_RTE, output_scale, output_zp)
+SOFTMAX_AXIS0_2D_SH_IMPL_8BITS(U8, F16, vxc_uchar16, half4,  vxc_short8, CONV,         1,           0)
+
+_viv_uniform VXC_512Bits uniConvEvenDatatoF32_4x4;
+_viv_uniform VXC_512Bits uniConvOddDatatoF32_4x4;
+_viv_uniform VXC_512Bits uniExtractABAB_2x8;
+#define SOFTMAX_AXIS0_2D_SH_IMPL_AXISIZE2(src_name, dst_name, src_type, copy_type, conv_type, dst_type, save_type) \
+__kernel void softmax_axis0_##src_name##to##dst_name##_AXSIZE2_2D \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    src_type src; \
+    copy_type vec; \
+ \
+    VXC_ReadImage(vec, input, coord.xy, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    _viv_asm(COPY, src, vec, 16); \
+ \
+    float4 data0, data1, maxVal, minVal; \
+    VXC_DP4x4(data0, src, src, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvEvenDatatoF32_4x4); \
+    VXC_DP4x4(data1, src, src, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvOddDatatoF32_4x4); \
+    maxVal = data1 >= data0 ? data1 : data0; \
+    minVal = data1 < data0 ? data1 : data0; \
+    minVal -= maxVal; \
+    minVal *= scaleLogE; \
+    minVal = exp2(minVal); \
+ \
+    float4 fProbSum = minVal + 1.0; \
+    fProbSum = output_scale / fProbSum; \
+    data0 = data0 == maxVal ? 1.0 : minVal; \
+    data1 = data1 == maxVal ? 1.0 : minVal; \
+    data0 = data0 * fProbSum + output_zp; \
+    data1 = data1 * fProbSum + output_zp; \
+ \
+    conv_type vect0, vect1; \
+    dst_type tmp; \
+    save_type dst; \
+    _viv_asm(CONV_RTE, vect0, data0); \
+    _viv_asm(CONV_RTE, vect1, data1); \
+    VXC_DP2x8(tmp, vect0, vect1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniExtractABAB_2x8); \
+    _viv_asm(COPY, dst, tmp, 16); \
+    VXC_WriteImage(output, coord.xy, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+}
+
+SOFTMAX_AXIS0_2D_SH_IMPL_AXISIZE2(F16, F16, vxc_half8,  vxc_short8, half4, vxc_half8,  vxc_short8)
+SOFTMAX_AXIS0_2D_SH_IMPL_AXISIZE2(F16, I16, vxc_half8,  vxc_short8, int4,  vxc_short8, vxc_short8)
+SOFTMAX_AXIS0_2D_SH_IMPL_AXISIZE2(F16, U8,  vxc_half8,  vxc_short8, int4,  vxc_uchar8, vxc_uchar8)
+SOFTMAX_AXIS0_2D_SH_IMPL_AXISIZE2(F16, I8,  vxc_half8,  vxc_short8, int4,  vxc_char8,  vxc_char8)
+SOFTMAX_AXIS0_2D_SH_IMPL_AXISIZE2(I16, I16, vxc_short8, vxc_short8, int4,  vxc_short8, vxc_short8)
+SOFTMAX_AXIS0_2D_SH_IMPL_AXISIZE2(I16, F16, vxc_short8, vxc_short8, half4, vxc_half8,  vxc_short8)
+SOFTMAX_AXIS0_2D_SH_IMPL_AXISIZE2(U8,  U8,  vxc_uchar8, vxc_uchar8, int4,  vxc_uchar8, vxc_uchar8)
+SOFTMAX_AXIS0_2D_SH_IMPL_AXISIZE2(U8,  F16, vxc_uchar8, vxc_uchar8, half4, vxc_half8,  vxc_short8)
+SOFTMAX_AXIS0_2D_SH_IMPL_AXISIZE2(I8,  I8,  vxc_char8,  vxc_char8,  int4,  vxc_char8,  vxc_char8)
+SOFTMAX_AXIS0_2D_SH_IMPL_AXISIZE2(I8,  F16, vxc_char8,  vxc_char8,  half4, vxc_half8,  vxc_short8)
+SOFTMAX_AXIS0_2D_SH_IMPL_AXISIZE2(I16, U8,  vxc_short8, vxc_short8, int4,  vxc_uchar8, vxc_uchar8)
+
+_viv_uniform VXC_512Bits uniDataMinusMax_0_4x4;
+_viv_uniform VXC_512Bits uniDataMinusMax_1_4x4;
+_viv_uniform VXC_512Bits uniDataMinusMax_2_4x4;
+_viv_uniform VXC_512Bits uniDataMinusMax_3_4x4;
+__kernel __attribute__((reqd_work_group_size(32, 1, 1))) void softmax_axis0_U8toU8_size_1024_2D
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    vxc_uchar16 src0, src1, max16;
+    int lx = get_local_id(0);
+
+    __local uchar lcl_max[32];
+    __local float lcl_prob[32];
+
+    int4 coord = (int4)(lx * 32 + 16, get_global_id(1), get_global_id(1), get_global_id(1));
+
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.xz = coord.xx - (int2)(16, 0);
+
+    VXC_VertMax3_Integer(max16, src0, src1, src1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMax3_Integer(max16, max16, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMax3_Integer(max16, max16.s0369cddddddddddd, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMax3_Integer(max16, max16.s0344444444444444, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+
+    lcl_max[lx] = max16.s0;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    vxc_uchar16 max0 = ((vxc_uchar16 *)lcl_max)[0];
+    vxc_uchar16 max1 = ((vxc_uchar16 *)lcl_max)[1];
+    VXC_VertMax3_Integer(max16, max0, max1, max1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMax3_Integer(max16, max16, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMax3_Integer(max16, max16.s0369cddddddddddd, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMax3_Integer(max16, max16.s0344444444444444, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+
+    float4 prob0, prob1, prob2, prob3, prob4, prob5, prob6, prob7;
+    float4 one = (float4)(1, 1, 1, 1);
+    float sum_prob;
+    VXC_DP4x4(prob0, src0, max16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniDataMinusMax_0_4x4);
+    prob0 = prob0 * scaleLogE;
+    prob0 = exp2(prob0);
+    sum_prob = dot(prob0, one);
+    VXC_DP4x4(prob1, src0, max16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniDataMinusMax_1_4x4);
+    prob1 = prob1 * scaleLogE;
+    prob1 = exp2(prob1);
+    sum_prob = sum_prob + dot(prob1, one);
+    VXC_DP4x4(prob2, src0, max16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniDataMinusMax_2_4x4);
+    prob2 = prob2 * scaleLogE;
+    prob2 = exp2(prob2);
+    sum_prob = sum_prob + dot(prob2, one);
+    VXC_DP4x4(prob3, src0, max16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniDataMinusMax_3_4x4);
+    prob3 = prob3 * scaleLogE;
+    prob3 = exp2(prob3);
+    sum_prob = sum_prob + dot(prob3, one);
+
+    VXC_DP4x4(prob4, src1, max16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniDataMinusMax_0_4x4);
+    prob4 = prob4 * scaleLogE;
+    prob4 = exp2(prob4);
+    sum_prob = sum_prob + dot(prob4, one);
+    VXC_DP4x4(prob5, src1, max16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniDataMinusMax_1_4x4);
+    prob5 = prob5 * scaleLogE;
+    prob5 = exp2(prob5);
+    sum_prob = sum_prob + dot(prob5, one);
+    VXC_DP4x4(prob6, src1, max16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniDataMinusMax_2_4x4);
+    prob6 = prob6 * scaleLogE;
+    prob6 = exp2(prob6);
+    sum_prob = sum_prob + dot(prob6, one);
+    VXC_DP4x4(prob7, src1, max16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniDataMinusMax_3_4x4);
+    prob7 = prob7 * scaleLogE;
+    prob7 = exp2(prob7);
+    sum_prob = sum_prob + dot(prob7, one);
+
+    lcl_prob[lx] = sum_prob;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    float4 sum_prob0 = ((float4 *)lcl_prob)[0];
+    sum_prob = dot(sum_prob0, one);
+    for (int i = 1; i < 8; i ++)
+    {
+        sum_prob0 = ((float4 *)lcl_prob)[i];
+        sum_prob = sum_prob + dot(sum_prob0, one);
+    }
+
+    sum_prob = output_scale / sum_prob;
+
+    prob0 = prob0 * sum_prob + output_zp;
+    prob1 = prob1 * sum_prob + output_zp;
+    prob2 = prob2 * sum_prob + output_zp;
+    prob3 = prob3 * sum_prob + output_zp;
+
+    int4 dst0 = convert_int4_rte(prob0);
+    int4 dst1 = convert_int4_rte(prob1);
+    int4 dst2 = convert_int4_rte(prob2);
+    int4 dst3 = convert_int4_rte(prob3);
+
+    vxc_uchar16 dst;
+    VXC_DP2x8(dst, dst0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvertInt32toUint8_2x8);
+    VXC_DP2x8(dst, dst2, dst3, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 1), uniConvertInt32toUint8_2x8);
+    VXC_WriteImage(output, coord.xy, dst, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    prob4 = prob4 * sum_prob + output_zp;
+    prob5 = prob5 * sum_prob + output_zp;
+    prob6 = prob6 * sum_prob + output_zp;
+    prob7 = prob7 * sum_prob + output_zp;
+
+    dst0 = convert_int4_rte(prob4);
+    dst1 = convert_int4_rte(prob5);
+    dst2 = convert_int4_rte(prob6);
+    dst3 = convert_int4_rte(prob7);
+
+    VXC_DP2x8(dst, dst0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvertInt32toUint8_2x8);
+    VXC_DP2x8(dst, dst2, dst3, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 1), uniConvertInt32toUint8_2x8);
+    VXC_WriteImage(output, coord.zy, dst, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}

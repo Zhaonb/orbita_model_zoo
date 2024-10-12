@@ -1,0 +1,67 @@
+__kernel void gpuNormalization_axis1_f32(
+    __read_only  image2d_array_t   input,
+    int               radius,
+    float             bias,
+    float             alpha,
+    float             beta,
+    __write_only image2d_array_t   output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(x, 0, z, 0);
+    int4 coord = (int4)(x, y, z, 0);
+    int height = get_image_height(input);
+    float4 tmp = {0.0}, dst = {0.0};
+    int start = max(y-radius, 0);
+    int end = min(y+radius+1, height);
+    float sqrSum = 0.0, divider;
+
+    for(coord_in.y = start; coord_in.y < end; coord_in.y++)
+    {
+       tmp = read_imagef(input, coord_in);
+       sqrSum += tmp.x * tmp.x;
+    }
+
+    tmp = read_imagef(input, coord);
+    divider = exp2(beta * log2(bias+alpha*sqrSum));
+    dst.x = tmp.x/divider;
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuNormalization_axis1_u8(
+    __read_only  image2d_array_t   input,
+    int               radius,
+    float             bias,
+    float             alpha,
+    float             beta,
+    float             scaleIn,
+    float             scaleOut,
+    int               zpIn,
+    int               zpOut,
+    __write_only image2d_array_t   output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(x, 0, z, 0);
+    int4 coord = (int4)(x, y, z, 0);
+    int height = get_image_height(input);
+    uint4 tmp = {0.0}, dst = {0.0};
+    int start = max(y-radius, 0);
+    int end = min(y+radius+1, height);
+    float sqrSum = 0.0, divider, inPixel;
+
+    for(coord_in.y = start; coord_in.y < end; coord_in.y++)
+    {
+       tmp = read_imageui(input, coord_in);
+       inPixel = (convert_int(tmp.x-zpIn))*scaleIn;
+       sqrSum += inPixel * inPixel;
+    }
+
+    tmp = read_imageui(input, coord);
+    inPixel = (convert_int(tmp.x-zpIn))*scaleIn;
+    divider = exp2(beta * log2(bias+alpha*sqrSum));
+    dst.x = floor(inPixel/divider*scaleOut + zpOut + 0.5);
+    write_imageui(output, coord, dst);
+}

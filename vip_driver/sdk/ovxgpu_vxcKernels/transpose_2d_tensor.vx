@@ -1,0 +1,26 @@
+
+__kernel void transpose_2d_tensor_sign
+(
+    __read_only image2d_t input,
+    __write_only image2d_t output
+)
+{
+    int2  coord = (int2)(get_global_id(0), get_global_id(1));
+
+    int4 data = read_imagei(input, coord);
+
+    write_imagei(output, coord.yx, data);
+}
+
+__kernel void transpose_2d_tensor_unsign
+(
+    __read_only image2d_t input,
+    __write_only image2d_t output
+)
+{
+    int2  coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 data = read_imageui(input, coord);
+
+    write_imageui(output, coord.yx, data);
+}

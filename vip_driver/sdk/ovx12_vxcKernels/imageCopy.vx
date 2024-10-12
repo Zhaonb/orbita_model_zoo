@@ -1,0 +1,45 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+__kernel void copy_8Bits
+(
+    __read_only image2d_t  input,
+    __write_only image2d_t output
+)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(1), get_global_id(1));
+    vxc_uchar16 src0, src1, src2, src3;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input, coord, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord.zw += (int2)(1, 2);
+
+    VXC_WriteImage(output, coord.xy, src0, VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+    coord.y += 3;
+    VXC_WriteImage(output, coord.xz, src1, VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord.xw, src2, VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord.xy, src3, VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void copy_16Bits
+(
+    __read_only image2d_t  input,
+    __write_only image2d_t output
+)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(1), get_global_id(1));
+    vxc_short8 src0, src1, src2, src3;
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input, coord.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.zw += (int2)(1, 2);
+
+    VXC_WriteImage(output, coord.xy, src0, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord.y += 3;
+    VXC_WriteImage(output, coord.xz, src1, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord.xw, src2, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord.xy, src3, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}

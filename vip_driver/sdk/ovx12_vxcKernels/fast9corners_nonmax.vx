@@ -1,0 +1,85 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int height;
+_viv_uniform VXC_512Bits uniExtractData0_2x8;
+_viv_uniform VXC_512Bits uniExtractData1_2x8;
+_viv_uniform VXC_512Bits uniExtractData2_2x8;
+_viv_uniform VXC_512Bits uniMulU8Data_2x8;
+
+__kernel void fast9corners_nonmax_U8toU8
+    (
+    __read_only    image2d_t     input,
+                   float         _threshold,
+                   int           do_nonmax,
+    __write_only   image2d_t     output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_uchar16 r1, r2, r3;
+    vxc_short8  point[9], mask;
+    vxc_uchar16  dst;
+    VXC_ReadImage(r1, input, coord, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(r2, input, coord, VXC_5BITOFFSET_XY(-1,  0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(point[0], r1, r1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData0_2x8);
+    VXC_DP2x8(point[1], r1, r1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData1_2x8);
+    VXC_DP2x8(point[2], r1, r1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData2_2x8);
+    VXC_DP2x8(point[3], r2, r2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData0_2x8);
+    VXC_DP2x8(point[4], r2, r2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData1_2x8);
+    VXC_DP2x8(point[5], r2, r2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData2_2x8);
+
+    do
+    {
+        VXC_ReadImage(r3, input, coord, VXC_5BITOFFSET_XY(-1,  1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(point[6], r3, r3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData0_2x8);
+        VXC_DP2x8(point[7], r3, r3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData1_2x8);
+        VXC_DP2x8(point[8], r3, r3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData2_2x8);
+        mask = point[4] >= point[0];
+        mask = mask && (point[4] >= point[1]);
+        mask = mask && (point[4] >= point[2]);
+        mask = mask && (point[4] >= point[3]);
+        mask = mask && (point[4] > point[5]);
+        mask = mask && (point[4] > point[6]);
+        mask = mask && (point[4] > point[7]);
+        mask = mask && (point[4] > point[8]);
+        mask = mask & 0x01;
+        VXC_DP2x8(dst, point[4], mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMulU8Data_2x8);
+        VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord.y ++;
+        VXC_ReadImage(r1, input, coord, VXC_5BITOFFSET_XY(-1,  1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(point[0], r1, r1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData0_2x8);
+        VXC_DP2x8(point[1], r1, r1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData1_2x8);
+        VXC_DP2x8(point[2], r1, r1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData2_2x8);
+        mask = point[7] >= point[3];
+        mask = mask && (point[7] >= point[4]);
+        mask = mask && (point[7] >= point[5]);
+        mask = mask && (point[7] >= point[6]);
+        mask = mask && (point[7] > point[8]);
+        mask = mask && (point[7] > point[0]);
+        mask = mask && (point[7] > point[1]);
+        mask = mask && (point[7] > point[2]);
+        mask = mask & 0x01;
+        VXC_DP2x8(dst, point[7], mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMulU8Data_2x8);
+        VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord.y ++;
+        VXC_ReadImage(r2, input, coord, VXC_5BITOFFSET_XY(-1,  1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(point[3], r2, r2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData0_2x8);
+        VXC_DP2x8(point[4], r2, r2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData1_2x8);
+        VXC_DP2x8(point[5], r2, r2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractData2_2x8);
+        mask = point[1] >= point[6];
+        mask = mask && (point[1] >= point[7]);
+        mask = mask && (point[1] >= point[8]);
+        mask = mask && (point[1] >= point[0]);
+        mask = mask && (point[1] > point[2]);
+        mask = mask && (point[1] > point[3]);
+        mask = mask && (point[1] > point[4]);
+        mask = mask && (point[1] > point[5]);
+        mask = mask & 0x01;
+        VXC_DP2x8(dst, point[1], mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMulU8Data_2x8);
+        VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord.y ++;
+    } while (coord.y < height);
+}
+

@@ -1,0 +1,188 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+_viv_uniform int input_size_align32;
+_viv_uniform VXC_512Bits uniAccF16MulFp16_16x1;
+_viv_uniform VXC_512Bits uniFp16toFp32_16x1;
+_viv_uniform VXC_512Bits uniFp16toClip_4x4;
+__kernel void vxcLSTMUnitProjection_fp16_noBias(
+    __read_only image2d_array_t      input,
+    __read_only image2d_array_t      weights,
+    __read_only image2d_array_t      proj_clip,
+    __write_only image2d_array_t     output_state_out,
+    __write_only image2d_array_t     output)
+{
+    int4 coord_in    = (int4)(16, get_global_id(0), get_global_id(1), 0);
+    int2 coord_out   = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_short8 v0, v1, v2, v3, v4, v5, v6, v7;
+    vxc_half8 i0, i1, i2, i3;
+    vxc_half8 w0, w1, w2, w3;
+    float4 sum = 0;
+    float dst = 0;
+    do
+    {
+        VXC_ReadImage(v0, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i0, v0, 16);
+        VXC_ReadImage(v1, weights, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w0, v1, 16);
+        VXC_ReadImage(v2, input,  coord_in.xz, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i1, v2, 16);
+        VXC_ReadImage(v3, weights, coord_in.xy, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w1, v3, 16);
+        VXC_ReadImage(v4, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i2, v4, 16);
+        VXC_ReadImage(v5, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w2, v5, 16);
+        VXC_ReadImage(v6, input,  coord_in.xz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i3, v6, 16);
+        VXC_ReadImage(v7, weights, coord_in.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w3, v7, 16);
+
+        coord_in.x += 32;
+
+        VXC_DP16x1(sum, i0, w0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccF16MulFp16_16x1);
+        VXC_DP16x1(sum, i1, w1, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniAccF16MulFp16_16x1);
+        VXC_DP16x1(sum, i2, w2, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniAccF16MulFp16_16x1);
+        VXC_DP16x1(sum, i3, w3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniAccF16MulFp16_16x1);
+
+        float4 tmp = {1, 1, 1, 1};
+        dst = dst + dot(sum, tmp);
+
+    } while (coord_in.x < input_size_align32);
+    coord_in.xy = 0;
+    VXC_ReadImage(v1, proj_clip, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, w1, v1, 16);
+    VXC_DP4x4(sum, w1, w1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toClip_4x4);
+    sum.z = max(dst, sum.x);
+    sum.z = min(sum.z, sum.y);
+    dst = sum.y > 0 ? sum.z : dst;
+    half v;
+    _viv_asm(CONV, v, dst);
+    _viv_asm(COPY, v0, v, 16);
+    VXC_WriteImage(output, coord_out, v0, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_state_out, coord_out, v0, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+}
+__kernel void vxcLSTMUnitProjection_fp16(
+    __read_only image2d_array_t      input,
+    __read_only image2d_array_t      weights,
+    __read_only image2d_array_t      bias,
+    __read_only image2d_array_t      proj_clip,
+    __write_only image2d_array_t     output_state_out,
+    __write_only image2d_array_t     output)
+{
+    int4 coord_in    = (int4)(16, get_global_id(0), get_global_id(1), 0);
+    int2 coord_out   = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_short8 v0, v1, v2, v3, v4, v5, v6, v7;
+    vxc_half8 i0, i1, i2, i3;
+    vxc_half8 w0, w1, w2, w3;
+    float4 sum = 0;
+    float dst = 0;
+    VXC_ReadImage(v0, bias,  coord_in.yw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, i0, v0, 16);
+    VXC_DP16x1(dst, i0, 0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_16x1);
+    do
+    {
+        VXC_ReadImage(v0, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i0, v0, 16);
+        VXC_ReadImage(v1, weights, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w0, v1, 16);
+        VXC_ReadImage(v2, input,  coord_in.xz, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i1, v2, 16);
+        VXC_ReadImage(v3, weights, coord_in.xy, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w1, v3, 16);
+        VXC_ReadImage(v4, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i2, v4, 16);
+        VXC_ReadImage(v5, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w2, v5, 16);
+        VXC_ReadImage(v6, input,  coord_in.xz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i3, v6, 16);
+        VXC_ReadImage(v7, weights, coord_in.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w3, v7, 16);
+
+        coord_in.x += 32;
+
+        VXC_DP16x1(sum, i0, w0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccF16MulFp16_16x1);
+        VXC_DP16x1(sum, i1, w1, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniAccF16MulFp16_16x1);
+        VXC_DP16x1(sum, i2, w2, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniAccF16MulFp16_16x1);
+        VXC_DP16x1(sum, i3, w3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniAccF16MulFp16_16x1);
+
+        float4 tmp = {1, 1, 1, 1};
+        dst = dst + dot(sum, tmp);
+
+    } while (coord_in.x < input_size_align32);
+    coord_in.xy = 0;
+    VXC_ReadImage(v1, proj_clip, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, w1, v1, 16);
+    VXC_DP4x4(sum, w1, w1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toClip_4x4);
+    sum.z = max(dst, sum.x);
+    sum.z = min(sum.z, sum.y);
+    dst = sum.y > 0 ? sum.z : dst;
+    vxc_half v;
+    _viv_asm(CONV, v, dst);
+    _viv_asm(COPY, v0, v, 16);
+    VXC_WriteImage(output, coord_out, v0, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_state_out, coord_out, v0, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcLSTMUnitProjection_fp32(
+    __read_only image2d_array_t      input,
+    __read_only image2d_array_t      weights,
+    __read_only image2d_array_t      bias,
+    __read_only image2d_array_t      proj_clip,
+    __write_only image2d_array_t     output_state_out,
+    __write_only image2d_array_t     output)
+{
+    int4 coord_in    = (int4)(16, get_global_id(0), get_global_id(1), 0);
+    int2 coord_out   = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_short8 v0, v1, v2, v3, v4, v5, v6, v7;
+    vxc_half8 i0, i1, i2, i3;
+    vxc_half8 w0, w1, w2, w3;
+    float4 sum = 0;
+    float dst = 0;
+    dst = read_imagef(bias, coord_in.ywww).x;
+    do
+    {
+        VXC_ReadImage(v0, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i0, v0, 16);
+        VXC_ReadImage(v1, weights, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w0, v1, 16);
+        VXC_ReadImage(v2, input,  coord_in.xz, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i1, v2, 16);
+        VXC_ReadImage(v3, weights, coord_in.xy, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w1, v3, 16);
+        VXC_ReadImage(v4, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i2, v4, 16);
+        VXC_ReadImage(v5, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w2, v5, 16);
+        VXC_ReadImage(v6, input,  coord_in.xz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i3, v6, 16);
+        VXC_ReadImage(v7, weights, coord_in.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w3, v7, 16);
+
+        coord_in.x += 32;
+
+        VXC_DP16x1(sum, i0, w0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccF16MulFp16_16x1);
+        VXC_DP16x1(sum, i1, w1, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniAccF16MulFp16_16x1);
+        VXC_DP16x1(sum, i2, w2, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniAccF16MulFp16_16x1);
+        VXC_DP16x1(sum, i3, w3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniAccF16MulFp16_16x1);
+
+        float4 tmp = {1, 1, 1, 1};
+        dst = dst + dot(sum, tmp);
+
+    } while (coord_in.x < input_size_align32);
+    coord_in.xy = 0;
+    VXC_ReadImage(v1, proj_clip, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, w1, v1, 16);
+    VXC_DP4x4(sum, w1, w1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toClip_4x4);
+    sum.z = max(dst, sum.x);
+    sum.z = min(sum.z, sum.y);
+    dst = sum.y > 0 ? sum.z : dst;
+    vxc_half v;
+    _viv_asm(CONV, v, dst);
+    _viv_asm(COPY, v0, v, 16);
+    VXC_WriteImage(output, coord_out, v0, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_state_out, coord_out, v0, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+}

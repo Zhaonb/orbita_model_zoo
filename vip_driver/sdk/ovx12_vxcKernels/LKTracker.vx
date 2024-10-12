@@ -1,0 +1,638 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+#define INI_ROUND(x,n)  (((x) + (1 << ((n) - 1))) >> (n))
+
+typedef struct _vx_keypoint_t
+{
+    int     x;
+    int     y;
+    float   strength;
+    float   scale;
+    float   orientation;
+    int     tracking_status;
+    float   error;
+}
+vx_keypoint_t;
+
+typedef struct _vx_keypoint_t_optpyrlk_internal
+{
+    float   x;
+    float   y;
+    float   strength;
+    float   scale;
+    float   orientation;
+    int     tracking_status;
+    float   error;
+}
+vx_keypoint_t_optpyrlk_internal;
+
+_viv_uniform uint width;
+_viv_uniform uint height;
+_viv_uniform int  termination_Criteria_type;
+_viv_uniform float pyramid_scale_value_reciprocal;
+_viv_uniform float pyramid_scale_value_pown;
+_viv_uniform VXC_512Bits mul_add_16x1;
+_viv_uniform VXC_512Bits left_shift2x8;
+
+__kernel void LKTracker(
+    __read_only  image2d_t  prevImg,
+    __read_only  image2d_t  prevDervIx,
+    __read_only  image2d_t  prevDervIy,
+    __read_only  image2d_t  nextImg,
+         global       int*  prevPts,
+         global       int*  lastoutput,
+         global       int*  nextPts,
+                       int  winSize_s,
+                       int  criteria_s,
+                     float  epsilon,
+                      uint  num_iterations,
+                       int  level0,
+                     float  pyramid_scale_value,
+                       int  maxLevel_value,
+                       int  isUseInitialEstimateScalar,
+         global      char*  estimatedPts
+)
+{
+    int list_indx = get_global_id(0);
+    int   j       = 0;
+    float b1 = 0;
+    float b2 = 0;
+    float delta_x = 0;
+    float delta_y = 0;
+    float A11     = 0;
+    float A12     = 0;
+    float A22     = 0;
+    float D       = 0;
+    float minEig_times_50  = 0;
+    float prevDelta_x = 0.0f;
+    float prevDelta_y = 0.0f;
+    float FLT_SCALE = 1.f / (1 << 20);
+    float nextPt_item_x;
+    float nextPt_item_y;
+    vxc_uchar8 dst0_uchar,dst1_uchar,dst2_uchar,dst3_uchar,dst4_uchar,dst5_uchar;
+    vxc_ushort8 dst0_ushort,dst1_ushort,dst2_ushort,dst3_ushort,dst4_ushort,dst5_ushort;
+    vxc_short8 diff0, diff1, diff2, diff3, diff4, diff_temp;
+
+    vx_keypoint_t_optpyrlk_internal nextPt;
+    vx_keypoint_t_optpyrlk_internal prevPt;
+    vx_keypoint_t_optpyrlk_internal iprevPt;
+    vx_keypoint_t_optpyrlk_internal inextPt;
+    vx_keypoint_t*                   outputPt_item0 = (vx_keypoint_t*)nextPts;
+    vx_keypoint_t_optpyrlk_internal* outputPt_item1 = (vx_keypoint_t_optpyrlk_internal*)nextPts;
+
+    if (level0 != maxLevel_value)
+    {
+        nextPt_item_x = ((vx_keypoint_t_optpyrlk_internal*)lastoutput)[list_indx].x * pyramid_scale_value_reciprocal;
+        nextPt_item_y = ((vx_keypoint_t_optpyrlk_internal*)lastoutput)[list_indx].y * pyramid_scale_value_reciprocal;
+    }
+    else
+    {
+        nextPt_item_x = ((vx_keypoint_t*)estimatedPts)[list_indx].x * pyramid_scale_value_pown;
+        nextPt_item_y = ((vx_keypoint_t*)estimatedPts)[list_indx].y * pyramid_scale_value_pown;
+    }
+
+    outputPt_item1[list_indx].tracking_status = ((vx_keypoint_t*)estimatedPts)[list_indx].tracking_status;
+    outputPt_item1[list_indx].x = nextPt_item_x;
+    outputPt_item1[list_indx].y = nextPt_item_y;
+
+    prevPt.x = ((vx_keypoint_t*)prevPts)[list_indx].x * pyramid_scale_value_pown - 2;
+    prevPt.y = ((vx_keypoint_t*)prevPts)[list_indx].y * pyramid_scale_value_pown - 2;
+    nextPt.x = nextPt_item_x - 2;
+    nextPt.y = nextPt_item_y - 2;
+    iprevPt.x = floor(prevPt.x);
+    iprevPt.y = floor(prevPt.y);
+
+    if (iprevPt.x < 0 || iprevPt.x >= width - 6  ||
+        iprevPt.y < 0 || iprevPt.y >= height - 6  ||
+        ((vx_keypoint_t*)prevPts)[list_indx].tracking_status == 0)
+    {
+        return;
+    }
+
+    int2 coord2 = (int2)(convert_uint(iprevPt.x), convert_uint(iprevPt.y));
+
+    vxc_uchar8 src0_uchar, src1_uchar, src2_uchar, src3_uchar, src4_uchar, src5_uchar;
+    vxc_short4 dIptr0_x_short, dIptr1_x_short, dIptr2_x_short, dIptr3_x_short, dIptr4_x_short, dIptr5_x_short;
+    vxc_short4 dIptr0_y_short, dIptr1_y_short, dIptr2_y_short, dIptr3_y_short, dIptr4_y_short, dIptr5_y_short;
+
+    VXC_ReadImage(src0_uchar, prevImg, coord2, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1_uchar, prevImg, coord2, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2_uchar, prevImg, coord2, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3_uchar, prevImg, coord2, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src4_uchar, prevImg, coord2, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src5_uchar, prevImg, coord2, VXC_5BITOFFSET_XY(0, 5), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(dIptr0_x_short, prevDervIx, coord2, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(dIptr1_x_short, prevDervIx, coord2, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(dIptr2_x_short, prevDervIx, coord2, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(dIptr3_x_short, prevDervIx, coord2, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(dIptr4_x_short, prevDervIx, coord2, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(dIptr5_x_short, prevDervIx, coord2, VXC_5BITOFFSET_XY(0, 5), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(dIptr0_y_short, prevDervIy, coord2, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(dIptr1_y_short, prevDervIy, coord2, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(dIptr2_y_short, prevDervIy, coord2, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(dIptr3_y_short, prevDervIy, coord2, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(dIptr4_y_short, prevDervIy, coord2, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(dIptr5_y_short, prevDervIy, coord2, VXC_5BITOFFSET_XY(0, 5), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    vxc_float4 weight = {prevPt.y - iprevPt.y, 0, 0, 0};
+    vxc_float4 weight2 = {prevPt.x - iprevPt.x, 0, 0, 0};
+
+    vxc_ushort8 src0_ushort,src1_ushort,src2_ushort,src3_ushort,src4_ushort,src5_ushort;
+    vxc_short8 ival0,ival1,ival2,ival3,ival4,ival_temp;
+    vxc_short8 ixval0,ixval1,ixval2,ixval3,ixval4,ixval_temp;
+    vxc_short8 iyval0,iyval1,iyval2,iyval3,iyval4,iyval_temp;
+
+    VXC_DP2x8(src0_ushort, src0_uchar, src0_uchar, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), left_shift2x8);
+    VXC_DP2x8(src1_ushort, src1_uchar, src1_uchar, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), left_shift2x8);
+    VXC_DP2x8(src2_ushort, src2_uchar, src0_uchar, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), left_shift2x8);
+    VXC_DP2x8(src3_ushort, src3_uchar, src1_uchar, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), left_shift2x8);
+    VXC_DP2x8(src4_ushort, src4_uchar, src0_uchar, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), left_shift2x8);
+    VXC_DP2x8(src5_ushort, src5_uchar, src1_uchar, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), left_shift2x8);
+
+    VXC_Lerp(ival0, src0_ushort, src1_ushort, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    ival_temp.s01234567 = ival0.s12345000;
+    VXC_Lerp(ival0, ival0, ival_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(ival1, src1_ushort, src2_ushort, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    ival_temp.s01234567 = ival1.s12345000;
+    VXC_Lerp(ival1, ival1, ival_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(ival2, src2_ushort, src3_ushort, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    ival_temp.s01234567 = ival2.s12345000;
+    VXC_Lerp(ival2, ival2, ival_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(ival3, src3_ushort, src4_ushort, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    ival_temp.s01234567 = ival3.s12345000;
+    VXC_Lerp(ival3, ival3, ival_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(ival4, src4_ushort, src5_ushort, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    ival_temp.s01234567 = ival4.s12345000;
+    VXC_Lerp(ival4, ival4, ival_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(ixval0, dIptr0_x_short, dIptr1_x_short, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    ixval_temp.s01234567 = ixval0.s12345000;
+    VXC_Lerp(ixval0, ixval0, ixval_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(ixval1, dIptr1_x_short, dIptr2_x_short, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    ixval_temp.s01234567 = ixval0.s12345000;
+    VXC_Lerp(ixval1, ixval1, ixval_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(ixval2, dIptr2_x_short, dIptr3_x_short, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    ixval_temp.s01234567 = ixval2.s12345000;
+    VXC_Lerp(ixval2, ixval2, ixval_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(ixval3, dIptr3_x_short, dIptr4_x_short, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    ixval_temp.s01234567 = ixval0.s12345000;
+    VXC_Lerp(ixval3, ixval3, ixval_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(ixval4, dIptr4_x_short, dIptr5_x_short, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    ixval_temp.s01234567 = ixval0.s12345000;
+    VXC_Lerp(ixval4, ixval4, ixval_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(iyval0, dIptr0_y_short, dIptr1_y_short, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    iyval_temp.s01234567 = iyval0.s12345000;
+    VXC_Lerp(iyval0, iyval0, iyval_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(iyval1, dIptr1_y_short, dIptr2_y_short, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    iyval_temp.s01234567 = iyval1.s12345000;
+    VXC_Lerp(iyval1, iyval1, iyval_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(iyval2, dIptr2_y_short, dIptr3_y_short, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    iyval_temp.s01234567 = iyval2.s12345000;
+    VXC_Lerp(iyval2, iyval2, iyval_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(iyval3, dIptr3_y_short, dIptr4_y_short, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    iyval_temp.s01234567 = iyval3.s12345000;
+    VXC_Lerp(iyval3, iyval3, iyval_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Lerp(iyval4, dIptr4_y_short, dIptr5_y_short, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    iyval_temp.s01234567 = iyval4.s12345000;
+    VXC_Lerp(iyval4, iyval4, iyval_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    float8 A_temp;
+    float4 coefficient = (float4)(1.0f,1.0f,1.0f,1.0f);
+    VXC_DP16x1(A_temp, ixval0, ixval0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    VXC_DP16x1(A_temp, ixval1, ixval1, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    VXC_DP16x1(A_temp, ixval2, ixval2, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    VXC_DP16x1(A_temp, ixval3, ixval3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    VXC_DP16x1(A_temp.s4, ixval4, ixval4, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    A11 = dot(A_temp.xyzw,coefficient) + A_temp.s4;
+
+    VXC_DP16x1(A_temp, ixval0, iyval0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    VXC_DP16x1(A_temp, ixval1, iyval1, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    VXC_DP16x1(A_temp, ixval2, iyval2, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    VXC_DP16x1(A_temp, ixval3, iyval3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    VXC_DP16x1(A_temp.s4, ixval4, iyval4, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    A12 = dot(A_temp.xyzw,coefficient) + A_temp.s4;
+
+    VXC_DP16x1(A_temp, iyval0, iyval0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    VXC_DP16x1(A_temp, iyval1, iyval1, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    VXC_DP16x1(A_temp, iyval2, iyval2, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    VXC_DP16x1(A_temp, iyval3, iyval3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    VXC_DP16x1(A_temp.s4, iyval4, iyval4, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+    A22 = dot(A_temp.xyzw,coefficient) + A_temp.s4;
+
+    A11 *= FLT_SCALE;
+    A12 *= FLT_SCALE;
+    A22 *= FLT_SCALE;
+    D = A11*A22 - A12*A12;
+    minEig_times_50 = A22 + A11 - sqrt((A11 - A22) * (A11 - A22) + 4.f * A12 * A12);
+
+    if (minEig_times_50 < 5.0e-03F || D < 1.e-07F)
+    {
+        return;
+    }
+    D = 1.f / D;
+
+    while (j < num_iterations || termination_Criteria_type == 2)
+    {
+        inextPt.x = floor(nextPt.x);
+        inextPt.y = floor(nextPt.y);
+
+        if (inextPt.x < 0 || inextPt.x >= width - 6 ||
+            inextPt.y < 0 || inextPt.y >= height - 6)
+        {
+            if (level0 == 0);
+            {
+                outputPt_item0[list_indx].tracking_status = 0;
+                outputPt_item0[list_indx].error = 0;
+            }
+            break;
+        }
+
+        coord2 = (int2)(convert_uint(inextPt.x), convert_uint(inextPt.y));
+
+        weight.x = nextPt.y - inextPt.y;
+        weight2.x = nextPt.x - inextPt.x;
+
+        VXC_ReadImage(dst0_uchar, nextImg, coord2, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(dst1_uchar, nextImg, coord2, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(dst2_uchar, nextImg, coord2, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(dst3_uchar, nextImg, coord2, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(dst4_uchar, nextImg, coord2, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(dst5_uchar, nextImg, coord2, VXC_5BITOFFSET_XY(0, 5), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        VXC_DP2x8(dst0_ushort, dst0_uchar, dst0_uchar, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), left_shift2x8);
+        VXC_DP2x8(dst1_ushort, dst1_uchar, dst1_uchar, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), left_shift2x8);
+        VXC_DP2x8(dst2_ushort, dst2_uchar, dst2_uchar, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), left_shift2x8);
+        VXC_DP2x8(dst3_ushort, dst3_uchar, dst3_uchar, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), left_shift2x8);
+        VXC_DP2x8(dst4_ushort, dst4_uchar, dst4_uchar, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), left_shift2x8);
+        VXC_DP2x8(dst5_ushort, dst5_uchar, dst5_uchar, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), left_shift2x8);
+
+        VXC_Lerp(diff0, dst0_ushort, dst1_ushort, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        diff_temp.s01234567 = diff0.s12345000;
+        VXC_Lerp(diff0, diff0, diff_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+        VXC_Lerp(diff1, dst1_ushort, dst2_ushort, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        diff_temp.s01234567 = diff1.s12345000;
+        VXC_Lerp(diff1, diff1, diff_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+        VXC_Lerp(diff2, dst2_ushort, dst3_ushort, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        diff_temp.s01234567 = diff2.s12345000;
+        VXC_Lerp(diff2, diff2, diff_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+        VXC_Lerp(diff3, dst3_ushort, dst4_ushort, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        diff_temp.s01234567 = diff3.s12345000;
+        VXC_Lerp(diff3, diff3, diff_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+        VXC_Lerp(diff4, dst4_ushort, dst5_ushort, weight, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        diff_temp.s01234567 = diff4.s12345000;
+        VXC_Lerp(diff4, diff4, diff_temp, weight2, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+        diff0 = diff0 - ival0;
+        diff1 = diff1 - ival1;
+        diff2 = diff2 - ival2;
+        diff3 = diff3 - ival3;
+        diff4 = diff4 - ival4;
+
+        float8 b_temp;
+        VXC_DP16x1(b_temp, diff0, ixval0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+        VXC_DP16x1(b_temp, diff1, ixval1, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+        VXC_DP16x1(b_temp, diff2, ixval2, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+        VXC_DP16x1(b_temp, diff3, ixval3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+        VXC_DP16x1(b_temp.s4, diff4, ixval4, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+        b1 = dot(b_temp.xyzw,coefficient) + b_temp.s4;
+
+        VXC_DP16x1(b_temp, diff0, iyval0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+        VXC_DP16x1(b_temp, diff1, iyval1, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+        VXC_DP16x1(b_temp, diff2, iyval2, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+        VXC_DP16x1(b_temp, diff3, iyval3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+        VXC_DP16x1(b_temp.s4, diff4, iyval4, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), mul_add_16x1);
+        b2 = dot(b_temp.xyzw,coefficient) + b_temp.s4;
+
+        delta_x = (A12 * b2 - A22 * b1) * D * FLT_SCALE;
+        delta_y = (A12 * b1 - A11 * b2) * D * FLT_SCALE;
+        nextPt.x += delta_x;
+        nextPt.y += delta_y;
+
+        outputPt_item1[list_indx].x = (nextPt.x + 2);
+        outputPt_item1[list_indx].y = (nextPt.y + 2);
+
+        if ((delta_x * delta_x + delta_y * delta_y) < epsilon &&
+            (termination_Criteria_type == 2 || termination_Criteria_type == 3))
+        {
+            break;
+        }
+        if (j > 0 && fabs(delta_x + prevDelta_x) < 0.01 && fabs(delta_y + prevDelta_y) < 0.01)
+        {
+            outputPt_item1[list_indx].x -= (delta_x * 0.5f);
+            outputPt_item1[list_indx].y -= (delta_y * 0.5f);
+            break;
+        }
+        prevDelta_x = delta_x;
+        prevDelta_y = delta_y;
+        j++;
+    }
+
+    if (level0 == 0)
+    {
+        outputPt_item0[list_indx].x = convert_int(outputPt_item1[list_indx].x + 0.5);
+        outputPt_item0[list_indx].y = convert_int(outputPt_item1[list_indx].y + 0.5);
+    }
+}
+
+#if 0
+_viv_uniform int halfwin;
+_viv_uniform VXC_512Bits convertDataToInt_4x4;
+
+__kernel void LKTracker_others(
+    __read_only  image2d_t  prevImg,
+    __read_only  image2d_t  prevDervIx,
+    __read_only  image2d_t  prevDervIy,
+    __read_only  image2d_t  nextImg,
+         global       int*  prevPts,
+         global       int*  lastoutput,
+         global       int*  nextPts,
+                       int  winSize_s,
+                       int  criteria_s,
+                     float  epsilon,
+                      uint  num_iterations,
+                       int  level0,
+                     float  pyramid_scale_value,
+                       int  maxLevel_value,
+                       int  isUseInitialEstimateScalar,
+         global      char*  estimatedPts
+)
+{
+    int list_indx = get_global_id(0);
+    int   j       = 0;
+    int   W_BITS  = 14;
+    int   W_BITS1 = 14;
+    int4  iw;
+    int   dstep_x = 0;
+    int   dstep_y = 0;
+    int   stepJ   = 0;
+    int   stepI   = 0;
+    int   x       = 0;
+    int   y       = 0;
+    float a       = 0;
+    float b       = 0;
+    float A11     = 0;
+    float A12     = 0;
+    float A22     = 0;
+    float D       = 0;
+    float minEig  = 0;
+    float prevDelta_x = 0.0f;
+    float prevDelta_y = 0.0f;
+    float FLT_SCALE = 1.f / (1 << 20);
+    short Iptr[10][10];
+    short dIptr_x[10][10];
+    short dIptr_y[10][10];
+    float prevPt_item_x;
+    float prevPt_item_y;
+    float nextPt_item_x;
+    float nextPt_item_y;
+    vx_keypoint_t_optpyrlk_internal nextPt;
+    vx_keypoint_t_optpyrlk_internal prevPt;
+    vx_keypoint_t_optpyrlk_internal iprevPt;
+    vx_keypoint_t_optpyrlk_internal inextPt;
+    vx_keypoint_t* prevPt_item    = (vx_keypoint_t*)prevPts;
+    vx_keypoint_t* estimated_item = (vx_keypoint_t*)estimatedPts;
+    vx_keypoint_t_optpyrlk_internal* nextPt_item    = (vx_keypoint_t_optpyrlk_internal*)lastoutput;
+    vx_keypoint_t*                   outputPt_item0 = (vx_keypoint_t*)nextPts;
+    vx_keypoint_t_optpyrlk_internal* outputPt_item1 = (vx_keypoint_t_optpyrlk_internal*)nextPts;
+
+    if (level0 != maxLevel_value)
+    {
+        nextPt_item_x = convert_float(nextPt_item[list_indx].x) * pyramid_scale_value_reciprocal;
+        nextPt_item_y = convert_float(nextPt_item[list_indx].y) * pyramid_scale_value_reciprocal;
+    }
+    else
+    {
+        if (isUseInitialEstimateScalar == 1)
+        {
+            nextPt_item_x = convert_float(estimated_item[list_indx].x) * pyramid_scale_value_pown;
+            nextPt_item_y = convert_float(estimated_item[list_indx].y) * pyramid_scale_value_pown;
+            nextPt_item[list_indx].tracking_status = estimated_item[list_indx].tracking_status;
+        }
+        else
+        {
+            nextPt_item_x = convert_float(prevPt_item[list_indx].x) * pyramid_scale_value_pown;
+            nextPt_item_y = convert_float(prevPt_item[list_indx].y) * pyramid_scale_value_pown;
+            nextPt_item[list_indx].tracking_status = prevPt_item[list_indx].tracking_status;
+        }
+    }
+
+    if (level0 == 0)
+    {
+        outputPt_item0[list_indx].tracking_status = nextPt_item[list_indx].tracking_status;
+        outputPt_item0[list_indx].x = nextPt_item_x;
+        outputPt_item0[list_indx].y = nextPt_item_y;
+    }
+
+    outputPt_item1[list_indx].tracking_status = nextPt_item[list_indx].tracking_status;
+    outputPt_item1[list_indx].x = nextPt_item_x;
+    outputPt_item1[list_indx].y = nextPt_item_y;
+
+    prevPt_item_x = convert_float(prevPt_item[list_indx].x) * pown(pyramid_scale_value, level0);
+    prevPt_item_y = convert_float(prevPt_item[list_indx].y) * pown(pyramid_scale_value, level0);
+    if (prevPt_item[list_indx].tracking_status == 0)
+    {
+        return;
+    }
+    prevPt.x = convert_float(prevPt_item_x - halfwin);
+    prevPt.y = convert_float(prevPt_item_y - halfwin);
+    nextPt.x = convert_float(nextPt_item_x - halfwin);
+    nextPt.y = convert_float(nextPt_item_y - halfwin);
+    iprevPt.x = floor(prevPt.x);
+    iprevPt.y = floor(prevPt.y);
+
+    if (iprevPt.x < 0 || iprevPt.x >= width - winSize_s - 1 ||
+        iprevPt.y < 0 || iprevPt.y >= height - winSize_s - 1)
+    {
+        if( level0 == 0 )
+        {
+            nextPt_item[list_indx].tracking_status = 0;
+            nextPt_item[list_indx].error           = 0;
+        }
+        return;
+    }
+    a = prevPt.x - iprevPt.x;
+    b = prevPt.y - iprevPt.y;
+    iw.x = convert_int(((1.f - a) * (1.f - b) * (1 << W_BITS)) + 0.5f);
+    iw.y = convert_int((a * (1.f - b) * (1 << W_BITS)) + 0.5f);
+    iw.z = convert_int(((1.f - a) * b * (1 << W_BITS)) + 0.5f);
+    iw.w = (1 << W_BITS) - iw.x - iw.y - iw.z;
+    A11 = 0;
+    A12 = 0;
+    A22 = 0;
+
+    int2 coord, coord2;
+    coord2 = (int2)(convert_uint(iprevPt.x), convert_uint(iprevPt.y));
+
+    for (y = 0;y < winSize_s;y++)
+    {
+        for (x = 0;x < winSize_s;x++)
+        {
+            coord = coord2 + (int2)(x,y);
+
+            vxc_uchar4 src;
+            vxc_short4 dsrc_x, dsrc_y;
+            VXC_ReadImage(src.x, prevImg, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src.y, prevImg, coord, VXC_5BITOFFSET_XY(1, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src.z, prevImg, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src.w, prevImg, coord, VXC_5BITOFFSET_XY(1, 1), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+            VXC_ReadImage(dsrc_x.x, prevDervIx, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(dsrc_x.y, prevDervIx, coord, VXC_5BITOFFSET_XY(1, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(dsrc_x.z, prevDervIx, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(dsrc_x.w, prevDervIx, coord, VXC_5BITOFFSET_XY(1, 1), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+            VXC_ReadImage(dsrc_y.x, prevDervIy, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(dsrc_y.y, prevDervIy, coord, VXC_5BITOFFSET_XY(1, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(dsrc_y.z, prevDervIy, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(dsrc_y.w, prevDervIy, coord, VXC_5BITOFFSET_XY(1, 1), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+            int4 src_i, dsrc_x_i, dsrc_y_i;
+            int4 ival0, ixval0, iyval0;
+            VXC_DP4x4(src_i, src, src, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), convertDataToInt_4x4);
+            VXC_DP4x4(dsrc_x_i, dsrc_x, dsrc_x, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), convertDataToInt_4x4);
+            VXC_DP4x4(dsrc_y_i, dsrc_y, dsrc_y, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), convertDataToInt_4x4);
+
+            ival0 = src_i * iw;
+            ixval0 = dsrc_x_i * iw;
+            iyval0 = dsrc_y_i * iw;
+
+            int ival = INI_ROUND(ival0.x + ival0.y + ival0.z + ival0.w, W_BITS1 - 5);
+            int ixval = INI_ROUND(ixval0.x + ixval0.y + ixval0.z + ixval0.w, W_BITS1);
+            int iyval = INI_ROUND(iyval0.x + iyval0.y + iyval0.z + iyval0.w, W_BITS1);
+
+            Iptr[x][y] = convert_short(ival);
+            dIptr_x[x][y] = convert_short(ixval);
+            dIptr_y[x][y] = convert_short(iyval);
+            A11 += convert_float(ixval * ixval);
+            A12 += convert_float(ixval * iyval);
+            A22 += convert_float(iyval * iyval);
+        }
+    }
+
+    A11 *= FLT_SCALE;
+    A12 *= FLT_SCALE;
+    A22 *= FLT_SCALE;
+    D = A11*A22 - A12*A12;
+    minEig = convert_float(A22 + A11 - sqrt((A11 - A22) * (A11 - A22) + 4.f * A12 * A12)) / (2 * winSize_s * winSize_s);
+
+    if (minEig < 1.0e-04F || D < 1.e-07F)
+    {
+        return;
+    }
+    D = 1.f / D;
+    prevDelta_x = 0.0f;
+    prevDelta_y = 0.0f;
+    j = 0;
+
+    while (j < num_iterations || termination_Criteria_type == 2)
+    {
+        float b1 = 0;
+        float b2 = 0;
+        float delta_x = 0;
+        float delta_y = 0;
+        inextPt.x = floor(nextPt.x);
+        inextPt.y = floor(nextPt.y);
+
+        if (inextPt.x < 0 || inextPt.x >= width - winSize_s - 1 ||
+            inextPt.y < 0 || inextPt.y >= height - winSize_s - 1)
+        {
+            if (level0 == 0);
+            {
+                outputPt_item0[list_indx].tracking_status = 0;
+                outputPt_item0[list_indx].error = 0;
+            }
+            break;
+        }
+        a = nextPt.x - inextPt.x;
+        b = nextPt.y - inextPt.y;
+        iw.x = (int)(((1.f - a) * (1.f - b) * (1 << W_BITS)) + 0.5f);
+        iw.y = (int)((a * (1.f - b) * (1 << W_BITS)) + 0.5f);
+        iw.z = (int)(((1.f - a) * b * (1 << W_BITS)) + 0.5f);
+        iw.w = (1 << W_BITS) - iw.x - iw.y - iw.z;
+
+        coord2 = (int2)(convert_uint(inextPt.x), convert_uint(inextPt.y));
+
+        vxc_uchar8 dst0, dst1, dst2, dst3, dst4 ,dst5;
+        VXC_ReadImage(dst0, nextImg, coord2, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(dst1, nextImg, coord2, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(dst2, nextImg, coord2, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(dst3, nextImg, coord2, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(dst4, nextImg, coord2, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(dst5, nextImg, coord2, VXC_5BITOFFSET_XY(0, 5), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        for (y = 0;y < winSize_s;y++)
+        {
+            for (x = 0;x < winSize_s;x++)
+            {
+                coord = coord2 + (int2)(x,y);
+
+                int4 dst_i;
+                vxc_uchar4 dst;
+                VXC_ReadImage(dst.x, nextImg, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(dst.y, nextImg, coord, VXC_5BITOFFSET_XY(1, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(dst.z, nextImg, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(dst.w, nextImg, coord, VXC_5BITOFFSET_XY(1, 1), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                VXC_DP4x4(dst_i, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), convertDataToInt_4x4);
+
+                int4 diff0 = dst_i * iw;
+                int diff = INI_ROUND(diff0.x + diff0.y + diff0.z + diff0.w, W_BITS1 - 5) - Iptr[x][y];
+                b1 += convert_float(diff * dIptr_x[x][y]);
+                b2 += convert_float(diff * dIptr_y[x][y]);
+            }
+        }
+
+        b1 *= FLT_SCALE;
+        b2 *= FLT_SCALE;
+        delta_x = convert_float((A12 * b2 - A22 * b1) * D);
+        delta_y = convert_float((A12 * b1 - A11 * b2) * D);
+        nextPt.x += delta_x;
+        nextPt.y += delta_y;
+
+        outputPt_item1[list_indx].x = (nextPt.x + halfwin);
+        outputPt_item1[list_indx].y = (nextPt.y + halfwin);
+
+        if ((delta_x * delta_x + delta_y * delta_y) < epsilon &&
+            (termination_Criteria_type == 2 || termination_Criteria_type == 3))
+        {
+            break;
+        }
+        if (j > 0 && fabs(delta_x + prevDelta_x) < 0.01 && fabs(delta_y + prevDelta_y) < 0.01)
+        {
+
+            outputPt_item1[list_indx].x -= (delta_x * 0.5f);
+            outputPt_item1[list_indx].y -= (delta_y * 0.5f);
+            break;
+        }
+        prevDelta_x = delta_x;
+        prevDelta_y = delta_y;
+        j++;
+    }
+
+    if (level0 == 0)
+    {
+        outputPt_item0[list_indx].x = convert_int(outputPt_item1[list_indx].x + 0.5);
+        outputPt_item0[list_indx].y = convert_int(outputPt_item1[list_indx].y + 0.5);
+    }
+}
+#endif

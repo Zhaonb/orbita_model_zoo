@@ -1,0 +1,1632 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+_viv_uniform VXC_512Bits uniFp16toFp32_4x4;
+_viv_uniform VXC_512Bits uniExtractHalf4_4x4;
+_viv_uniform VXC_512Bits uniSumFp16MulFp16_16x1;
+_viv_uniform VXC_512Bits uniExtractHalf8_2x8;
+_viv_uniform VXC_512Bits uniUnpackFp16toFp32Lo_4x4;
+_viv_uniform VXC_512Bits uniUnpackFp16toFp32Hi_4x4;
+_viv_uniform float logE;
+_viv_uniform float twoLogE;
+_viv_uniform int output_num;
+_viv_uniform int time_step;
+_viv_uniform int2 offsetX;
+_viv_uniform float forget_bias;
+float4 sigmoid(float4 x)
+{
+    x *= -logE;
+    x = 1 + exp2(x);
+    return 1 / x;
+}
+float4 tangentH(float4 x)
+{
+    x *= -twoLogE;
+    x = 1 + exp2(x);
+    x = 1 / x;
+    return 2 * x - 1;
+}
+__kernel __attribute__((reqd_work_group_size(32, 1, 1))) void vxcLSTMLayer_32x1_Fp16toFp16(
+    __read_only  image2d_array_t  w_x_x,
+    __read_only  image2d_array_t  w_h,
+    __write_only image2d_array_t  h_t
+    )
+{
+    int local_x = get_global_id(0) >> 2;
+    local int2 h_t_local[32];
+    float4 data_c_t = 0;
+    float4 data_i_t, data_f_t, data_g_t, data_o_t;
+    int time = 0;
+    h_t_local[local_x] = 0;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int4 coord_in = (int4)(0, get_global_id(0), 0, get_global_id(0));
+    do
+    {
+        vxc_short8 vect0, vect1, vect2, vect3;
+        vxc_half8  src0, src1, src2, src3;
+        coord_in.xy = (int2)(coord_in.w, coord_in.z);
+        VXC_ReadImage(vect0, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, src0, vect0, 16);
+        coord_in.x += output_num;
+        VXC_ReadImage(vect1, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, src1, vect1, 16);
+        coord_in.x += output_num;
+        VXC_ReadImage(vect2, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, src2, vect2, 16);
+        coord_in.x += output_num;
+        VXC_ReadImage(vect3, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, src3, vect3, 16);
+        VXC_DP4x4(data_i_t, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+        VXC_DP4x4(data_f_t, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+        VXC_DP4x4(data_g_t, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+        VXC_DP4x4(data_o_t, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+
+        coord_in.xy = (int2)(0, coord_in.w);
+        do
+        {
+            int4 *ptrHt = (int4*)&h_t_local[0];
+            int4 tm1s;
+            vxc_half8 data_h_tm1s;
+            float4 sum;
+            tm1s = ptrHt[coord_in.x>>3];
+            _viv_asm(COPY, data_h_tm1s, tm1s, 16);
+            VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+            coord_in.y += output_num;
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            data_i_t += sum;
+            VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+            coord_in.y += output_num;
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            data_f_t += sum;
+            VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+            coord_in.y += output_num;
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            data_g_t += sum;
+            VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            data_o_t += sum;
+            coord_in.xy += offsetX;
+        }while(coord_in.x < output_num);
+        barrier(CLK_LOCAL_MEM_FENCE);
+        //coord_in.xy = (int2)(0, coord_in.w);
+        data_i_t = sigmoid(data_i_t);
+        data_f_t = sigmoid(data_f_t + forget_bias);
+        data_g_t = tangentH(data_g_t);
+        data_i_t = data_i_t * data_g_t;
+        data_c_t = data_c_t * data_f_t + data_i_t;
+        half4 dst;
+        int lid = coord_in.w >> 2;
+        data_o_t = sigmoid(data_o_t);
+        data_f_t = tangentH(data_c_t);
+        data_o_t = data_o_t * data_f_t;
+        int2 vect8bytes;
+        _viv_asm(CONV, dst, data_o_t);
+        VXC_DP4x4(src0, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniExtractHalf4_4x4);
+        _viv_asm(COPY, vect8bytes, src0, 16);
+        h_t_local[lid] = vect8bytes;
+        _viv_asm(COPY, vect0, vect8bytes, 8);
+        VXC_WriteImage(h_t, coord_in.wz, vect0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        barrier(CLK_LOCAL_MEM_FENCE);
+        coord_in.z ++;
+    }while (coord_in.z < time_step);
+}
+__kernel __attribute__((reqd_work_group_size(16, 1, 1))) void vxcLSTMLayer_16x1_Fp16toFp16(
+    __read_only  image2d_array_t  w_x_x,
+    __read_only  image2d_array_t  w_h,
+    __write_only image2d_array_t  h_t
+    )
+{
+    int local_x = get_global_id(0) >> 3;
+    local int4 h_t_local[16];
+    float4 vec_c_t0 = 0, vec_c_t1 = 0;
+    vxc_half8 data_i_t, data_f_t, data_g_t, data_o_t;
+    float4 vec_i_t0, vec_i_t1;
+    float4 vec_f_t0, vec_f_t1;
+    float4 vec_g_t0, vec_g_t1;
+    float4 vec_o_t0, vec_o_t1;
+    int time = 0;
+    h_t_local[local_x] = 0;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int4 coord_in = (int4)(0, get_global_id(0), 0, get_global_id(0));
+    do
+    {
+        vxc_short8 vect0, vect1, vect2, vect3;
+        vxc_half8  src0, src1, src2, src3;
+
+        coord_in.xy = (int2)(coord_in.w, coord_in.z);
+        VXC_ReadImage(vect0, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, src0, vect0, 16);
+        coord_in.x += output_num;
+        VXC_ReadImage(vect1, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, src1, vect1, 16);
+        coord_in.x += output_num;
+        VXC_ReadImage(vect2, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, src2, vect2, 16);
+        coord_in.x += output_num;
+        VXC_ReadImage(vect3, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, src3, vect3, 16);
+
+        VXC_DP4x4(vec_i_t0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUnpackFp16toFp32Lo_4x4);
+        VXC_DP4x4(vec_i_t1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUnpackFp16toFp32Hi_4x4);
+        VXC_DP4x4(vec_f_t0, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUnpackFp16toFp32Lo_4x4);
+        VXC_DP4x4(vec_f_t1, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUnpackFp16toFp32Hi_4x4);
+        VXC_DP4x4(vec_g_t0, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUnpackFp16toFp32Lo_4x4);
+        VXC_DP4x4(vec_g_t1, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUnpackFp16toFp32Hi_4x4);
+        VXC_DP4x4(vec_o_t0, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUnpackFp16toFp32Lo_4x4);
+        VXC_DP4x4(vec_o_t1, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUnpackFp16toFp32Hi_4x4);
+        coord_in.xy = (int2)(0, coord_in.w);
+        do
+        {
+            int4 *ptrHt = (int4*)&h_t_local[0];
+            int4 tm1s;
+            vxc_half8 data_h_tm1s;
+            float4 sum;
+            tm1s = ptrHt[coord_in.x>>3];
+            _viv_asm(COPY, data_h_tm1s, tm1s, 16);
+
+            VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            vec_i_t0 += sum;
+
+            VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 5), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 6), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 7), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+            coord_in.y += output_num;
+
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            vec_i_t1 += sum;
+
+            VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            vec_f_t0 += sum;
+
+            VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 5), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 6), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 7), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+            coord_in.y += output_num;
+
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            vec_f_t1 += sum;
+
+            VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            vec_g_t0 += sum;
+
+            VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 5), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 6), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 7), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+            coord_in.y += output_num;
+
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            vec_g_t1 += sum;
+
+            VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            vec_o_t0 += sum;
+
+            VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 5), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 6), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 7), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+            vec_o_t1 += sum;
+
+            coord_in.xy += offsetX;
+        }while(coord_in.x < output_num);
+        //coord_in.xy = (int2)(0, coord_in.w);
+
+        vec_i_t0 = sigmoid(vec_i_t0);
+        vec_i_t1 = sigmoid(vec_i_t1);
+
+        //data_g_t = tangentH(data_g_t);
+        vec_g_t0 = tangentH(vec_g_t0);
+        vec_g_t1 = tangentH(vec_g_t1);
+
+        //data_f_t = sigmoid(data_f_t);
+        vec_f_t0 = sigmoid(vec_f_t0 + forget_bias);
+        vec_f_t1 = sigmoid(vec_f_t1 + forget_bias);
+
+        vec_i_t0 = vec_i_t0 * vec_g_t0;
+        vec_i_t1 = vec_i_t1 * vec_g_t1;
+
+        vec_c_t0 = vec_c_t0 * vec_f_t0 + vec_i_t0;
+        vec_c_t1 = vec_c_t1 * vec_f_t1 + vec_i_t1;
+
+        int lid = coord_in.w >> 3;
+
+        vec_o_t0 = sigmoid(vec_o_t0);
+        vec_o_t1 = sigmoid(vec_o_t1);
+
+        vec_f_t0 = tangentH(vec_c_t0);
+        vec_f_t1 = tangentH(vec_c_t1);
+
+        vec_o_t0 = vec_o_t0 * vec_f_t0;
+        vec_o_t1 = vec_o_t1 * vec_f_t1;
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        half4 dst0, dst1;
+        int4 vect16bytes;
+        _viv_asm(CONV, dst0, vec_o_t0);
+        _viv_asm(CONV, dst1, vec_o_t1);
+        VXC_DP2x8(data_i_t, dst0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractHalf8_2x8);
+        _viv_asm(COPY, vect16bytes, data_i_t, 16);
+        h_t_local[lid] = vect16bytes;
+
+        vxc_short8 dst;
+        _viv_asm(COPY, dst, vect16bytes, 16);
+        VXC_WriteImage(h_t, coord_in.wz, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        coord_in.z ++;
+    }while (coord_in.z < time_step);
+}
+__kernel __attribute__((reqd_work_group_size(32, 1, 1))) void vxcLSTMLayer_32x1_Fp16toFp16_1024(
+    __read_only  image2d_array_t  w_x_x,
+    __read_only  image2d_array_t  w_h,
+    __write_only image2d_array_t  h_t
+    )
+{
+    int local_x = get_global_id(0) >> 5;
+    local int2 h_ab_local[512];
+    local float4 c_t_local[256];
+
+    h_ab_local[8 * local_x]      = 0;
+    h_ab_local[8 * local_x + 1]  = 0;
+    h_ab_local[8 * local_x + 2]  = 0;
+    h_ab_local[8 * local_x + 3]  = 0;
+    h_ab_local[8 * local_x + 4]  = 0;
+    h_ab_local[8 * local_x + 5]  = 0;
+    h_ab_local[8 * local_x + 6]  = 0;
+    h_ab_local[8 * local_x + 7]  = 0;
+    c_t_local[8 * local_x + 0]  = 0;
+    c_t_local[8 * local_x + 1]  = 0;
+    c_t_local[8 * local_x + 2]  = 0;
+    c_t_local[8 * local_x + 3]  = 0;
+    c_t_local[8 * local_x + 4]  = 0;
+    c_t_local[8 * local_x + 5]  = 0;
+    c_t_local[8 * local_x + 6]  = 0;
+    c_t_local[8 * local_x + 7]  = 0;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int4 coord_in = (int4)(0, get_global_id(0), 0, get_global_id(0));
+    int a_idx = 0;
+    int b_idx = 256;
+    do
+    {
+        int i = 0;
+        do
+        {
+            int offset = i << 2;
+            vxc_short8 vect0, vect1, vect2, vect3;
+            vxc_half8  src0, src1, src2, src3;
+            float4 data_i_t, data_f_t, data_g_t, data_o_t;
+            coord_in.xy = (int2)(coord_in.w + offset, coord_in.z);
+            VXC_ReadImage(vect0, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            coord_in.x += output_num;
+            VXC_ReadImage(vect1, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            coord_in.x += output_num;
+            VXC_ReadImage(vect2, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            coord_in.x += output_num;
+            VXC_ReadImage(vect3, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+            VXC_DP4x4(data_i_t, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+            VXC_DP4x4(data_f_t, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+            VXC_DP4x4(data_g_t, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+            VXC_DP4x4(data_o_t, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+
+            coord_in.xy = (int2)(0, coord_in.w + offset);
+            do
+            {
+                int4 *ptrHt = (int4*)&h_ab_local[a_idx];
+                int4 tm1s;
+                vxc_half8 data_h_tm1s;
+                float4 sum;
+                tm1s = ptrHt[coord_in.x>>3];
+                _viv_asm(COPY, data_h_tm1s, tm1s, 16);
+                VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src0, vect0, 16);
+                VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src1, vect1, 16);
+                VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src2, vect2, 16);
+                VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src3, vect3, 16);
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                data_i_t += sum;
+                VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src0, vect0, 16);
+                VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src1, vect1, 16);
+                VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src2, vect2, 16);
+                VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src3, vect3, 16);
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                data_f_t += sum;
+                VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src0, vect0, 16);
+                VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src1, vect1, 16);
+                VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src2, vect2, 16);
+                VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src3, vect3, 16);
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                data_g_t += sum;
+                VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src0, vect0, 16);
+                VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src1, vect1, 16);
+                VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src2, vect2, 16);
+                VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src3, vect3, 16);
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                data_o_t += sum;
+                coord_in.xy += offsetX;
+            }while(coord_in.x < output_num);
+
+            float4 data_c_t;
+            data_c_t = c_t_local[8 * local_x + i];
+            data_i_t = sigmoid(data_i_t);
+            data_f_t = sigmoid(data_f_t + forget_bias);
+            data_g_t = tangentH(data_g_t);
+            data_i_t = data_i_t * data_g_t;
+            data_c_t = data_c_t * data_f_t + data_i_t;
+            c_t_local[8 * local_x + i]  = data_c_t;
+            half4 dst;
+            data_o_t = sigmoid(data_o_t);
+            data_f_t = tangentH(data_c_t);
+            data_o_t = data_o_t * data_f_t;
+            int2 vect8bytes;
+            _viv_asm(CONV, dst, data_o_t);
+            VXC_DP4x4(src0, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniExtractHalf4_4x4);
+            _viv_asm(COPY, vect8bytes, src0, 16);
+            int2 *pABBuf = (int2*)&h_ab_local[b_idx];
+            pABBuf[8 * local_x + i] = vect8bytes;
+            coord_in.x = coord_in.w + offset;
+            _viv_asm(COPY, vect0, vect8bytes, 8);
+            VXC_WriteImage(h_t, coord_in.xz, vect0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            i ++;
+        } while (i < 8);
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+        b_idx = (coord_in.z & 1) << 8;
+        coord_in.z ++;
+        a_idx = (coord_in.z & 1) << 8;
+    }while (coord_in.z < time_step);
+}
+__kernel __attribute__((reqd_work_group_size(16, 1, 1))) void vxcLSTMLayer_16x1_Fp16toFp16_1024(
+    __read_only  image2d_array_t  w_x_x,
+    __read_only  image2d_array_t  w_h,
+    __write_only image2d_array_t  h_t
+    )
+{
+    int local_x = get_global_id(0) >> 6;
+    int i = 0;
+    local int2 h_ab_local[512];
+    local float4 c_t_local[256];
+
+    do
+    {
+        h_ab_local[16 * local_x + i]         = 0;
+        c_t_local[16 * local_x + i]          = 0;
+        i ++;
+    }while(i < 16);
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int4 coord_in = (int4)(0, get_global_id(0), 0, get_global_id(0));
+    int a_idx = 0;
+    int b_idx = 256;
+    do
+    {
+        int i = 0;
+        do
+        {
+            int offset = i << 2;
+            vxc_short8 vect0, vect1, vect2, vect3;
+            vxc_half8  src0, src1, src2, src3;
+            float4 data_i_t, data_f_t, data_g_t, data_o_t;
+            coord_in.xy = (int2)(coord_in.w + offset, coord_in.z);
+            VXC_ReadImage(vect0, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src0, vect0, 16);
+            coord_in.x += output_num;
+            VXC_ReadImage(vect1, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src1, vect1, 16);
+            coord_in.x += output_num;
+            VXC_ReadImage(vect2, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src2, vect2, 16);
+            coord_in.x += output_num;
+            VXC_ReadImage(vect3, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, src3, vect3, 16);
+            VXC_DP4x4(data_i_t, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+            VXC_DP4x4(data_f_t, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+            VXC_DP4x4(data_g_t, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+            VXC_DP4x4(data_o_t, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+
+            coord_in.xy = (int2)(0, coord_in.w + offset);
+            do
+            {
+                int4 *ptrHt = (int4*)&h_ab_local[a_idx];
+                int4 tm1s;
+                vxc_half8 data_h_tm1s;
+                float4 sum;
+                tm1s = ptrHt[coord_in.x>>3];
+                _viv_asm(COPY, data_h_tm1s, tm1s, 16);
+                VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src0, vect0, 16);
+                VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src1, vect1, 16);
+                VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src2, vect2, 16);
+                VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src3, vect3, 16);
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                data_i_t += sum;
+                VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src0, vect0, 16);
+                VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src1, vect1, 16);
+                VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src2, vect2, 16);
+                VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src3, vect3, 16);
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                data_f_t += sum;
+                VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src0, vect0, 16);
+                VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src1, vect1, 16);
+                VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src2, vect2, 16);
+                VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src3, vect3, 16);
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                data_g_t += sum;
+                VXC_ReadImage(vect0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src0, vect0, 16);
+                VXC_ReadImage(vect1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src1, vect1, 16);
+                VXC_ReadImage(vect2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src2, vect2, 16);
+                VXC_ReadImage(vect3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, src3, vect3, 16);
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumFp16MulFp16_16x1);
+                data_o_t += sum;
+                coord_in.xy += offsetX;
+            }while(coord_in.x < output_num);
+
+            float4 data_c_t;
+            data_c_t = c_t_local[16 * local_x + i];
+            data_i_t = sigmoid(data_i_t);
+            data_f_t = sigmoid(data_f_t + forget_bias);
+            data_g_t = tangentH(data_g_t);
+            data_i_t = data_i_t * data_g_t;
+            data_c_t = data_c_t * data_f_t + data_i_t;
+            c_t_local[16 * local_x + i]  = data_c_t;
+            half4 dst;
+            data_o_t = sigmoid(data_o_t);
+            data_f_t = tangentH(data_c_t);
+            data_o_t = data_o_t * data_f_t;
+            int2 vect8bytes;
+            _viv_asm(CONV, dst, data_o_t);
+            VXC_DP4x4(src0, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniExtractHalf4_4x4);
+            _viv_asm(COPY, vect8bytes, src0, 16);
+            int2 *pABBuf = (int2*)&h_ab_local[b_idx];
+            pABBuf[16 * local_x + i] = vect8bytes;
+            coord_in.x = coord_in.w + offset;
+            _viv_asm(COPY, vect0, vect8bytes, 8);
+            VXC_WriteImage(h_t, coord_in.xz, vect0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            i ++;
+        } while (i < 16);
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+        b_idx = (coord_in.z & 1) << 8;
+        coord_in.z ++;
+        a_idx = (coord_in.z & 1) << 8;
+    }while (coord_in.z < time_step);
+}
+_viv_uniform float hidden_fcScale;
+_viv_uniform float outputScale;
+_viv_uniform VXC_512Bits uniDft16toFp32_input_4x4;
+_viv_uniform VXC_512Bits uniExtractDft16_2x8;
+_viv_uniform VXC_512Bits uniMulAccInt16_16x1;
+__kernel __attribute__((reqd_work_group_size(32, 1, 1))) void vxcLSTMLayer_32x1_Int16toInt16(
+    __read_only  image2d_array_t  w_x_x,
+    __read_only  image2d_array_t  w_h,
+    __write_only image2d_array_t  h_t
+    )
+{
+    int local_x = get_global_id(0) >> 2;
+    local int2 h_t_local[32];
+    float4 data_c_t = 0;
+    float4 data_i_t, data_f_t, data_g_t, data_o_t;
+    int time = 0;
+    h_t_local[local_x] = 0;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int4 coord_in = (int4)(0, get_global_id(0), 0, get_global_id(0));
+    do
+    {
+        vxc_short8  src0, src1, src2, src3;
+        coord_in.xy = (int2)(coord_in.w, coord_in.z);
+        VXC_ReadImage(src0, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += output_num;
+        VXC_ReadImage(src1, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += output_num;
+        VXC_ReadImage(src2, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += output_num;
+        VXC_ReadImage(src3, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(data_i_t, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+        VXC_DP4x4(data_f_t, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+        VXC_DP4x4(data_g_t, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+        VXC_DP4x4(data_o_t, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+
+        coord_in.xy = (int2)(0, coord_in.w);
+        do
+        {
+            int4 *ptrHt = (int4*)&h_t_local[0];
+            int4 tm1s;
+            vxc_short8 data_h_tm1s;
+            float4 sum;
+            tm1s = ptrHt[coord_in.x>>3];
+            _viv_asm(COPY, data_h_tm1s, tm1s, 16);
+            VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            coord_in.y += output_num;
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            data_i_t += sum * hidden_fcScale;
+            VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            coord_in.y += output_num;
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            data_f_t += sum * hidden_fcScale;
+            VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            coord_in.y += output_num;
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            data_g_t += sum * hidden_fcScale;
+            VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+            data_o_t += sum * hidden_fcScale;
+            coord_in.xy += offsetX;
+        }while(coord_in.x < output_num);
+        barrier(CLK_LOCAL_MEM_FENCE);
+        data_i_t = sigmoid(data_i_t);
+        data_f_t = sigmoid(data_f_t + forget_bias);
+        data_g_t = tangentH(data_g_t);
+        data_i_t = data_i_t * data_g_t;
+        data_c_t = data_c_t * data_f_t + data_i_t;
+        int4 dst;
+        int lid = coord_in.w >> 2;
+        data_o_t = sigmoid(data_o_t);
+        data_f_t = tangentH(data_c_t);
+        data_o_t = data_o_t * data_f_t * outputScale;
+        int2 vect8bytes;
+        _viv_asm(CONV_RTE, dst, data_o_t);
+        VXC_DP2x8(src0, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniExtractDft16_2x8);
+        _viv_asm(COPY, vect8bytes, src0, 16);
+        h_t_local[lid] = vect8bytes;
+        VXC_WriteImage(h_t, coord_in.wz, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        barrier(CLK_LOCAL_MEM_FENCE);
+        coord_in.z ++;
+    }while (coord_in.z < time_step);
+}
+__kernel __attribute__((reqd_work_group_size(16, 1, 1))) void vxcLSTMLayer_16x1_Int16toInt16(
+    __read_only  image2d_array_t  w_x_x,
+    __read_only  image2d_array_t  w_h,
+    __write_only image2d_array_t  h_t
+    )
+{
+    int local_x = get_global_id(0) >> 3;
+    int i = 0;
+    local int2 h_ab_local[64];
+    local float4 c_t_local[32];
+
+    h_ab_local[2 * local_x + 0]         = 0;
+    h_ab_local[2 * local_x + 1]         = 0;
+    c_t_local[2 * local_x + 0]          = 0;
+    c_t_local[2 * local_x + 1]          = 0;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int4 coord_in = (int4)(0, get_global_id(0), 0, get_global_id(0));
+    int a_idx = 0;
+    int b_idx = 32;
+    do
+    {
+        int i = 0;
+        do
+        {
+            int offset = i << 2;
+            vxc_short8  src0, src1, src2, src3;
+            float4 data_i_t, data_f_t, data_g_t, data_o_t;
+            coord_in.xy = (int2)(coord_in.w + offset, coord_in.z);
+            VXC_ReadImage(src0, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src1, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src2, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src3, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            VXC_DP4x4(data_i_t, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_f_t, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_g_t, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_o_t, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+
+            coord_in.xy = (int2)(0, coord_in.w + offset);
+            do
+            {
+                int4 *ptrHt = (int4*)&h_ab_local[a_idx];
+                int4 tm1s;
+                vxc_short8 data_h_tm1s;
+                float4 sum;
+                tm1s = ptrHt[coord_in.x>>3];
+                _viv_asm(COPY, data_h_tm1s, tm1s, 16);
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                data_i_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                data_f_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                data_g_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                data_o_t += sum * hidden_fcScale;
+                coord_in.xy += offsetX;
+            }while(coord_in.x < output_num);
+
+            float4 data_c_t;
+            data_c_t = c_t_local[2 * local_x + i];
+            data_i_t = sigmoid(data_i_t);
+            data_f_t = sigmoid(data_f_t + forget_bias);
+            data_g_t = tangentH(data_g_t);
+            data_i_t = data_i_t * data_g_t;
+            data_c_t = data_c_t * data_f_t + data_i_t;
+            c_t_local[2 * local_x + i]  = data_c_t;
+            int4 dst;
+            data_o_t = sigmoid(data_o_t);
+            data_f_t = tangentH(data_c_t);
+            data_o_t = data_o_t * data_f_t * outputScale;
+            int2 vect8bytes;
+            _viv_asm(CONV_RTE, dst, data_o_t);
+            VXC_DP2x8(src0, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniExtractDft16_2x8);
+            _viv_asm(COPY, vect8bytes, src0, 16);
+            int2 *pABBuf = (int2*)&h_ab_local[b_idx];
+            pABBuf[2 * local_x + i] = vect8bytes;
+            coord_in.x = coord_in.w + offset;
+            VXC_WriteImage(h_t, coord_in.xz, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            i ++;
+        } while (i < 2);
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+        b_idx = (coord_in.z & 1) << 5;
+        coord_in.z ++;
+        a_idx = (coord_in.z & 1) << 5;
+    }while (coord_in.z < time_step);
+}
+__kernel __attribute__((reqd_work_group_size(32, 1, 1))) void vxcLSTMLayer_32x1_Int16toInt16_1024(
+    __read_only  image2d_array_t  w_x_x,
+    __read_only  image2d_array_t  w_h,
+    __write_only image2d_array_t  h_t
+    )
+{
+    int local_x = get_global_id(0) >> 5;
+    local int2 h_ab_local[512];
+    local float4 c_t_local[256];
+
+    h_ab_local[8 * local_x]      = 0;
+    h_ab_local[8 * local_x + 1]  = 0;
+    h_ab_local[8 * local_x + 2]  = 0;
+    h_ab_local[8 * local_x + 3]  = 0;
+    h_ab_local[8 * local_x + 4]  = 0;
+    h_ab_local[8 * local_x + 5]  = 0;
+    h_ab_local[8 * local_x + 6]  = 0;
+    h_ab_local[8 * local_x + 7]  = 0;
+    c_t_local[8 * local_x + 0]  = 0;
+    c_t_local[8 * local_x + 1]  = 0;
+    c_t_local[8 * local_x + 2]  = 0;
+    c_t_local[8 * local_x + 3]  = 0;
+    c_t_local[8 * local_x + 4]  = 0;
+    c_t_local[8 * local_x + 5]  = 0;
+    c_t_local[8 * local_x + 6]  = 0;
+    c_t_local[8 * local_x + 7]  = 0;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int4 coord_in = (int4)(0, get_global_id(0), 0, get_global_id(0));
+    int a_idx = 0;
+    int b_idx = 256;
+    do
+    {
+        int i = 0;
+        do
+        {
+            int offset = i << 2;
+            vxc_short8  src0, src1, src2, src3;
+            float4 data_i_t, data_f_t, data_g_t, data_o_t;
+            coord_in.xy = (int2)(coord_in.w + offset, coord_in.z);
+            VXC_ReadImage(src0, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src1, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src2, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src3, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            VXC_DP4x4(data_i_t, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_f_t, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_g_t, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_o_t, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+
+            coord_in.xy = (int2)(0, coord_in.w + offset);
+            do
+            {
+                int4 *ptrHt = (int4*)&h_ab_local[a_idx];
+                int4 tm1s;
+                vxc_short8 data_h_tm1s;
+                float4 sum;
+                tm1s = ptrHt[coord_in.x>>3];
+                _viv_asm(COPY, data_h_tm1s, tm1s, 16);
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                data_i_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                data_f_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                data_g_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                data_o_t += sum * hidden_fcScale;
+                coord_in.xy += offsetX;
+            }while(coord_in.x < output_num);
+
+            float4 data_c_t;
+            data_c_t = c_t_local[8 * local_x + i];
+            data_i_t = sigmoid(data_i_t);
+            data_f_t = sigmoid(data_f_t + forget_bias);
+            data_g_t = tangentH(data_g_t);
+            data_i_t = data_i_t * data_g_t;
+            data_c_t = data_c_t * data_f_t + data_i_t;
+            c_t_local[8 * local_x + i]  = data_c_t;
+            int4 dst;
+            data_o_t = sigmoid(data_o_t);
+            data_f_t = tangentH(data_c_t);
+            data_o_t = data_o_t * data_f_t * outputScale;
+            int2 vect8bytes;
+            _viv_asm(CONV_RTE, dst, data_o_t);
+            VXC_DP2x8(src0, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniExtractDft16_2x8);
+            _viv_asm(COPY, vect8bytes, src0, 16);
+            int2 *pABBuf = (int2*)&h_ab_local[b_idx];
+            pABBuf[8 * local_x + i] = vect8bytes;
+            coord_in.x = coord_in.w + offset;
+            VXC_WriteImage(h_t, coord_in.xz, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            i ++;
+        } while (i < 8);
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+        b_idx = (coord_in.z & 1) << 8;
+        coord_in.z ++;
+        a_idx = (coord_in.z & 1) << 8;
+    }while (coord_in.z < time_step);
+}
+__kernel __attribute__((reqd_work_group_size(16, 1, 1))) void vxcLSTMLayer_16x1_Int16toInt16_1024(
+    __read_only  image2d_array_t  w_x_x,
+    __read_only  image2d_array_t  w_h,
+    __write_only image2d_array_t  h_t
+    )
+{
+    int local_x = get_global_id(0) >> 6;
+    int i = 0;
+    local int2 h_ab_local[512];
+    local float4 c_t_local[256];
+
+    do
+    {
+        h_ab_local[16 * local_x + i]         = 0;
+        c_t_local[16 * local_x + i]          = 0;
+        i ++;
+    }while(i < 16);
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int4 coord_in = (int4)(0, get_global_id(0), 0, get_global_id(0));
+    int a_idx = 0;
+    int b_idx = 256;
+    do
+    {
+        int i = 0;
+        do
+        {
+            int offset = i << 2;
+            vxc_short8  src0, src1, src2, src3;
+            float4 data_i_t, data_f_t, data_g_t, data_o_t;
+            coord_in.xy = (int2)(coord_in.w + offset, coord_in.z);
+            VXC_ReadImage(src0, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src1, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src2, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src3, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            VXC_DP4x4(data_i_t, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_f_t, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_g_t, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_o_t, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+
+            coord_in.xy = (int2)(0, coord_in.w + offset);
+            do
+            {
+                int4 *ptrHt = (int4*)&h_ab_local[a_idx];
+                int4 tm1s;
+                vxc_short8 data_h_tm1s;
+                float4 sum;
+                tm1s = ptrHt[coord_in.x>>3];
+                _viv_asm(COPY, data_h_tm1s, tm1s, 16);
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                data_i_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                data_f_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                data_g_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt16_16x1);
+                data_o_t += sum * hidden_fcScale;
+                coord_in.xy += offsetX;
+            }while(coord_in.x < output_num);
+
+            float4 data_c_t;
+            data_c_t = c_t_local[16 * local_x + i];
+            data_i_t = sigmoid(data_i_t);
+            data_f_t = sigmoid(data_f_t + forget_bias);
+            data_g_t = tangentH(data_g_t);
+            data_i_t = data_i_t * data_g_t;
+            data_c_t = data_c_t * data_f_t + data_i_t;
+            c_t_local[16 * local_x + i]  = data_c_t;
+            int4 dst;
+            data_o_t = sigmoid(data_o_t);
+            data_f_t = tangentH(data_c_t);
+            data_o_t = data_o_t * data_f_t * outputScale;
+            int2 vect8bytes;
+            _viv_asm(CONV_RTE, dst, data_o_t);
+            VXC_DP2x8(src0, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniExtractDft16_2x8);
+            _viv_asm(COPY, vect8bytes, src0, 16);
+            int2 *pABBuf = (int2*)&h_ab_local[b_idx];
+            pABBuf[16 * local_x + i] = vect8bytes;
+            coord_in.x = coord_in.w + offset;
+            VXC_WriteImage(h_t, coord_in.xz, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            i ++;
+        } while (i < 16);
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+        b_idx = (coord_in.z & 1) << 8;
+        coord_in.z ++;
+        a_idx = (coord_in.z & 1) << 8;
+    }while (coord_in.z < time_step);
+}
+_viv_uniform VXC_512Bits uniMulAccInt8_16x1;
+__kernel __attribute__((reqd_work_group_size(32, 1, 1))) void vxcLSTMLayer_32x1_Int8toInt8(
+    __read_only  image2d_array_t  w_x_x,
+    __read_only  image2d_array_t  w_h,
+    __write_only image2d_array_t  h_t
+    )
+{
+    int local_x = get_global_id(0) >> 2;
+    local int h_t_local[32];
+    float4 data_c_t = 0;
+    float4 data_i_t, data_f_t, data_g_t, data_o_t;
+    int time = 0;
+    h_t_local[local_x] = 0;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int4 coord_in = (int4)(0, get_global_id(0), 0, get_global_id(0));
+    do
+    {
+        vxc_char16  src0, src1, src2, src3;
+        coord_in.xy = (int2)(coord_in.w, coord_in.z);
+        VXC_ReadImage(src0, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += output_num;
+        VXC_ReadImage(src1, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += output_num;
+        VXC_ReadImage(src2, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += output_num;
+        VXC_ReadImage(src3, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(data_i_t, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+        VXC_DP4x4(data_f_t, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+        VXC_DP4x4(data_g_t, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+        VXC_DP4x4(data_o_t, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+
+        coord_in.xy = (int2)(0, coord_in.w);
+        do
+        {
+            int4 *ptrHt = (int4*)&h_t_local[0];
+            int4 tm1s;
+            vxc_char16 data_h_tm1s;
+            float4 sum;
+            tm1s = ptrHt[coord_in.x>>4];
+            _viv_asm(COPY, data_h_tm1s, tm1s, 16);
+            VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            coord_in.y += output_num;
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            data_i_t += sum * hidden_fcScale;
+            VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            coord_in.y += output_num;
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            data_f_t += sum * hidden_fcScale;
+            VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            coord_in.y += output_num;
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            data_g_t += sum * hidden_fcScale;
+            VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+            data_o_t += sum * hidden_fcScale;
+            coord_in.xy += offsetX;
+        }while(coord_in.x < output_num);
+        barrier(CLK_LOCAL_MEM_FENCE);
+        data_i_t = sigmoid(data_i_t);
+        data_f_t = sigmoid(data_f_t + forget_bias);
+        data_g_t = tangentH(data_g_t);
+        data_i_t = data_i_t * data_g_t;
+        data_c_t = data_c_t * data_f_t + data_i_t;
+        int4 dst;
+        int lid = coord_in.w >> 2;
+        data_o_t = sigmoid(data_o_t);
+        data_f_t = tangentH(data_c_t);
+        data_o_t = data_o_t * data_f_t * outputScale;
+        int vect4bytes;
+        _viv_asm(CONV_RTE, dst, data_o_t);
+        VXC_DP2x8(src0, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniExtractDft16_2x8);
+        _viv_asm(COPY, vect4bytes, src0, 16);
+        h_t_local[lid] = vect4bytes;
+        VXC_WriteImage(h_t, coord_in.wz, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        barrier(CLK_LOCAL_MEM_FENCE);
+        coord_in.z ++;
+    }while (coord_in.z < time_step);
+}
+__kernel __attribute__((reqd_work_group_size(16, 1, 1))) void vxcLSTMLayer_16x1_Int8toInt8(
+    __read_only  image2d_array_t  w_x_x,
+    __read_only  image2d_array_t  w_h,
+    __write_only image2d_array_t  h_t
+    )
+{
+    int local_x = get_global_id(0) >> 3;
+    int i = 0;
+    local int h_ab_local[64];
+    float4 c_t_array[2];
+    c_t_array[0] = 0;
+    c_t_array[1] = 0;
+
+    h_ab_local[2 * local_x + 0]         = 0;
+    h_ab_local[2 * local_x + 1]         = 0;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int4 coord_in = (int4)(0, get_global_id(0), 0, get_global_id(0));
+    int a_idx = 0;
+    int b_idx = 32;
+    do
+    {
+        int i = 0;
+        do
+        {
+            vxc_char16  src0, src1, src2, src3;
+            float4 data_i_t, data_f_t, data_g_t, data_o_t;
+            coord_in.xy = (int2)(coord_in.w, coord_in.z);
+            VXC_ReadImage(src0, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src1, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src2, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src3, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            VXC_DP4x4(data_i_t, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_f_t, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_g_t, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_o_t, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+
+            coord_in.xy = (int2)(0, coord_in.w);
+            do
+            {
+                int4 *ptrHt = (int4*)&h_ab_local[a_idx];
+                int4 tm1s;
+                vxc_char16 data_h_tm1s;
+                float4 sum;
+                tm1s = ptrHt[coord_in.x>>4];
+                _viv_asm(COPY, data_h_tm1s, tm1s, 16);
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                data_i_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                data_f_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                data_g_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                data_o_t += sum * hidden_fcScale;
+                coord_in.xy += offsetX;
+            }while(coord_in.x < output_num);
+
+            float4 data_c_t;
+            data_c_t = c_t_array[i];
+            data_i_t = sigmoid(data_i_t);
+            data_f_t = sigmoid(data_f_t + forget_bias);
+            data_g_t = tangentH(data_g_t);
+            data_i_t = data_i_t * data_g_t;
+            data_c_t = data_c_t * data_f_t + data_i_t;
+            c_t_array[i] = data_c_t;
+            int4 dst;
+            data_o_t = sigmoid(data_o_t);
+            data_f_t = tangentH(data_c_t);
+            data_o_t = data_o_t * data_f_t * outputScale;
+            int vect4bytes;
+            _viv_asm(CONV_RTE, dst, data_o_t);
+            VXC_DP2x8(src0, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniExtractDft16_2x8);
+            _viv_asm(COPY, vect4bytes, src0, 4);
+            int *pABBuf = (int*)&h_ab_local[b_idx];
+            pABBuf[2 * local_x + i] = vect4bytes;
+            coord_in.x = coord_in.w;
+            VXC_WriteImage(h_t, coord_in.xz, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.w += 4;
+            i ++;
+        } while (i < 2);
+
+        coord_in.w -= 8;
+        barrier(CLK_LOCAL_MEM_FENCE);
+        b_idx = (coord_in.z & 1) << 5;
+        coord_in.z ++;
+        a_idx = (coord_in.z & 1) << 5;
+    }while (coord_in.z < time_step);
+}
+__kernel __attribute__((reqd_work_group_size(32, 1, 1))) void vxcLSTMLayer_32x1_Int8toInt8_1024(
+    __read_only  image2d_array_t  w_x_x,
+    __read_only  image2d_array_t  w_h,
+    __write_only image2d_array_t  h_t
+    )
+{
+    int local_x = get_global_id(0) >> 5;
+    local int h_ab_local[512];
+    local float4 c_t_local[256];
+
+    h_ab_local[8 * local_x]      = 0;
+    h_ab_local[8 * local_x + 1]  = 0;
+    h_ab_local[8 * local_x + 2]  = 0;
+    h_ab_local[8 * local_x + 3]  = 0;
+    h_ab_local[8 * local_x + 4]  = 0;
+    h_ab_local[8 * local_x + 5]  = 0;
+    h_ab_local[8 * local_x + 6]  = 0;
+    h_ab_local[8 * local_x + 7]  = 0;
+    c_t_local[8 * local_x + 0]  = 0;
+    c_t_local[8 * local_x + 1]  = 0;
+    c_t_local[8 * local_x + 2]  = 0;
+    c_t_local[8 * local_x + 3]  = 0;
+    c_t_local[8 * local_x + 4]  = 0;
+    c_t_local[8 * local_x + 5]  = 0;
+    c_t_local[8 * local_x + 6]  = 0;
+    c_t_local[8 * local_x + 7]  = 0;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int4 coord_in = (int4)(0, get_global_id(0), 0, get_global_id(0));
+    int a_idx = 0;
+    int b_idx = 256;
+    do
+    {
+        int i = 0;
+        do
+        {
+            int offset = i << 2;
+            vxc_char16  src0, src1, src2, src3;
+            float4 data_i_t, data_f_t, data_g_t, data_o_t;
+            coord_in.xy = (int2)(coord_in.w + offset, coord_in.z);
+            VXC_ReadImage(src0, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src1, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src2, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src3, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            VXC_DP4x4(data_i_t, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_f_t, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_g_t, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_o_t, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+
+            coord_in.xy = (int2)(0, coord_in.w + offset);
+            do
+            {
+                int4 *ptrHt = (int4*)&h_ab_local[a_idx];
+                int4 tm1s;
+                vxc_char16 data_h_tm1s;
+                float4 sum;
+                tm1s = ptrHt[coord_in.x>>4];
+                _viv_asm(COPY, data_h_tm1s, tm1s, 16);
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                data_i_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                data_f_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                data_g_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                data_o_t += sum * hidden_fcScale;
+                coord_in.xy += offsetX;
+            }while(coord_in.x < output_num);
+
+            float4 data_c_t;
+            data_c_t = c_t_local[8 * local_x + i];
+            data_i_t = sigmoid(data_i_t);
+            data_f_t = sigmoid(data_f_t + forget_bias);
+            data_g_t = tangentH(data_g_t);
+            data_i_t = data_i_t * data_g_t;
+            data_c_t = data_c_t * data_f_t + data_i_t;
+            c_t_local[8 * local_x + i]  = data_c_t;
+            int4 dst;
+            data_o_t = sigmoid(data_o_t);
+            data_f_t = tangentH(data_c_t);
+            data_o_t = data_o_t * data_f_t * outputScale;
+            int vect4bytes;
+            _viv_asm(CONV_RTE, dst, data_o_t);
+            VXC_DP2x8(src0, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniExtractDft16_2x8);
+            _viv_asm(COPY, vect4bytes, src0, 16);
+            int *pABBuf = (int*)&h_ab_local[b_idx];
+            pABBuf[8 * local_x + i] = vect4bytes;
+            coord_in.x = coord_in.w + offset;
+            VXC_WriteImage(h_t, coord_in.xz, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            i ++;
+        } while (i < 8);
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+        b_idx = (coord_in.z & 1) << 8;
+        coord_in.z ++;
+        a_idx = (coord_in.z & 1) << 8;
+    }while (coord_in.z < time_step);
+}
+__kernel __attribute__((reqd_work_group_size(16, 1, 1))) void vxcLSTMLayer_16x1_Int8toInt8_1024(
+    __read_only  image2d_array_t  w_x_x,
+    __read_only  image2d_array_t  w_h,
+    __write_only image2d_array_t  h_t
+    )
+{
+    int local_x = get_global_id(0) >> 6;
+    int i = 0;
+    local int h_ab_local[512];
+    local float4 c_t_local[256];
+
+    do
+    {
+        h_ab_local[16 * local_x + i]         = 0;
+        c_t_local[16 * local_x + i]          = 0;
+        i ++;
+    }while(i < 16);
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int4 coord_in = (int4)(0, get_global_id(0), 0, get_global_id(0));
+    int a_idx = 0;
+    int b_idx = 256;
+    do
+    {
+        int i = 0;
+        do
+        {
+            int offset = i << 2;
+            vxc_char16  src0, src1, src2, src3;
+            float4 data_i_t, data_f_t, data_g_t, data_o_t;
+            coord_in.xy = (int2)(coord_in.w + offset, coord_in.z);
+            VXC_ReadImage(src0, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src1, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src2, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            coord_in.x += output_num;
+            VXC_ReadImage(src3, w_x_x, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            VXC_DP4x4(data_i_t, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_f_t, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_g_t, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+            VXC_DP4x4(data_o_t, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDft16toFp32_input_4x4);
+
+            coord_in.xy = (int2)(0, coord_in.w + offset);
+            do
+            {
+                int4 *ptrHt = (int4*)&h_ab_local[a_idx];
+                int4 tm1s;
+                vxc_char16 data_h_tm1s;
+                float4 sum;
+                tm1s = ptrHt[coord_in.x>>4];
+                _viv_asm(COPY, data_h_tm1s, tm1s, 16);
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                data_i_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                data_f_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                coord_in.y += output_num;
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                data_g_t += sum * hidden_fcScale;
+                VXC_ReadImage(src0, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src1, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src2, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_ReadImage(src3, w_h, coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_DP16x1(sum, src0, data_h_tm1s, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src1, data_h_tm1s, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src2, data_h_tm1s, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                VXC_DP16x1(sum, src3, data_h_tm1s, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAccInt8_16x1);
+                data_o_t += sum * hidden_fcScale;
+                coord_in.xy += offsetX;
+            }while(coord_in.x < output_num);
+
+            float4 data_c_t;
+            data_c_t = c_t_local[16 * local_x + i];
+            data_i_t = sigmoid(data_i_t);
+            data_f_t = sigmoid(data_f_t + forget_bias);
+            data_g_t = tangentH(data_g_t);
+            data_i_t = data_i_t * data_g_t;
+            data_c_t = data_c_t * data_f_t + data_i_t;
+            c_t_local[16 * local_x + i]  = data_c_t;
+            int4 dst;
+            data_o_t = sigmoid(data_o_t);
+            data_f_t = tangentH(data_c_t);
+            data_o_t = data_o_t * data_f_t * outputScale;
+            int vect4bytes;
+            _viv_asm(CONV_RTE, dst, data_o_t);
+            VXC_DP2x8(src0, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniExtractDft16_2x8);
+            _viv_asm(COPY, vect4bytes, src0, 16);
+            int *pABBuf = (int*)&h_ab_local[b_idx];
+            pABBuf[16 * local_x + i] = vect4bytes;
+            coord_in.x = coord_in.w + offset;
+            VXC_WriteImage(h_t, coord_in.xz, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            i ++;
+        } while (i < 16);
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+        b_idx = (coord_in.z & 1) << 8;
+        coord_in.z ++;
+        a_idx = (coord_in.z & 1) << 8;
+    }while (coord_in.z < time_step);
+}

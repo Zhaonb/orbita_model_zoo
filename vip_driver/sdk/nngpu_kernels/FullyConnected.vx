@@ -1,0 +1,931 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+
+__kernel void gpuFullyConnected_U8_I8_I32toU8_Perchanel
+(
+    __read_only  image2d_t input,
+    __read_only  image2d_t weights,
+    __read_only  image2d_t bias,
+                 float     input_zp,
+                 float     output_zp,
+                 int       input_size,
+    __read_only  image2d_t scales,
+    __write_only image2d_t output
+ )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord       = (int4)(x, y, 0, 0);
+    float4 tmpSum = {0.0}, src0, src1;
+    uint4 dst = {0}, tmp0;
+    int4 biasData;
+    int4 tmpData0, tmpData1;
+    float4 scaleVal = read_imagef(scales, coord.xz);
+    biasData = read_imagei(bias, coord.xz);
+    tmpSum.x = biasData.x;
+    float4 one = (float4)(1.0, 1.0, 1.0, 1.0);
+    do
+    {
+        tmp0     = read_imageui(input, coord.zy);
+        tmpData1 = read_imagei(weights, coord.zx);
+        coord.z ++;
+        tmpData0 = convert_int4(tmp0);
+        src0 = convert_float4(tmpData0) - input_zp;
+        src1 = convert_float4(tmpData1);
+        tmpSum += src0 * src1;
+    } while (coord.z < input_size);
+    dst.x = convert_uint_rte(tmpSum.x * scaleVal.x + output_zp);
+    write_imageui(output, coord.xy, dst.xxxx);
+}
+
+__kernel void gpuFullyConnected_U8_I8_I32toU8_4X_Perchanel
+(
+    __read_only  image2d_t input,
+    __read_only  image2d_t weights,
+    __read_only  image2d_t bias,
+                 float     input_zp,
+                 float     output_zp,
+                 int       input_size,
+    __read_only  image2d_t scales,
+    __write_only image2d_t output
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord       = (int4)(x, y, 0, 0);
+    float4 tmpSum = {0.0}, src0, src1;
+    uint4 dst = {0}, tmp0;
+    int4 biasData;
+    float4 sum = 0;
+    int4 tmpData0, tmpData1;
+    float4 scaleVal = read_imagef(scales, coord.xz);
+    biasData = read_imagei(bias, coord.xz);
+    tmpSum.x = biasData.x;
+    float4 one = (float4)(1.0, 1.0, 1.0, 1.0);
+
+    input_size >>= 2;
+    do
+    {
+        tmp0     = read_imageui(input, coord.zy);
+        tmpData1 = read_imagei(weights, coord.zx);
+        coord.z += 1;
+        tmpData0 = convert_int4(tmp0);
+        src0 = convert_float4(tmpData0) - input_zp;
+        src1 = convert_float4(tmpData1);
+        tmpSum += src0 * src1;
+    } while (coord.z < input_size);
+    sum.x = dot(tmpSum, one);
+    dst.x = convert_uint_rte(sum.x * scaleVal.x + output_zp);
+    write_imageui(output, coord.xy, dst.xxxx);
+}
+
+__kernel void gpuFullyConnected_Quant32_2D
+    (
+    __read_only  image2d_t input,
+    __read_only  image2d_t weights,
+    __read_only  image2d_t bias,
+    float                  uint8_scale,
+    float                  input_zp,
+    float                  weight_zp,
+    float                  output_zp,
+    int                    input_size,
+    __write_only image2d_t output,
+    int                    overflow_mode,
+    int                    is_bias_uint8
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord       = (int4)(x, y, 0, 0);
+    float4 sumData, src0, src1;
+    uint4 dst = {0}, tmp0, tmp1;
+    int4 biasData;
+    float sum = 0;
+
+    if (is_bias_uint8)
+        biasData.x = convert_int(read_imageui(bias, coord.xz).x);
+    else
+        biasData = read_imagei(bias, coord.xz);
+    sum = biasData.x;
+    float4 one = (float4)(1.0, 1.0, 1.0, 1.0);
+
+    input_size >>= 2;
+
+    do
+    {
+        tmp0 = read_imageui(weights, coord.zx);
+        tmp1 = read_imageui(input, coord.zy);
+        coord.z += 1;
+
+        uint4 bits = (uint4)(8, 8, 8, 8);
+        uint4 cfg = (uint4)(0, 8, 16, 24);
+        uint4 i0Temp, i1Temp, i2Temp, i3Temp;
+        uint4 w0Temp, w1Temp, w2Temp, w3Temp;
+        float4 i0Pixel, i1Pixel, i2Pixel, i3Pixel;
+        float4 w0Pixel, w1Pixel, w2Pixel, w3Pixel;
+
+        w0Temp = viv_bitfieldExtract(tmp0.xxxx, cfg, bits);
+        w1Temp = viv_bitfieldExtract(tmp0.yyyy, cfg, bits);
+        w2Temp = viv_bitfieldExtract(tmp0.zzzz, cfg, bits);
+        w3Temp = viv_bitfieldExtract(tmp0.wwww, cfg, bits);
+
+        w0Pixel = convert_float4(w0Temp) - weight_zp;
+        w1Pixel = convert_float4(w1Temp) - weight_zp;
+        w2Pixel = convert_float4(w2Temp) - weight_zp;
+        w3Pixel = convert_float4(w3Temp) - weight_zp;
+
+        i0Temp = viv_bitfieldExtract(tmp1.xxxx, cfg, bits);
+        i1Temp = viv_bitfieldExtract(tmp1.yyyy, cfg, bits);
+        i2Temp = viv_bitfieldExtract(tmp1.zzzz, cfg, bits);
+        i3Temp = viv_bitfieldExtract(tmp1.wwww, cfg, bits);
+
+        i0Pixel = convert_float4(i0Temp) - input_zp;
+        i1Pixel = convert_float4(i1Temp) - input_zp;
+        i2Pixel = convert_float4(i2Temp) - input_zp;
+        i3Pixel = convert_float4(i3Temp) - input_zp;
+
+        sumData.x = dot(i0Pixel, w0Pixel);
+        sumData.y = dot(i1Pixel, w1Pixel);
+        sumData.z = dot(i2Pixel, w2Pixel);
+        sumData.w = dot(i3Pixel, w3Pixel);
+
+        sum += dot(sumData, one);
+    } while (coord.z < input_size);
+
+    float val = floor(sum * uint8_scale + output_zp + 0.5);
+    dst.x = overflow_mode == 0 ? (uint)((uchar)(val)) : clamp(val, 0, 255);
+    write_imageui(output, coord.xy, dst);
+}
+
+#define FC_IMPL_WITH_BIAS_U8(name, in_type, read_fun0, weight_type, read_fun1, \
+                bias_read_fun2, out_type, write_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __read_only  image2d_t bias, \
+    __write_only image2d_t output, \
+                 float     weight_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float sum = 0; \
+    out_type dst; \
+ \
+    float4 biasData = convert_float4(bias_read_fun2(bias, coord.xz)); \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float src0 = convert_float(data0.x) - input_zp; \
+        float src1 = convert_float(data1.x) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    sum = sum + biasData.x; \
+    float val = floor(sum * output_scale + output_zp + 0.5); \
+    dst.x = overflow_mode == 0 ? (uint)((uchar)(val)) : clamp(val, 0, 255); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_WITH_BIAS_U8(U8_U8_I32toU8, uint4, read_imageui, uint4, read_imageui, read_imagei,  uint4, write_imageui)
+FC_IMPL_WITH_BIAS_U8(U8_U8_U8toU8,  uint4, read_imageui, uint4, read_imageui, read_imageui, uint4, write_imageui)
+
+#define FC_IMPL_WITH_BIAS_U8_4X(name, in_type, read_fun0, weight_type, read_fun1, \
+                bias_read_fun2, out_type, write_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __read_only  image2d_t bias, \
+    __write_only image2d_t output, \
+                 float     weight_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float4 sum = 0; \
+    out_type dst; \
+ \
+    float4 biasData = convert_float4(bias_read_fun2(bias, coord.xz)); \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float4 src0 = convert_float4(data0) - input_zp; \
+        float4 src1 = convert_float4(data1) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    float4 one = (float4)(1, 1, 1, 1); \
+    sum.x = dot(sum, one) + biasData.x; \
+    float val = floor(sum.x * output_scale + output_zp + 0.5); \
+    dst.x = overflow_mode == 0 ? (uint)((uchar)(val)) : clamp(val, 0, 255); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_WITH_BIAS_U8_4X(U8_U8_I32toU8_4X, uint4, read_imageui, uint4, read_imageui, read_imagei,  uint4, write_imageui)
+FC_IMPL_WITH_BIAS_U8_4X(U8_U8_U8toU8_4X,  uint4, read_imageui, uint4, read_imageui, read_imageui, uint4, write_imageui)
+
+#define FC_IMPL_U8(name, in_type, read_fun0, weight_type, read_fun1, \
+                out_type, write_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __write_only image2d_t output, \
+                 float     weight_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float sum = 0; \
+    out_type dst; \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float src0 = convert_float(data0.x) - input_zp; \
+        float src1 = convert_float(data1.x) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    float val = floor(sum * output_scale + output_zp + 0.5); \
+    dst.x = overflow_mode == 0 ? (uint)((uchar)(val)) : clamp(val, 0, 255); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_U8(U8_U8toU8, uint4, read_imageui, uint4, read_imageui,  uint4, write_imageui)
+
+#define FC_IMPL_U8_4X(name, in_type, read_fun0, weight_type, read_fun1, \
+                out_type, write_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __write_only image2d_t output, \
+                 float     weight_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float4 sum = 0; \
+    out_type dst; \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float4 src0 = convert_float4(data0) - input_zp; \
+        float4 src1 = convert_float4(data1) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    float4 one = (float4)(1, 1, 1, 1); \
+    sum.x = dot(sum, one); \
+    float val = floor(sum.x * output_scale + output_zp + 0.5); \
+    dst.x = overflow_mode == 0 ? (uint)((uchar)(val)) : clamp(val, 0, 255); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_U8_4X(U8_U8toU8_4X, uint4, read_imageui, uint4, read_imageui, uint4, write_imageui)
+
+#define FC_IMPL_WITH_BIAS_F32(name) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __read_only  image2d_t bias, \
+    __write_only image2d_t output, \
+                 float     weight_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float4 sum = 0; \
+ \
+    float4 biasData = read_imagef(bias, coord.xz); \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        float4 src0 = read_imagef(input, coord.zy); \
+        float4 src1 = read_imagef(weights, coord.zx); \
+        coord.z++; \
+ \
+        sum.x = sum.x + src0.x * src1.x; \
+    } \
+ \
+    sum.x = sum.x + biasData.x; \
+ \
+    write_imagef(output, coord.xy, sum.xxxx); \
+}
+FC_IMPL_WITH_BIAS_F32(F32_F32_F32toF32)
+
+#define FC_IMPL_WITH_BIAS_F32_4X(name) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __read_only  image2d_t bias, \
+    __write_only image2d_t output, \
+                 float     weight_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float4 sum = 0; \
+ \
+    float4 biasData = read_imagef(bias, coord.xz); \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        float4 src0 = read_imagef(input, coord.zy); \
+        float4 src1 = read_imagef(weights, coord.zx); \
+        coord.z++; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    float4 one = (float4)(1, 1, 1, 1); \
+    sum = dot(sum, one) + biasData.x; \
+ \
+    write_imagef(output, coord.xy, sum.xxxx); \
+}
+FC_IMPL_WITH_BIAS_F32_4X(F32_F32_F32toF32_4X)
+
+#define FC_IMPL_F32(name) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __write_only image2d_t output, \
+                 float     weight_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float4 sum = 0; \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        float4 src0 = read_imagef(input, coord.zy); \
+        float4 src1 = read_imagef(weights, coord.zx); \
+        coord.z++; \
+ \
+        sum.x = sum.x + src0.x * src1.x; \
+    } \
+ \
+    write_imagef(output, coord.xy, sum.xxxx); \
+}
+FC_IMPL_F32(F32_F32toF32)
+
+#define FC_IMPL_F32_4X(name) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __write_only image2d_t output, \
+                 float     weight_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float4 sum = 0; \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        float4 src0 = read_imagef(input, coord.zy); \
+        float4 src1 = read_imagef(weights, coord.zx); \
+        coord.z++; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    float4 one = (float4)(1, 1, 1, 1); \
+    sum = dot(sum, one); \
+ \
+    write_imagef(output, coord.xy, sum.xxxx); \
+}
+FC_IMPL_F32_4X(F32_F32toF32_4X)
+
+#define FC_IMPL_BIAS_F32(name, in_type, read_fun0, weight_type, read_fun1, \
+                out_type, write_func, convert_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __read_only  image2d_t bias, \
+    __write_only image2d_t output, \
+                 float     input_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float sum = 0; \
+    out_type dst; \
+ \
+    float4 biasData = read_imagef(bias, coord.xz); \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float src0 = convert_float(data0.x) - input_zp; \
+        float src1 = convert_float(data1.x) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    sum = sum * input_scale + biasData.x; \
+    dst.x = convert_func(sum * output_scale + output_zp); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_BIAS_F32(F32_U8_F32toU8,  float4, read_imagef, uint4, read_imageui, uint4,  write_imageui, convert_uint_rte)
+FC_IMPL_BIAS_F32(F32_U8_F32toF32, float4, read_imagef, uint4, read_imageui, float4, write_imagef,  convert_float)
+
+#define FC_IMPL_BIAS_F32_4X(name, in_type, read_fun0, weight_type, read_fun1, \
+                out_type, write_func, convert_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __read_only  image2d_t bias, \
+    __write_only image2d_t output, \
+                 float     input_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float4 sum = 0; \
+    out_type dst; \
+ \
+    float4 biasData = read_imagef(bias, coord.xz); \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float4 src0 = convert_float4(data0) - input_zp; \
+        float4 src1 = convert_float4(data1) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    float4 one = (float4)(1, 1, 1, 1); \
+    sum.x = dot(sum, one) * input_scale + biasData.x; \
+    dst.x = convert_func(sum.x * output_scale + output_zp); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_BIAS_F32_4X(F32_U8_F32toU8_4X,  float4, read_imagef, uint4, read_imageui, uint4,  write_imageui, convert_uint_rte)
+FC_IMPL_BIAS_F32_4X(F32_U8_F32toF32_4X, float4, read_imagef, uint4, read_imageui, float4, write_imagef,  convert_float)
+
+#define FC_IMPL_HYBRID(name, in_type, read_fun0, weight_type, read_fun1, \
+                out_type, write_func, convert_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __write_only image2d_t output, \
+                 float     weight_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float sum = 0; \
+    out_type dst; \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float src0 = convert_float(data0.x) - input_zp; \
+        float src1 = convert_float(data1.x) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    dst.x = convert_func(sum * output_scale + output_zp); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_HYBRID(F32_U8toU8,  float4, read_imagef, uint4, read_imageui, uint4,  write_imageui, convert_uint_rte)
+FC_IMPL_HYBRID(F32_U8toF32, float4, read_imagef, uint4, read_imageui, float4, write_imagef,  convert_float)
+
+
+#define FC_IMPL_HYBRID_4X(name, in_type, read_fun0, weight_type, read_fun1, \
+                out_type, write_func, convert_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __write_only image2d_t output, \
+                 float     weight_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float4 sum = 0; \
+    out_type dst; \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float4 src0 = convert_float4(data0) - input_zp; \
+        float4 src1 = convert_float4(data1) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    float4 one = (float4)(1, 1, 1, 1); \
+    sum.x = dot(sum, one); \
+    dst.x = convert_func(sum.x * output_scale + output_zp + 0.5); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_HYBRID_4X(F32_U8toU8_4X,  float4, read_imagef, uint4, read_imageui, uint4,  write_imageui, convert_uint_rte)
+FC_IMPL_HYBRID_4X(F32_U8toF32_4X, float4, read_imagef, uint4, read_imageui, float4, write_imagef,  convert_float)
+
+
+#define FC_IMPL_BIAS_I32(name, in_type, read_fun0, weight_type, read_fun1, \
+                out_type, write_func, convert_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __read_only  image2d_t bias, \
+    __write_only image2d_t output, \
+                 float     input_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float sum = 0; \
+    out_type dst; \
+ \
+    float4 biasData = convert_float4(read_imagei(bias, coord.xz)); \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float src0 = convert_float(data0.x) - input_zp; \
+        float src1 = convert_float(data1.x) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    sum = sum + biasData.x; \
+    dst.x = convert_func(sum * output_scale + output_zp); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_BIAS_I32(U8_U8_I32toF32,   uint4, read_imageui, uint4, read_imageui, float4, write_imagef, convert_float)
+FC_IMPL_BIAS_I32(U8_U8_I32toI32,   uint4, read_imageui, uint4, read_imageui, int4,   write_imagei, convert_int_rte)
+FC_IMPL_BIAS_I32(I32_I32_I32toI32, int4,  read_imagei,  int4,  read_imagei,  int4,   write_imagei, convert_int_rte)
+FC_IMPL_BIAS_I32(F32_U8_I32toU8,  float4, read_imagef, uint4, read_imageui, uint4,  write_imageui, convert_uint_rte)
+FC_IMPL_BIAS_I32(F32_U8_I32toF32, float4, read_imagef, uint4, read_imageui, float4, write_imagef,  convert_float)
+
+#define FC_IMPL_BIAS_I32_4X(name, in_type, read_fun0, weight_type, read_fun1, \
+                out_type, write_func, convert_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __read_only  image2d_t bias, \
+    __write_only image2d_t output, \
+                 float     input_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float4 sum = 0; \
+    out_type dst; \
+ \
+    float4 biasData = convert_float4(read_imagei(bias, coord.xz)); \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float4 src0 = convert_float4(data0) - input_zp; \
+        float4 src1 = convert_float4(data1) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    float4 one = (float4)(1, 1, 1, 1); \
+    sum.x = dot(sum, one) + biasData.x; \
+    dst.x = convert_func(sum.x * output_scale + output_zp); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_BIAS_I32_4X(U8_U8_I32toF32_4X,  uint4, read_imageui, uint4, read_imageui, float4, write_imagef, convert_float)
+FC_IMPL_BIAS_I32_4X(U8_U8_I32toI32_4X,  uint4, read_imageui, uint4, read_imageui, int4,   write_imagei, convert_int_rte)
+FC_IMPL_BIAS_I32_4X(I32_I32_I32toI32_4X, int4,  read_imagei,  int4,  read_imagei,  int4,   write_imagei, convert_int_rte)
+FC_IMPL_BIAS_I32_4X(F32_U8_I32toU8_4X,  float4, read_imagef, uint4, read_imageui, uint4,  write_imageui, convert_uint_rte)
+FC_IMPL_BIAS_I32_4X(F32_U8_I32toF32_4X, float4, read_imagef, uint4, read_imageui, float4, write_imagef,  convert_float)
+
+#define FC_IMPL_NO_BIAS(name, in_type, read_fun0, weight_type, read_fun1, \
+                out_type, write_func, convert_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __write_only image2d_t output, \
+                 float     weight_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float sum = 0; \
+    out_type dst; \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float src0 = convert_float(data0.x) - input_zp; \
+        float src1 = convert_float(data1.x) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    dst.x = convert_func(sum * output_scale + output_zp); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_NO_BIAS(U8_U8toF32,   uint4,  read_imageui, uint4, read_imageui, float4, write_imagef, convert_float)
+FC_IMPL_NO_BIAS(U8_U8toI32,   uint4,  read_imageui, uint4, read_imageui, int4,   write_imagei, convert_int_rte)
+FC_IMPL_NO_BIAS(I32_I32toI32, int4,   read_imagei,  int4,  read_imagei,  int4,   write_imagei, convert_int_rte)
+
+#define FC_IMPL_NO_BIAS_4X(name, in_type, read_fun0, weight_type, read_fun1, \
+                out_type, write_func, convert_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __write_only image2d_t output, \
+                 float     weight_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float4 sum = 0; \
+    out_type dst; \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float4 src0 = convert_float4(data0) - input_zp; \
+        float4 src1 = convert_float4(data1) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    float4 one = (float4)(1, 1, 1, 1); \
+    sum.x = dot(sum, one); \
+    dst.x = convert_func(sum.x * output_scale + output_zp + 0.5); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_NO_BIAS_4X(U8_U8toF32_4X,  uint4, read_imageui, uint4, read_imageui, float4, write_imagef, convert_float)
+FC_IMPL_NO_BIAS_4X(U8_U8toI32_4X,  uint4, read_imageui, uint4, read_imageui, int4,   write_imagei, convert_int_rte)
+FC_IMPL_NO_BIAS_4X(I32_I32toI32_4X, int4,  read_imagei,  int4,  read_imagei,  int4,   write_imagei, convert_int_rte)
+
+#define FC_IMPL_BIAS_I64(name, in_type, read_fun0, weight_type, read_fun1, \
+                out_type, write_func, convert_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __read_only  image2d_t bias, \
+    __write_only image2d_t output, \
+                 float     input_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float sum = 0; \
+    out_type dst; \
+ \
+    int2 tmpBias; \
+    coord.w = coord.x << 1; \
+    tmpBias.x = read_imagei(bias, coord_in.wx).x; \
+    coord.w ++; \
+    tmpBias.y = read_imagei(bias, coord_in.wx).x; \
+    long b; \
+    _viv_asm(MOV_LONG, b, tmpBias.x, tmpBias.y); \
+    float4 biasData; \
+    biasData.x = convert_float(b); \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float src0 = convert_float(data0.x) - input_zp; \
+        float src1 = convert_float(data1.x) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    sum = sum + biasData.x; \
+    dst.x = convert_func(sum * output_scale + output_zp); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_BIAS_I32(I32_I32_I64toI32, int4,  read_imagei,  int4,  read_imagei,  int4,   write_imagei, convert_int_rte)
+
+#define FC_IMPL_BIAS_I64_4X(name, in_type, read_fun0, weight_type, read_fun1, \
+                out_type, write_func, convert_func) \
+__kernel void gpuFullyConnected_##name \
+( \
+    __read_only  image2d_t input, \
+    __read_only  image2d_t weights, \
+    __read_only  image2d_t bias, \
+    __write_only image2d_t output, \
+                 float     input_scale, \
+                 float     output_scale, \
+                 float     input_zp, \
+                 float     weight_zp, \
+                 float     output_zp, \
+                 int       input_size, \
+                 int       overflow_mode \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int4 coord = (int4)(x, y, 0, 0); \
+    float4 sum = 0; \
+    out_type dst; \
+ \
+    int2 tmpBias; \
+    coord.w = coord.x << 1; \
+    tmpBias.x = read_imagei(bias, coord_in.wx).x; \
+    coord.w ++; \
+    tmpBias.y = read_imagei(bias, coord_in.wx).x; \
+    long b; \
+    _viv_asm(MOV_LONG, b, tmpBias.x, tmpBias.y); \
+    float4 biasData; \
+    biasData.x = convert_float(b); \
+ \
+    for (; coord.z < input_size;) \
+    { \
+        in_type data0 = read_fun0(input, coord.zy); \
+        weight_type data1 = read_fun1(weights, coord.zx); \
+        coord.z++; \
+        float4 src0 = convert_float4(data0) - input_zp; \
+        float4 src1 = convert_float4(data1) - weight_zp; \
+ \
+        sum = sum + src0 * src1; \
+    } \
+ \
+    float4 one = (float4)(1, 1, 1, 1); \
+    sum.x = dot(sum, one) + biasData.x; \
+    dst.x = convert_func(sum.x * output_scale + output_zp); \
+ \
+    write_func(output, coord.xy, dst.xxxx); \
+}
+FC_IMPL_BIAS_I32_4X(I32_I32_I64toI32_4X, int4,  read_imagei,  int4,  read_imagei,  int4,   write_imagei, convert_int_rte)

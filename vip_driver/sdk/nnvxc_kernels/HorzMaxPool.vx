@@ -1,0 +1,450 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+_viv_uniform VXC_512Bits uniGetMaxPoolPos_FP16_4x4;
+_viv_uniform VXC_512Bits uniRePackData0;
+_viv_uniform VXC_512Bits uniRePackData1;
+_viv_uniform VXC_512Bits uniRePackData0_int8;
+_viv_uniform VXC_512Bits uniRePackData1_int8;
+_viv_uniform VXC_512Bits uniMaskData;
+_viv_uniform VXC_512Bits uniInt8Scale_2x8;
+_viv_uniform float outputScale;
+
+__kernel void horzMaxPool_20x16_int8toint8(
+    __read_only image2d_array_t    input,
+    __read_only image2d_array_t    rois,
+    __write_only image2d_array_t  output)
+{
+    int rois_idx    = get_global_id(0);
+    int channel        = get_global_id(1);
+
+    int2 coord_rect = (int2)(16, rois_idx);
+
+    vxc_ushort8 mask0to5;
+    vxc_ushort4    pos01, pos23, pos45;
+    vxc_char8 vect0, vect1, vect2;
+    vxc_int4 horz_len0, horz_len1;
+
+    VXC_ReadImage(pos01, rois,  coord_rect, VXC_5BITOFFSET_XY(-4, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(mask0to5, rois,  coord_rect, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pos23, rois,  coord_rect, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pos45, rois,  coord_rect, VXC_5BITOFFSET_XY(4, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    int loopCnt = 0;
+    int channelNum = channel << 2;
+
+    vxc_int4 coord_in;
+    VXC_DP4x4(coord_in, pos01, channelNum, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos_FP16_4x4);
+    VXC_ReadImage(vect0, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(vect0, input,  coord_in.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0));
+
+    vxc_int4 coord_out = (vxc_int4)(0, channel, rois_idx, 0);
+    coord_rect.x = 24;
+    do
+    {
+        vxc_char8 dst;
+        vxc_uchar8 mask;
+        vxc_ushort8 config;
+
+        VXC_DP4x4(coord_in, pos23, channelNum, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos_FP16_4x4);
+        VXC_ReadImage(vect1, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(vect1, input,  coord_in.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(pos01, rois,  coord_rect, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(pos23, rois,  coord_rect, VXC_5BITOFFSET_XY(4, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+        VXC_DP4x4(coord_in, pos45, channelNum, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos_FP16_4x4);
+        VXC_ReadImage(vect2, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(vect2, input,  coord_in.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(pos45, rois,  coord_rect, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+        // 0 1
+        vxc_uint4 config0 = (vxc_uint4)(0x03020100, 0x13121110, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect0, vect0, mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMaskData);
+        VXC_HorzMax3_Integer(vect0, vect0, VXC_MODIFIER(0, 5, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(dst, vect0, vect0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData1_int8);
+        VXC_DP2x8(vect0, vect0, vect0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData0_int8);
+        VXC_VertMax3_Integer(dst, vect0, dst, dst, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+
+        // 2 3
+        vxc_uint4 config2 = (vxc_uint4)(0x23222120, 0x33323130, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect1, vect1, mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMaskData);
+        VXC_HorzMax3_Integer(vect1, vect1, VXC_MODIFIER(0, 5, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect0, vect1, vect1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData1_int8);
+        VXC_DP2x8(vect1, vect1, vect1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData0_int8);
+        VXC_VertMax3_Integer(dst, vect1, vect0, vect0, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));
+
+        VXC_DP4x4(coord_in, pos01, channelNum, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos_FP16_4x4);
+        VXC_ReadImage(vect0, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(vect0, input,  coord_in.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0));
+
+        // 4 5
+        vxc_uint4 config4 = (vxc_uint4)(0x43424140, 0x53525150, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect2, vect2, mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMaskData);
+        VXC_HorzMax3_Integer(vect2, vect2, VXC_MODIFIER(0, 5, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect1, vect2, vect2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData1_int8);
+        VXC_DP2x8(vect2, vect2, vect2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData0_int8);
+        VXC_VertMax3_Integer(dst, vect2, vect1, vect1, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 0));
+
+        half scale;
+        _viv_asm(CONV, scale, outputScale);
+        VXC_DP2x8(dst, dst, scale, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniInt8Scale_2x8);
+        VXC_WriteImage2DArray(output, coord_out, dst, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+        coord_out.x += 6;
+        coord_rect.x += 12;
+        loopCnt ++;
+    } while (loopCnt < 6);
+}
+__kernel void horzMaxPool_20x16_fp16tofp16(
+    __read_only image2d_array_t    input,
+    __read_only image2d_array_t    rois,
+    __write_only image2d_array_t  output)
+{
+    int rois_idx    = get_global_id(0);
+    int channel        = get_global_id(1);
+
+    int2 coord_rect = (int2)(16, rois_idx);
+
+    vxc_ushort8 mask0to5;
+    vxc_ushort4    pos01, pos23, pos45;
+    vxc_ushort8 vect0, vect1, vect2;
+    vxc_int4 horz_len0, horz_len1;
+
+    VXC_ReadImage(pos01, rois,  coord_rect, VXC_5BITOFFSET_XY(-4, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(mask0to5, rois,  coord_rect, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pos23, rois,  coord_rect, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pos45, rois,  coord_rect, VXC_5BITOFFSET_XY(4, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    int loopCnt = 0;
+    int channelNum = channel << 2;
+
+    vxc_int4 coord_in;
+    VXC_DP4x4(coord_in, pos01, channelNum, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos_FP16_4x4);
+    VXC_ReadImage(vect0, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(vect0, input,  coord_in.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0));
+
+    vxc_int4 coord_out = (vxc_int4)(0, channel, rois_idx, 0);
+    coord_rect.x = 24;
+    do
+    {
+        vxc_ushort8 dst;
+        vxc_ushort8 mask;
+        vxc_ushort8 config;
+
+        VXC_DP4x4(coord_in, pos23, channelNum, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos_FP16_4x4);
+        VXC_ReadImage(vect1, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(vect1, input,  coord_in.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(pos01, rois,  coord_rect, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(pos23, rois,  coord_rect, VXC_5BITOFFSET_XY(4, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+        VXC_DP4x4(coord_in, pos45, channelNum, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos_FP16_4x4);
+        VXC_ReadImage(vect2, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(vect2, input,  coord_in.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(pos45, rois,  coord_rect, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+        // 0 1
+        vxc_uint4 config0 = (vxc_uint4)(0x03020100, 0x13121110, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect0, vect0, mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMaskData);
+        VXC_HorzMax3_Integer(vect0, vect0, VXC_MODIFIER(0, 5, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(dst, vect0, vect0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData1);
+        VXC_DP2x8(vect0, vect0, vect0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData0);
+        VXC_VertMax3_Integer(dst, vect0, dst, dst, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+
+        // 2 3
+        vxc_uint4 config2 = (vxc_uint4)(0x23222120, 0x33323130, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect1, vect1, mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMaskData);
+        VXC_HorzMax3_Integer(vect1, vect1, VXC_MODIFIER(0, 5, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect0, vect1, vect1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData1);
+        VXC_DP2x8(vect1, vect1, vect1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData0);
+        VXC_VertMax3_Integer(dst, vect1, vect0, vect0, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));
+
+        VXC_DP4x4(coord_in, pos01, channelNum, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos_FP16_4x4);
+        VXC_ReadImage(vect0, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(vect0, input,  coord_in.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0));
+
+        // 4 5
+        vxc_uint4 config4 = (vxc_uint4)(0x43424140, 0x53525150, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect2, vect2, mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMaskData);
+        VXC_HorzMax3_Integer(vect2, vect2, VXC_MODIFIER(0, 5, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect1, vect2, vect2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData1);
+        VXC_DP2x8(vect2, vect2, vect2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData0);
+        VXC_VertMax3_Integer(dst, vect2, vect1, vect1, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 0));
+
+        VXC_WriteImage2DArray(output, coord_out, dst, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+        coord_out.x += 6;
+        coord_rect.x += 12;
+        loopCnt ++;
+    } while (loopCnt < 6);
+}
+_viv_uniform VXC_512Bits uniUnpackU16toS32_FP16_Lo;
+_viv_uniform VXC_512Bits uniUnpackU16toS32_FP16_Hi;
+//_viv_uniform VXC_512Bits uniGetMaxPoolPos;
+_viv_uniform VXC_512Bits uniRePackData;
+//_viv_uniform VXC_512Bits uniMaskData;
+
+__kernel void horzMaxPool_51x39_fp16tofp16(
+    __read_only image2d_array_t    input,
+    __read_only image2d_array_t    rois,
+    __write_only image2d_array_t  output)
+{
+    int rois_idx    = get_global_id(0);
+    int channel        = get_global_id(1);
+
+    int2 coord_rect = (int2)(16, rois_idx);
+
+    vxc_ushort8 mask0to5;
+    vxc_ushort4    pos01, pos23, pos45;
+    vxc_ushort8 vect0, vect1, vect2;
+    vxc_int4 horz_len0, horz_len1;
+    vxc_int4 coord_in0;
+
+    VXC_ReadImage(mask0to5, rois,  coord_rect, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(vect0, rois,  coord_rect, VXC_5BITOFFSET_XY(-10, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(pos01, rois,  coord_rect, VXC_5BITOFFSET_XY(-4, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pos23, rois,  coord_rect, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pos45, rois,  coord_rect, VXC_5BITOFFSET_XY(4, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP4x4(horz_len0, vect0, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUnpackU16toS32_FP16_Lo);
+    VXC_DP4x4(horz_len1, vect0, 0, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniUnpackU16toS32_FP16_Hi);
+
+    int loopCnt = 0;
+    int channel7 = channel * 7;
+    VXC_DP4x4(coord_in0, pos01, channel7, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos_FP16_4x4);
+    VXC_ReadImage(vect0, input,  coord_in0.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    vxc_int4 coord_out = (vxc_int4)(0, channel, rois_idx, 0);
+    coord_rect.x = 24;
+    do
+    {
+        vxc_ushort8 dst;
+        vxc_ushort8 mask;
+        vxc_ushort8 config;
+        vxc_int4 coord_in1;
+        vxc_int4 coord_in2;
+        VXC_ReadImage(vect1, input,  coord_in0.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(pos01, rois,  coord_rect, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+        VXC_DP4x4(coord_in1, pos23, channel7, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos_FP16_4x4);
+        VXC_DP4x4(coord_in2, pos45, channel7, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos_FP16_4x4);
+
+        VXC_ReadImage(vect2, input,  coord_in1.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(pos23, rois,  coord_rect, VXC_5BITOFFSET_XY(4, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(pos45, rois,  coord_rect, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        // 0
+        vxc_uint4 config0 = (vxc_uint4)(0x03020100, 0x07060504, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect0, vect0, mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMaskData);
+        VXC_HorzMax3_Integer(vect0, vect0, VXC_MODIFIER(0, 5, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect0, vect0, vect0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData);
+        VXC_HorzMax3_Integer(dst, vect0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        if(horz_len0.x >= 9)
+        {
+            VXC_ReadImage(vect0, input,  coord_in0.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_VertMax3_Integer(dst, dst, dst, vect0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        }
+        VXC_ReadImage(vect0, input,  coord_in1.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        // 1
+        vxc_uint4 config1 = (vxc_uint4)(0x13121110, 0x17161514, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect1, vect1, mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMaskData);
+        VXC_HorzMax3_Integer(vect1, vect1, VXC_MODIFIER(0, 5, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect1, vect1, vect1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData);
+        VXC_HorzMax3_Integer(dst, vect1, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0));
+        if(horz_len0.y >= 9)
+        {
+            VXC_ReadImage(vect1, input,  coord_in0.zw, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0));
+            VXC_VertMax3_Integer(dst, dst, dst, vect1, VXC_MODIFIER(1, 1, 1, VXC_RM_TowardZero, 0));
+        }
+        VXC_ReadImage(vect1, input,  coord_in2.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        // 2
+        vxc_uint4 config2 = (vxc_uint4)(0x23222120, 0x27262524, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect2, vect2, mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMaskData);
+        VXC_HorzMax3_Integer(vect2, vect2, VXC_MODIFIER(0, 5, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect2, vect2, vect2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData);
+        VXC_HorzMax3_Integer(dst, vect2, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0));
+        if(horz_len0.z >= 9)
+        {
+            VXC_ReadImage(vect2, input,  coord_in1.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0));
+            VXC_VertMax3_Integer(dst, dst, dst, vect2, VXC_MODIFIER(2, 2, 2, VXC_RM_TowardZero, 0));
+        }
+        VXC_ReadImage(vect2, input,  coord_in2.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        // 3
+        vxc_uint4 config3 = (vxc_uint4)(0x33323130, 0x37363534, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect0, vect0, mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMaskData);
+        VXC_HorzMax3_Integer(vect0, vect0, VXC_MODIFIER(0, 5, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect0, vect0, vect0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData);
+        VXC_HorzMax3_Integer(dst, vect0, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0));
+        if(horz_len0.w >= 9)
+        {
+            VXC_ReadImage(vect0, input,  coord_in1.zw, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0));
+            VXC_VertMax3_Integer(dst, dst, dst, vect0, VXC_MODIFIER(3, 3, 3, VXC_RM_TowardZero, 0));
+        }
+        VXC_DP4x4(coord_in0, pos01, channel7, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos_FP16_4x4);
+        VXC_ReadImage(vect0, input,  coord_in0.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        // 4
+        vxc_uint4 config4 = (vxc_uint4)(0x43424140, 0x47464544, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect1, vect1, mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMaskData);
+        VXC_HorzMax3_Integer(vect1, vect1, VXC_MODIFIER(0, 5, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect1, vect1, vect1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData);
+        VXC_HorzMax3_Integer(dst, vect1, VXC_MODIFIER(4, 4, 0, VXC_RM_TowardZero, 0));
+        if(horz_len1.x >= 9)
+        {
+            VXC_ReadImage(vect1, input,  coord_in2.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(4, 4, 0, VXC_RM_TowardZero, 0));
+            VXC_VertMax3_Integer(dst, dst, dst, vect1, VXC_MODIFIER(4, 4, 4, VXC_RM_TowardZero, 0));
+        }
+        // 5
+        vxc_uint4 config5 = (vxc_uint4)(0x53525150, 0x57565554, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect2, vect2, mask, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMaskData);
+        VXC_HorzMax3_Integer(vect2, vect2, VXC_MODIFIER(0, 5, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect2, vect2, vect2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackData);
+        VXC_HorzMax3_Integer(dst, vect2, VXC_MODIFIER(5, 5, 0, VXC_RM_TowardZero, 0));
+        if(horz_len1.y >= 9)
+        {
+            VXC_ReadImage(vect2, input,  coord_in2.zw, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(5, 5, 0, VXC_RM_TowardZero, 0));
+            VXC_VertMax3_Integer(dst, dst, dst, vect2, VXC_MODIFIER(5, 5, 5, VXC_RM_TowardZero, 0));
+        }
+        VXC_WriteImage2DArray(output, coord_out, dst, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        coord_out.x += 6;
+        coord_rect.x += 12;
+    } while (coord_out.x < 36);
+}
+_viv_uniform VXC_512Bits uniUnpackU16toS32_Lo;
+_viv_uniform VXC_512Bits uniUnpackU16toS32_Hi;
+_viv_uniform VXC_512Bits uniGetMaxPoolPos;
+_viv_uniform VXC_512Bits uniGetMask9Bit0_16x1;
+_viv_uniform VXC_512Bits uniGetMask9Bit1_16x1;
+_viv_uniform VXC_512Bits uniGetMask9Bit2_16x1;
+_viv_uniform VXC_512Bits uniGetMask9Bit3_16x1;
+_viv_uniform VXC_512Bits uniGetMask9Bit4_16x1;
+_viv_uniform VXC_512Bits uniGetMask9Bit5_16x1;
+_viv_uniform VXC_512Bits uniRePackInt8Data;
+__kernel void horzMaxPool_51x39_int8toint8 (
+    __read_only image2d_array_t    input,
+    __read_only image2d_array_t    rois,
+    __write_only image2d_array_t  output)
+{
+    int rois_idx    = get_global_id(0);
+    int channel        = get_global_id(1);
+
+    int2 coord_rect = (int2)(16, rois_idx);
+
+    vxc_ushort8 mask0to5;
+    vxc_ushort4    pos01, pos23, pos45;
+    vxc_ushort8 tmpVect;
+    vxc_char16 vect0, vect1, vect2;
+    vxc_int4 horz_len0, horz_len1;
+    vxc_int4 coord_in0;
+
+    VXC_ReadImage(mask0to5, rois,  coord_rect, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(tmpVect, rois,  coord_rect, VXC_5BITOFFSET_XY(-10, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(pos01, rois,  coord_rect, VXC_5BITOFFSET_XY(-4, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pos23, rois,  coord_rect, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pos45, rois,  coord_rect, VXC_5BITOFFSET_XY(4, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP4x4(horz_len0, tmpVect, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUnpackU16toS32_Lo);
+    VXC_DP4x4(horz_len1, tmpVect, 0, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniUnpackU16toS32_Hi);
+
+    int loopCnt = 0;
+    int channel7 = channel * 7;
+    VXC_DP4x4(coord_in0, pos01, channel7, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos);
+    VXC_ReadImage(vect0, input,  coord_in0.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 8, 0, VXC_RM_TowardZero, 0));
+
+    vxc_int4 coord_out = (vxc_int4)(0, channel, rois_idx, 0);
+    coord_rect.x = 24;
+    do
+    {
+        vxc_char16 dst;
+        vxc_uchar16 mask;
+        vxc_char16 smask;
+        vxc_ushort8 config;
+        vxc_int4 coord_in1;
+        vxc_int4 coord_in2;
+        VXC_ReadImage(vect1, input,  coord_in0.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 8, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(pos01, rois,  coord_rect, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+        VXC_DP4x4(coord_in1, pos23, channel7, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos);
+        VXC_DP4x4(coord_in2, pos45, channel7, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos);
+
+        VXC_ReadImage(vect2, input,  coord_in1.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 8, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(pos23, rois,  coord_rect, VXC_5BITOFFSET_XY(4, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(pos45, rois,  coord_rect, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        // 0
+        vxc_uint4 config0 = (vxc_uint4)(0x03020100, 0x07060504, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP16x1(mask, mask0to5, mask0to5, VXC_MODIFIER(8, 8, 0, VXC_RM_TowardZero, 0), uniGetMask9Bit0_16x1);
+        _viv_asm(COPY, smask, mask, 16);
+        vect0 = vect0 * smask;
+        VXC_HorzMax3_Integer(vect0, vect0, VXC_MODIFIER(0, 6, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect0, vect0, vect0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackInt8Data);
+        VXC_HorzMax3_Integer(dst, vect0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(vect0, input,  coord_in1.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 8, 0, VXC_RM_TowardZero, 0));
+        // 1
+        vxc_uint4 config1 = (vxc_uint4)(0x13121110, 0x17161514, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP16x1(mask, mask0to5, mask0to5, VXC_MODIFIER(8, 8, 0, VXC_RM_TowardZero, 0), uniGetMask9Bit1_16x1);
+        _viv_asm(COPY, smask, mask, 16);
+        vect1 = vect1 * smask;
+        VXC_HorzMax3_Integer(vect1, vect1, VXC_MODIFIER(0, 6, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect1, vect1, vect1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackInt8Data);
+        VXC_HorzMax3_Integer(dst, vect1, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(vect1, input,  coord_in2.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 8, 0, VXC_RM_TowardZero, 0));
+        // 2
+        vxc_uint4 config2 = (vxc_uint4)(0x23222120, 0x27262524, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP16x1(mask, mask0to5, mask0to5, VXC_MODIFIER(8, 8, 0, VXC_RM_TowardZero, 0), uniGetMask9Bit2_16x1);
+        _viv_asm(COPY, smask, mask, 16);
+        vect2 = vect2 * smask;
+        VXC_HorzMax3_Integer(vect2, vect2, VXC_MODIFIER(0, 6, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect2, vect2, vect2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackInt8Data);
+        VXC_HorzMax3_Integer(dst, vect2, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(vect2, input,  coord_in2.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 8, 0, VXC_RM_TowardZero, 0));
+        // 3
+        vxc_uint4 config3 = (vxc_uint4)(0x33323130, 0x37363534, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP16x1(mask, mask0to5, mask0to5, VXC_MODIFIER(8, 8, 0, VXC_RM_TowardZero, 0), uniGetMask9Bit3_16x1);
+        _viv_asm(COPY, smask, mask, 16);
+        vect0 = vect0 * smask;
+        VXC_HorzMax3_Integer(vect0, vect0, VXC_MODIFIER(0, 6, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect0, vect0, vect0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackInt8Data);
+        VXC_HorzMax3_Integer(dst, vect0, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(coord_in0, pos01, channel7, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetMaxPoolPos);
+        VXC_ReadImage(vect0, input,  coord_in0.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 8, 0, VXC_RM_TowardZero, 0));
+        // 4
+        vxc_uint4 config4 = (vxc_uint4)(0x43424140, 0x47464544, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP16x1(mask, mask0to5, mask0to5, VXC_MODIFIER(8, 8, 0, VXC_RM_TowardZero, 0), uniGetMask9Bit4_16x1);
+        _viv_asm(COPY, smask, mask, 16);
+        vect1 = vect1 * smask;
+        VXC_HorzMax3_Integer(vect1, vect1, VXC_MODIFIER(0, 6, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect1, vect1, vect1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackInt8Data);
+        VXC_HorzMax3_Integer(dst, vect1, VXC_MODIFIER(4, 4, 0, VXC_RM_TowardZero, 0));
+        // 5
+        vxc_uint4 config5 = (vxc_uint4)(0x53525150, 0x57565554, 0x01010101, 0x01010101);
+        VXC_BitExtract(mask, mask0to5, mask0to5, config5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP16x1(mask, mask0to5, mask0to5, VXC_MODIFIER(8, 8, 0, VXC_RM_TowardZero, 0), uniGetMask9Bit5_16x1);
+        _viv_asm(COPY, smask, mask, 16);
+        vect2 = vect2 * smask;
+        VXC_HorzMax3_Integer(vect2, vect2, VXC_MODIFIER(0, 6, 0,VXC_RM_TowardZero, 0));
+        VXC_DP2x8(vect2, vect2, vect2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniRePackInt8Data);
+        VXC_HorzMax3_Integer(dst, vect2, VXC_MODIFIER(5, 5, 0, VXC_RM_TowardZero, 0));
+        half scale;
+        _viv_asm(CONV, scale, outputScale);
+        VXC_DP2x8(dst, dst, scale, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniInt8Scale_2x8);
+        VXC_WriteImage2DArray(output, coord_out, dst, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        coord_out.x += 6;
+        coord_rect.x += 12;
+    } while (coord_out.x < 36);
+}

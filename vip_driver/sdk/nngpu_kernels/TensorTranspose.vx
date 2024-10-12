@@ -1,0 +1,1893 @@
+__kernel void gpuTranspose_F32toF32_NCHW2NWHC
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.zyxw;
+    float4 tmpOut = {0.0};
+
+    tmpOut = read_imagef(input, coord_in);
+
+    write_imagef(output, coord_out, tmpOut);
+}
+
+__kernel void gpuTranspose_F32toF32_NCHW2NHWC
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.zxyw;
+    float4 tmpOut = {0.0};
+
+    tmpOut = read_imagef(input, coord_in);
+
+    write_imagef(output, coord_out, tmpOut);
+}
+
+__kernel void gpuTranspose_F32toF32_NCHW2NWCH
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.yzxw;
+    float4 tmpOut = {0.0};
+
+    tmpOut = read_imagef(input, coord_in);
+
+    write_imagef(output, coord_out, tmpOut);
+}
+
+__kernel void gpuTranspose_F32toF32_NCHW2NHCW
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.xzyw;
+    float4 tmpOut = {0.0};
+
+    tmpOut = read_imagef(input, coord_in);
+
+    write_imagef(output, coord_out, tmpOut);
+}
+
+__kernel void gpuTranspose_F32toF32_NCHW2NCWH
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(1), get_global_id(0), get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    float4 tmpOut = {0.0};
+
+    tmpOut = read_imagef(input, coord_in);
+
+    write_imagef(output, coord_out, tmpOut);
+}
+
+/*Quant 8 format*/
+__kernel void gpuTranspose_U8toU8_NCHW2NWHC
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.zyxw;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord_in);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_NCHW2NWHC
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.zyxw;
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord_in);
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_U8toU8_NCHW2NHWC
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.zxyw;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord_in);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_NCHW2NHWC
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.zxyw;
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord_in);
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_U8toU8_NCHW2NWCH
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.yzxw;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord_in);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_NCHW2NWCH
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.yzxw;
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord_in);
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_U8toU8_NCHW2NHCW
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.xzyw;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord_in);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_NCHW2NHCW
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.xzyw;
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord_in);
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_U8toU8_NCHW2NCWH
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(1), get_global_id(0), get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord_in);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_NCHW2NCWH
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(1), get_global_id(0), get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord_in);
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_F32toF32_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    float4 tmp = {0};
+
+    tmp = read_imagef(input, (int2)(x, y));
+    write_imagef(output, (int2)(y, x), tmp);
+}
+
+__kernel void gpuTranspose_U8toU8_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, (int2)(x, y));
+    write_imageui(output, (int2)(y, x), tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, (int2)(x, y));
+    write_imagei(output, (int2)(y, x), tmp);
+}
+
+__kernel void gpuTranspose_U8toU8_RQ_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+    float output_scale, float output_tail
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, (int2)(x, y));
+    tmp.x = convert_uint_rte(convert_float(tmp.x) * output_scale + output_tail);
+    write_imageui(output, (int2)(y, x), tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_RQ_2D(
+                __read_only image2d_t input,
+                __write_only image2d_t output,
+                float output_scale, float output_tail)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, (int2)(x, y));
+    tmp.x = convert_int_rte(convert_float(tmp.x) * output_scale + output_tail);
+    write_imagei(output, (int2)(y, x), tmp);
+}
+
+__kernel void gpuTranspose_F32toF32_NCHW2NWHC_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2) * 4, 0);
+    int4 coord_out = (int4)(get_global_id(2), get_global_id(1), get_global_id(0) * 4, 0);
+    float4 tmpIn0 = {0.0};
+    float4 tmpIn1 = {0.0};
+    float4 tmpIn2 = {0.0};
+    float4 tmpIn3 = {0.0};
+    float4 tmpOut0 = {0.0};
+    float4 tmpOut1 = {0.0};
+    float4 tmpOut2 = {0.0};
+    float4 tmpOut3 = {0.0};
+
+    tmpIn0 = read_imagef(input, coord_in);
+    coord_in.z++;
+    tmpIn1 = read_imagef(input, coord_in);
+    coord_in.z++;
+    tmpIn2 = read_imagef(input, coord_in);
+    coord_in.z++;
+    tmpIn3 = read_imagef(input, coord_in);
+
+    tmpOut0 = (float4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (float4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (float4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (float4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imagef(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imagef(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imagef(output, coord_out, tmpOut2);
+    coord_out.z++;
+    write_imagef(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_F32toF32_NCHW2NHWC_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2) * 4, 0);
+    int4 coord_out = (int4)(get_global_id(2), get_global_id(0) * 4, get_global_id(1), 0);
+    float4 tmpIn0 = {0.0};
+    float4 tmpIn1 = {0.0};
+    float4 tmpIn2 = {0.0};
+    float4 tmpIn3 = {0.0};
+    float4 tmpOut0 = {0.0};
+    float4 tmpOut1 = {0.0};
+    float4 tmpOut2 = {0.0};
+    float4 tmpOut3 = {0.0};
+
+    tmpIn0 = read_imagef(input, coord_in);
+    coord_in.z++;
+    tmpIn1 = read_imagef(input, coord_in);
+    coord_in.z++;
+    tmpIn2 = read_imagef(input, coord_in);
+    coord_in.z++;
+    tmpIn3 = read_imagef(input, coord_in);
+
+    tmpOut0 = (float4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (float4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (float4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (float4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imagef(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imagef(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imagef(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imagef(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_F32toF32_NCHW2NWCH_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(1), get_global_id(2), get_global_id(0) * 4, 0);
+    float4 tmpIn0 = {0.0};
+    float4 tmpIn1 = {0.0};
+    float4 tmpIn2 = {0.0};
+    float4 tmpIn3 = {0.0};
+    float4 tmpOut0 = {0.0};
+    float4 tmpOut1 = {0.0};
+    float4 tmpOut2 = {0.0};
+    float4 tmpOut3 = {0.0};
+
+    tmpIn0 = read_imagef(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imagef(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imagef(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imagef(input, coord_in);
+
+    tmpOut0 = (float4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (float4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (float4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (float4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imagef(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imagef(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imagef(output, coord_out, tmpOut2);
+    coord_out.z++;
+    write_imagef(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_F32toF32_3HC2HC3_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(1), get_global_id(2), get_global_id(0) * 4, 0);
+    float4 tmpIn0 = {0.0};
+    float4 tmpIn1 = {0.0};
+    float4 tmpIn2 = {0.0};
+    float4 tmpIn3 = {0.0};
+    float4 tmpOut0 = {0.0};
+    float4 tmpOut1 = {0.0};
+    float4 tmpOut2 = {0.0};
+
+    tmpIn0 = read_imagef(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imagef(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imagef(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imagef(input, coord_in);
+
+    tmpOut0 = (float4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (float4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (float4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+
+    write_imagef(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imagef(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imagef(output, coord_out, tmpOut2);
+}
+
+__kernel void gpuTranspose_F32toF32_NCHW2NHCW_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.xzyw;
+    float4 tmpOut = {0.0};
+
+    tmpOut = read_imagef(input, coord_in);
+
+    write_imagef(output, coord_out, tmpOut);
+}
+
+__kernel void gpuTranspose_F32toF32_NCHW2NCWH_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(1), get_global_id(0) * 4, get_global_id(2), 0);
+
+    float4 tmpIn0 = {0.0};
+    float4 tmpIn1 = {0.0};
+    float4 tmpIn2 = {0.0};
+    float4 tmpIn3 = {0.0};
+    float4 tmpOut0 = {0.0};
+    float4 tmpOut1 = {0.0};
+    float4 tmpOut2 = {0.0};
+    float4 tmpOut3 = {0.0};
+
+    tmpIn0 = read_imagef(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imagef(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imagef(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imagef(input, coord_in);
+
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+
+    tmpOut0 = (float4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (float4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (float4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (float4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imagef(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imagef(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imagef(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imagef(output, coord_out, tmpOut3);
+}
+
+/*Quant 8 format*/
+__kernel void gpuTranspose_U8toU8_NCHW2NWHC_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2) * 4, 0);
+    int4 coord_out = (int4)(get_global_id(2), get_global_id(1), get_global_id(0) * 4, 0);
+
+    uint4 tmpIn0 = {0};
+    uint4 tmpIn1 = {0};
+    uint4 tmpIn2 = {0};
+    uint4 tmpIn3 = {0};
+    uint4 tmpOut0 = {0};
+    uint4 tmpOut1 = {0};
+    uint4 tmpOut2 = {0};
+    uint4 tmpOut3 = {0};
+
+    tmpIn0 = read_imageui(input, coord_in);
+    coord_in.z++;
+    tmpIn1 = read_imageui(input, coord_in);
+    coord_in.z++;
+    tmpIn2 = read_imageui(input, coord_in);
+    coord_in.z++;
+    tmpIn3 = read_imageui(input, coord_in);
+
+    tmpOut0 = (uint4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (uint4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (uint4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (uint4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imageui(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut2);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_I32toI32_NCHW2NWHC_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2) * 4, 0);
+    int4 coord_out = (int4)(get_global_id(2), get_global_id(1), get_global_id(0) * 4, 0);
+
+    int4 tmpIn0 = {0};
+    int4 tmpIn1 = {0};
+    int4 tmpIn2 = {0};
+    int4 tmpIn3 = {0};
+    int4 tmpOut0 = {0};
+    int4 tmpOut1 = {0};
+    int4 tmpOut2 = {0};
+    int4 tmpOut3 = {0};
+
+    tmpIn0 = read_imagei(input, coord_in);
+    coord_in.z++;
+    tmpIn1 = read_imagei(input, coord_in);
+    coord_in.z++;
+    tmpIn2 = read_imagei(input, coord_in);
+    coord_in.z++;
+    tmpIn3 = read_imagei(input, coord_in);
+
+    tmpOut0 = (int4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (int4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (int4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (int4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imagei(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut2);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_U8toU8_NCHW2NHWC_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2) * 4, 0);
+    int4 coord_out = (int4)(get_global_id(2), get_global_id(0) * 4, get_global_id(1), 0);
+
+    uint4 tmpIn0 = {0};
+    uint4 tmpIn1 = {0};
+    uint4 tmpIn2 = {0};
+    uint4 tmpIn3 = {0};
+    uint4 tmpOut0 = {0};
+    uint4 tmpOut1 = {0};
+    uint4 tmpOut2 = {0};
+    uint4 tmpOut3 = {0};
+
+    tmpIn0 = read_imageui(input, coord_in);
+    coord_in.z++;
+    tmpIn1 = read_imageui(input, coord_in);
+    coord_in.z++;
+    tmpIn2 = read_imageui(input, coord_in);
+    coord_in.z++;
+    tmpIn3 = read_imageui(input, coord_in);
+
+    tmpOut0 = (uint4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (uint4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (uint4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (uint4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imageui(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_I32toI32_NCHW2NHWC_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2) * 4, 0);
+    int4 coord_out = (int4)(get_global_id(2), get_global_id(0) * 4, get_global_id(1), 0);
+
+    int4 tmpIn0 = {0};
+    int4 tmpIn1 = {0};
+    int4 tmpIn2 = {0};
+    int4 tmpIn3 = {0};
+    int4 tmpOut0 = {0};
+    int4 tmpOut1 = {0};
+    int4 tmpOut2 = {0};
+    int4 tmpOut3 = {0};
+
+    tmpIn0 = read_imagei(input, coord_in);
+    coord_in.z++;
+    tmpIn1 = read_imagei(input, coord_in);
+    coord_in.z++;
+    tmpIn2 = read_imagei(input, coord_in);
+    coord_in.z++;
+    tmpIn3 = read_imagei(input, coord_in);
+
+    tmpOut0 = (int4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (int4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (int4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (int4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imagei(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_U8toU8_NCHW2NWCH_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(1), get_global_id(2), get_global_id(0) * 4, 0);
+
+    uint4 tmpIn0 = {0};
+    uint4 tmpIn1 = {0};
+    uint4 tmpIn2 = {0};
+    uint4 tmpIn3 = {0};
+    uint4 tmpOut0 = {0};
+    uint4 tmpOut1 = {0};
+    uint4 tmpOut2 = {0};
+    uint4 tmpOut3 = {0};
+
+    tmpIn0 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imageui(input, coord_in);
+
+    tmpOut0 = (uint4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (uint4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (uint4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (uint4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imageui(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut2);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_I32toI32_NCHW2NWCH_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(1), get_global_id(2), get_global_id(0) * 4, 0);
+
+    int4 tmpIn0 = {0};
+    int4 tmpIn1 = {0};
+    int4 tmpIn2 = {0};
+    int4 tmpIn3 = {0};
+    int4 tmpOut0 = {0};
+    int4 tmpOut1 = {0};
+    int4 tmpOut2 = {0};
+    int4 tmpOut3 = {0};
+
+    tmpIn0 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imagei(input, coord_in);
+
+    tmpOut0 = (int4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (int4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (int4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (int4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imagei(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut2);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_U8toU8_3HC2HC3_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(1), get_global_id(2), get_global_id(0) * 4, 0);
+
+    uint4 tmpIn0 = {0};
+    uint4 tmpIn1 = {0};
+    uint4 tmpIn2 = {0};
+    uint4 tmpIn3 = {0};
+    uint4 tmpOut0 = {0};
+    uint4 tmpOut1 = {0};
+    uint4 tmpOut2 = {0};
+
+    tmpIn0 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imageui(input, coord_in);
+
+    tmpOut0 = (uint4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (uint4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (uint4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+
+    write_imageui(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut2);
+}
+
+__kernel void gpuTranspose_I32toI32_3HC2HC3_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(1), get_global_id(2), get_global_id(0) * 4, 0);
+
+    int4 tmpIn0 = {0};
+    int4 tmpIn1 = {0};
+    int4 tmpIn2 = {0};
+    int4 tmpIn3 = {0};
+    int4 tmpOut0 = {0};
+    int4 tmpOut1 = {0};
+    int4 tmpOut2 = {0};
+
+    tmpIn0 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imagei(input, coord_in);
+
+    tmpOut0 = (int4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (int4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (int4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+
+    write_imagei(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut2);
+}
+
+
+__kernel void gpuTranspose_U8toU8_NCHW2NHCW_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.xzyw;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord_in);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_NCHW2NHCW_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.xzyw;
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord_in);
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_U8toU8_NCHW2NCWH_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(1), get_global_id(0) * 4, get_global_id(2), 0);
+
+    uint4 tmpIn0 = {0};
+    uint4 tmpIn1 = {0};
+    uint4 tmpIn2 = {0};
+    uint4 tmpIn3 = {0};
+    uint4 tmpOut0 = {0};
+    uint4 tmpOut1 = {0};
+    uint4 tmpOut2 = {0};
+    uint4 tmpOut3 = {0};
+
+    tmpIn0 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imageui(input, coord_in);
+
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+
+    tmpOut0 = (uint4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (uint4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (uint4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (uint4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imageui(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_I32toI32_NCHW2NCWH_ALN4
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(1), get_global_id(0) * 4, get_global_id(2), 0);
+
+    int4 tmpIn0 = {0};
+    int4 tmpIn1 = {0};
+    int4 tmpIn2 = {0};
+    int4 tmpIn3 = {0};
+    int4 tmpOut0 = {0};
+    int4 tmpOut1 = {0};
+    int4 tmpOut2 = {0};
+    int4 tmpOut3 = {0};
+
+    tmpIn0 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imagei(input, coord_in);
+
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+
+    tmpOut0 = (int4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (int4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (int4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (int4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imagei(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_F32toF32_2D_ALN4
+    (
+        __read_only  image2d_t input,
+        __write_only image2d_t output
+    )
+{
+    int2 coord_in = (int2)(get_global_id(0), get_global_id(1) * 4);
+    int2 coord_out = (int2)(get_global_id(1), get_global_id(0) * 4);
+    float4 tmpIn0 = {0.0};
+    float4 tmpIn1 = {0.0};
+    float4 tmpIn2 = {0.0};
+    float4 tmpIn3 = {0.0};
+    float4 tmpOut0 = {0.0};
+    float4 tmpOut1 = {0.0};
+    float4 tmpOut2 = {0.0};
+    float4 tmpOut3 = {0.0};
+
+    tmpIn0 = read_imagef(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imagef(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imagef(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imagef(input, coord_in);
+
+    tmpOut0 = (float4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (float4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (float4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (float4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imagef(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imagef(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imagef(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imagef(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_U8toU8_2D_ALN4
+    (
+        __read_only  image2d_t input,
+        __write_only image2d_t output
+    )
+{
+    int2 coord_in = (int2)(get_global_id(0), get_global_id(1) * 4);
+    int2 coord_out = (int2)(get_global_id(1), get_global_id(0) * 4);
+
+    uint4 tmpIn0 = {0};
+    uint4 tmpIn1 = {0};
+    uint4 tmpIn2 = {0};
+    uint4 tmpIn3 = {0};
+    uint4 tmpOut0 = {0};
+    uint4 tmpOut1 = {0};
+    uint4 tmpOut2 = {0};
+    uint4 tmpOut3 = {0};
+
+    tmpIn0 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imageui(input, coord_in);
+
+    tmpOut0 = (uint4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (uint4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (uint4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (uint4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imageui(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_I32toI32_2D_ALN4
+    (
+        __read_only  image2d_t input,
+        __write_only image2d_t output
+    )
+{
+    int2 coord_in = (int2)(get_global_id(0), get_global_id(1) * 4);
+    int2 coord_out = (int2)(get_global_id(1), get_global_id(0) * 4);
+
+    int4 tmpIn0 = {0};
+    int4 tmpIn1 = {0};
+    int4 tmpIn2 = {0};
+    int4 tmpIn3 = {0};
+    int4 tmpOut0 = {0};
+    int4 tmpOut1 = {0};
+    int4 tmpOut2 = {0};
+    int4 tmpOut3 = {0};
+
+    tmpIn0 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imagei(input, coord_in);
+
+    tmpOut0 = (int4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (int4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (int4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (int4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    write_imagei(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_U8toU8_RQ_NCHW2NHWC_ALN4
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2) * 4, 0);
+    int4 coord_out = (int4)(get_global_id(2), get_global_id(0) * 4, get_global_id(1), 0);
+
+    uint4 tmpIn0 = {0};
+    uint4 tmpIn1 = {0};
+    uint4 tmpIn2 = {0};
+    uint4 tmpIn3 = {0};
+    uint4 tmpOut0 = {0};
+    uint4 tmpOut1 = {0};
+    uint4 tmpOut2 = {0};
+    uint4 tmpOut3 = {0};
+
+    tmpIn0 = read_imageui(input, coord_in);
+    coord_in.z++;
+    tmpIn1 = read_imageui(input, coord_in);
+    coord_in.z++;
+    tmpIn2 = read_imageui(input, coord_in);
+    coord_in.z++;
+    tmpIn3 = read_imageui(input, coord_in);
+
+    int4 tmpDst0 = (int4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    int4 tmpDst1 = (int4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    int4 tmpDst2 = (int4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    int4 tmpDst3 = (int4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    tmpOut0 = convert_uint4_rte(convert_float4(tmpDst0) * output_scale + output_tail);
+    tmpOut1 = convert_uint4_rte(convert_float4(tmpDst1) * output_scale + output_tail);
+    tmpOut2 = convert_uint4_rte(convert_float4(tmpDst2) * output_scale + output_tail);
+    tmpOut3 = convert_uint4_rte(convert_float4(tmpDst3) * output_scale + output_tail);
+
+    write_imageui(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_I32toI32_RQ_NCHW2NHWC_ALN4
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2) * 4, 0);
+    int4 coord_out = (int4)(get_global_id(2), get_global_id(0) * 4, get_global_id(1), 0);
+
+    int4 tmpIn0 = {0};
+    int4 tmpIn1 = {0};
+    int4 tmpIn2 = {0};
+    int4 tmpIn3 = {0};
+    int4 tmpOut0 = {0};
+    int4 tmpOut1 = {0};
+    int4 tmpOut2 = {0};
+    int4 tmpOut3 = {0};
+
+    tmpIn0 = read_imagei(input, coord_in);
+    coord_in.z++;
+    tmpIn1 = read_imagei(input, coord_in);
+    coord_in.z++;
+    tmpIn2 = read_imagei(input, coord_in);
+    coord_in.z++;
+    tmpIn3 = read_imagei(input, coord_in);
+
+    int4 tmpDst0 = (int4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    int4 tmpDst1 = (int4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    int4 tmpDst2 = (int4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    int4 tmpDst3 = (int4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    tmpOut0 = convert_int4_rte(convert_float4(tmpDst0) * output_scale + output_tail);
+    tmpOut1 = convert_int4_rte(convert_float4(tmpDst1) * output_scale + output_tail);
+    tmpOut2 = convert_int4_rte(convert_float4(tmpDst2) * output_scale + output_tail);
+    tmpOut3 = convert_int4_rte(convert_float4(tmpDst3) * output_scale + output_tail);
+
+    write_imagei(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_U8toU8_RQ_NCHW2NHWC
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.zxyw;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord_in);
+
+    tmp.x = convert_uint_rte(tmp.x * output_scale + output_tail);
+
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_RQ_NCHW2NHWC
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.zxyw;
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord_in);
+
+    tmp.x = convert_int_rte(tmp.x * output_scale + output_tail);
+
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_U8toU8_RQ_NCHW2NWHC_ALN4
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2) * 4, 0);
+    int4 coord_out = (int4)(get_global_id(2), get_global_id(1), get_global_id(0) * 4, 0);
+
+    uint4 tmpIn0 = {0};
+    uint4 tmpIn1 = {0};
+    uint4 tmpIn2 = {0};
+    uint4 tmpIn3 = {0};
+    uint4 tmpOut0 = {0};
+    uint4 tmpOut1 = {0};
+    uint4 tmpOut2 = {0};
+    uint4 tmpOut3 = {0};
+
+    tmpIn0 = read_imageui(input, coord_in);
+    coord_in.z++;
+    tmpIn1 = read_imageui(input, coord_in);
+    coord_in.z++;
+    tmpIn2 = read_imageui(input, coord_in);
+    coord_in.z++;
+    tmpIn3 = read_imageui(input, coord_in);
+
+    tmpOut0 = (uint4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (uint4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (uint4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (uint4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    tmpOut0 = convert_uint4_rte(convert_float4(tmpOut0) * output_scale + output_tail);
+    tmpOut1 = convert_uint4_rte(convert_float4(tmpOut1) * output_scale + output_tail);
+    tmpOut2 = convert_uint4_rte(convert_float4(tmpOut2) * output_scale + output_tail);
+    tmpOut3 = convert_uint4_rte(convert_float4(tmpOut3) * output_scale + output_tail);
+
+    write_imageui(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut2);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_I32toI32_RQ_NCHW2NWHC_ALN4
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2) * 4, 0);
+    int4 coord_out = (int4)(get_global_id(2), get_global_id(1), get_global_id(0) * 4, 0);
+
+    int4 tmpIn0 = {0};
+    int4 tmpIn1 = {0};
+    int4 tmpIn2 = {0};
+    int4 tmpIn3 = {0};
+    int4 tmpOut0 = {0};
+    int4 tmpOut1 = {0};
+    int4 tmpOut2 = {0};
+    int4 tmpOut3 = {0};
+
+    tmpIn0 = read_imagei(input, coord_in);
+    coord_in.z++;
+    tmpIn1 = read_imagei(input, coord_in);
+    coord_in.z++;
+    tmpIn2 = read_imagei(input, coord_in);
+    coord_in.z++;
+    tmpIn3 = read_imagei(input, coord_in);
+
+    tmpOut0 = (int4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (int4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (int4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (int4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    tmpOut0 = convert_int4_rte(convert_float4(tmpOut0) * output_scale + output_tail);
+    tmpOut1 = convert_int4_rte(convert_float4(tmpOut1) * output_scale + output_tail);
+    tmpOut2 = convert_int4_rte(convert_float4(tmpOut2) * output_scale + output_tail);
+    tmpOut3 = convert_int4_rte(convert_float4(tmpOut3) * output_scale + output_tail);
+
+    write_imagei(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut2);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_U8toU8_RQ_NCHW2NWHC
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.zyxw;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord_in);
+    tmp.x = convert_uint_rte(tmp.x * output_scale + output_tail);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_RQ_NCHW2NWHC(__read_only image2d_array_t   input,
+                                         __write_only image2d_array_t  output,
+                                         float output_scale, float output_tail)
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.zyxw;
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord_in);
+    tmp.x = convert_int_rte(tmp.x * output_scale + output_tail);
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_U8toU8_RQ_NCHW2NHCW_ALN4
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.xzyw;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord_in);
+    tmp = convert_uint4_rte(convert_float4(tmp) * output_scale + output_tail);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_RQ_NCHW2NHCW_ALN4
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.xzyw;
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord_in);
+    tmp = convert_int4_rte(convert_float4(tmp) * output_scale + output_tail);
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_U8toU8_RQ_NCHW2NHCW
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.xzyw;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord_in);
+    tmp.x = convert_uint_rte(tmp.x * output_scale + output_tail);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_RQ_NCHW2NHCW
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.xzyw;
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord_in);
+    tmp.x = convert_int_rte(tmp.x * output_scale + output_tail);
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_U8toU8_RQ_NCHW2NWCH_ALN4
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(1), get_global_id(2), get_global_id(0) * 4, 0);
+
+    uint4 tmpIn0 = {0};
+    uint4 tmpIn1 = {0};
+    uint4 tmpIn2 = {0};
+    uint4 tmpIn3 = {0};
+    uint4 tmpOut0 = {0};
+    uint4 tmpOut1 = {0};
+    uint4 tmpOut2 = {0};
+    uint4 tmpOut3 = {0};
+
+    tmpIn0 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imageui(input, coord_in);
+
+    tmpOut0 = (uint4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (uint4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (uint4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (uint4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    tmpOut0 = convert_uint4_rte(convert_float4(tmpOut0) * output_scale + output_tail);
+    tmpOut1 = convert_uint4_rte(convert_float4(tmpOut1) * output_scale + output_tail);
+    tmpOut2 = convert_uint4_rte(convert_float4(tmpOut2) * output_scale + output_tail);
+    tmpOut3 = convert_uint4_rte(convert_float4(tmpOut3) * output_scale + output_tail);
+
+    write_imageui(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut2);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_I32toI32_RQ_NCHW2NWCH_ALN4
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(1), get_global_id(2), get_global_id(0) * 4, 0);
+
+    int4 tmpIn0 = {0};
+    int4 tmpIn1 = {0};
+    int4 tmpIn2 = {0};
+    int4 tmpIn3 = {0};
+    int4 tmpOut0 = {0};
+    int4 tmpOut1 = {0};
+    int4 tmpOut2 = {0};
+    int4 tmpOut3 = {0};
+
+    tmpIn0 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imagei(input, coord_in);
+
+    tmpOut0 = (int4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (int4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (int4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (int4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    tmpOut0 = convert_int4_rte(convert_float4(tmpOut0) * output_scale + output_tail);
+    tmpOut1 = convert_int4_rte(convert_float4(tmpOut1) * output_scale + output_tail);
+    tmpOut2 = convert_int4_rte(convert_float4(tmpOut2) * output_scale + output_tail);
+    tmpOut3 = convert_int4_rte(convert_float4(tmpOut3) * output_scale + output_tail);
+
+    write_imagei(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut2);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_U8toU8_RQ_3HC2HC3_ALN4
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(1), get_global_id(2), get_global_id(0) * 4, 0);
+
+    uint4 tmpIn0 = {0};
+    uint4 tmpIn1 = {0};
+    uint4 tmpIn2 = {0};
+    uint4 tmpIn3 = {0};
+    uint4 tmpOut0 = {0};
+    uint4 tmpOut1 = {0};
+    uint4 tmpOut2 = {0};
+
+    tmpIn0 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imageui(input, coord_in);
+
+    tmpOut0 = (uint4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (uint4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (uint4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+
+    tmpOut0 = convert_uint4_rte(convert_float4(tmpOut0) * output_scale + output_tail);
+    tmpOut1 = convert_uint4_rte(convert_float4(tmpOut1) * output_scale + output_tail);
+    tmpOut2 = convert_uint4_rte(convert_float4(tmpOut2) * output_scale + output_tail);
+
+    write_imageui(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imageui(output, coord_out, tmpOut2);
+}
+
+__kernel void gpuTranspose_I32toI32_RQ_3HC2HC3_ALN4
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(1), get_global_id(2), get_global_id(0) * 4, 0);
+
+    int4 tmpIn0 = {0};
+    int4 tmpIn1 = {0};
+    int4 tmpIn2 = {0};
+    int4 tmpIn3 = {0};
+    int4 tmpOut0 = {0};
+    int4 tmpOut1 = {0};
+    int4 tmpOut2 = {0};
+
+    tmpIn0 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imagei(input, coord_in);
+
+    tmpOut0 = (int4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (int4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (int4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+
+    tmpOut0 = convert_int4_rte(convert_float4(tmpOut0) * output_scale + output_tail);
+    tmpOut1 = convert_int4_rte(convert_float4(tmpOut1) * output_scale + output_tail);
+    tmpOut2 = convert_int4_rte(convert_float4(tmpOut2) * output_scale + output_tail);
+
+    write_imagei(output, coord_out, tmpOut0);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut1);
+    coord_out.z++;
+    write_imagei(output, coord_out, tmpOut2);
+}
+
+__kernel void gpuTranspose_U8toU8_RQ_NCHW2NWCH
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.yzxw;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord_in);
+    tmp.x = convert_uint_rte(tmp.x * output_scale + output_tail);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_RQ_NCHW2NWCH
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in.yzxw;
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord_in);
+    tmp.x = convert_int_rte(tmp.x * output_scale + output_tail);
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_U8toU8_RQ_NCHW2NCWH_ALN4
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(1), get_global_id(0) * 4, get_global_id(2), 0);
+
+    uint4 tmpIn0 = {0};
+    uint4 tmpIn1 = {0};
+    uint4 tmpIn2 = {0};
+    uint4 tmpIn3 = {0};
+    uint4 tmpOut0 = {0};
+    uint4 tmpOut1 = {0};
+    uint4 tmpOut2 = {0};
+    uint4 tmpOut3 = {0};
+
+    tmpIn0 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imageui(input, coord_in);
+
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+
+    tmpOut0 = (uint4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (uint4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (uint4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (uint4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    tmpOut0 = convert_uint4_rte(convert_float4(tmpOut0) * output_scale + output_tail);
+    tmpOut1 = convert_uint4_rte(convert_float4(tmpOut1) * output_scale + output_tail);
+    tmpOut2 = convert_uint4_rte(convert_float4(tmpOut2) * output_scale + output_tail);
+    tmpOut3 = convert_uint4_rte(convert_float4(tmpOut3) * output_scale + output_tail);
+
+    write_imageui(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_I32toI32_RQ_NCHW2NCWH_ALN4
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(1), get_global_id(0) * 4, get_global_id(2), 0);
+
+    int4 tmpIn0 = {0};
+    int4 tmpIn1 = {0};
+    int4 tmpIn2 = {0};
+    int4 tmpIn3 = {0};
+    int4 tmpOut0 = {0};
+    int4 tmpOut1 = {0};
+    int4 tmpOut2 = {0};
+    int4 tmpOut3 = {0};
+
+    tmpIn0 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imagei(input, coord_in);
+
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1) * 4, get_global_id(2), 0);
+
+    tmpOut0 = (int4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (int4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (int4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (int4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    tmpOut0 = convert_int4_rte(convert_float4(tmpOut0) * output_scale + output_tail);
+    tmpOut1 = convert_int4_rte(convert_float4(tmpOut1) * output_scale + output_tail);
+    tmpOut2 = convert_int4_rte(convert_float4(tmpOut2) * output_scale + output_tail);
+    tmpOut3 = convert_int4_rte(convert_float4(tmpOut3) * output_scale + output_tail);
+
+    write_imagei(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_U8toU8_RQ_NCHW2NCWH
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(1), get_global_id(0), get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord_in);
+    tmp.x = convert_uint_rte(tmp.x * output_scale + output_tail);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_I32toI32_RQ_NCHW2NCWH
+    (
+        __read_only  image2d_array_t   input,
+        __write_only image2d_array_t  output,
+        float output_scale, float output_tail
+    )
+{
+    int4 coord_in = (int4)(get_global_id(1), get_global_id(0), get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord_in);
+    tmp.x = convert_int_rte(tmp.x * output_scale + output_tail);
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuTranspose_U8toU8_RQ_2D_ALN4
+    (
+        __read_only  image2d_t input,
+        __write_only image2d_t output,
+        float output_scale, float output_tail
+    )
+{
+    int2 coord_in = (int2)(get_global_id(0), get_global_id(1) * 4);
+    int2 coord_out = (int2)(get_global_id(1), get_global_id(0) * 4);
+
+    uint4 tmpIn0 = {0};
+    uint4 tmpIn1 = {0};
+    uint4 tmpIn2 = {0};
+    uint4 tmpIn3 = {0};
+    uint4 tmpOut0 = {0};
+    uint4 tmpOut1 = {0};
+    uint4 tmpOut2 = {0};
+    uint4 tmpOut3 = {0};
+
+    tmpIn0 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imageui(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imageui(input, coord_in);
+
+    tmpOut0 = (uint4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (uint4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (uint4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (uint4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    tmpOut0 = convert_uint4_rte(convert_float4(tmpOut0) * output_scale + output_tail);
+    tmpOut1 = convert_uint4_rte(convert_float4(tmpOut1) * output_scale + output_tail);
+    tmpOut2 = convert_uint4_rte(convert_float4(tmpOut2) * output_scale + output_tail);
+    tmpOut3 = convert_uint4_rte(convert_float4(tmpOut3) * output_scale + output_tail);
+
+    write_imageui(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imageui(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_I32toI32_RQ_2D_ALN4
+    (
+        __read_only  image2d_t input,
+        __write_only image2d_t output,
+        float output_scale, float output_tail
+    )
+{
+    int2 coord_in = (int2)(get_global_id(0), get_global_id(1) * 4);
+    int2 coord_out = (int2)(get_global_id(1), get_global_id(0) * 4);
+
+    int4 tmpIn0 = {0};
+    int4 tmpIn1 = {0};
+    int4 tmpIn2 = {0};
+    int4 tmpIn3 = {0};
+    int4 tmpOut0 = {0};
+    int4 tmpOut1 = {0};
+    int4 tmpOut2 = {0};
+    int4 tmpOut3 = {0};
+
+    tmpIn0 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn1 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn2 = read_imagei(input, coord_in);
+    coord_in.y++;
+    tmpIn3 = read_imagei(input, coord_in);
+
+    tmpOut0 = (int4)(tmpIn0.x, tmpIn1.x, tmpIn2.x, tmpIn3.x);
+    tmpOut1 = (int4)(tmpIn0.y, tmpIn1.y, tmpIn2.y, tmpIn3.y);
+    tmpOut2 = (int4)(tmpIn0.z, tmpIn1.z, tmpIn2.z, tmpIn3.z);
+    tmpOut3 = (int4)(tmpIn0.w, tmpIn1.w, tmpIn2.w, tmpIn3.w);
+
+    tmpOut0 = convert_int4_rte(convert_float4(tmpOut0) * output_scale + output_tail);
+    tmpOut1 = convert_int4_rte(convert_float4(tmpOut1) * output_scale + output_tail);
+    tmpOut2 = convert_int4_rte(convert_float4(tmpOut2) * output_scale + output_tail);
+    tmpOut3 = convert_int4_rte(convert_float4(tmpOut3) * output_scale + output_tail);
+
+    write_imagei(output, coord_out, tmpOut0);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut1);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut2);
+    coord_out.y++;
+    write_imagei(output, coord_out, tmpOut3);
+}
+
+__kernel void gpuTranspose_F32toF32_4D
+    (
+        __read_only  image2d_array_t  input,
+        __write_only image2d_array_t output,
+                     int             depth_in,
+                     int             depth_out,
+                     int             perm0,
+                     int             perm1,
+                     int             perm2,
+                     int             perm3
+ )
+{
+    int out_index[4] = { 0 };
+    int in_index[4]  = { 0 };
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+
+    float4 src = read_imagef(input, coord_in);
+
+    in_index[0] = coord_in.x;
+    in_index[1] = coord_in.y;
+    in_index[3] = ((float)coord_in.z +0.5f) / (float)depth_in;
+    in_index[2] = coord_in.z - in_index[3] * depth_in;
+
+    int4 coord_out;
+
+    coord_out.x = in_index[perm0];
+    coord_out.y = in_index[perm1];
+    coord_out.z = in_index[perm2] + in_index[perm3] * depth_out;
+
+    write_imagef(output, coord_out, src);
+}
+
+__kernel void gpuTranspose_I32toI32_4D(
+__read_only image2d_array_t  input,
+__write_only image2d_array_t output,
+             int             depth_in,
+             int             depth_out,
+             int             perm0,
+             int             perm1,
+             int             perm2,
+             int             perm3
+ )
+{
+    int out_index[4] = { 0 };
+    int in_index[4]  = { 0 };
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+
+    int4 src = read_imagei(input, coord_in);
+
+    in_index[0] = coord_in.x;
+    in_index[1] = coord_in.y;
+    in_index[3] = ((float)coord_in.z +0.5f)/ (float)depth_in;
+    in_index[2] = coord_in.z - in_index[3] * depth_in;
+
+    int4 coord_out;
+
+    coord_out.x = in_index[perm0];
+    coord_out.y = in_index[perm1];
+    coord_out.z = in_index[perm2] + in_index[perm3] * depth_out;
+
+    write_imagei(output, coord_out, src);
+}
+
+__kernel void gpuTranspose_U32toU32_4D(
+__read_only image2d_array_t  input,
+__write_only image2d_array_t output,
+             int             depth_in,
+             int             depth_out,
+             int             perm0,
+             int             perm1,
+             int             perm2,
+             int             perm3
+ )
+{
+    int out_index[4] = { 0 };
+    int in_index[4]  = { 0 };
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+
+    uint4 src = read_imageui(input, coord_in);
+
+    in_index[0] = coord_in.x;
+    in_index[1] = coord_in.y;
+    in_index[3] = ((float)coord_in.z +0.5f) / (float)depth_in;
+    in_index[2] = coord_in.z - in_index[3] * depth_in;
+
+    int4 coord_out;
+
+    coord_out.x = in_index[perm0];
+    coord_out.y = in_index[perm1];
+    coord_out.z = in_index[perm2] + in_index[perm3] * depth_out;
+
+    write_imageui(output, coord_out, src);
+}
+
+__kernel void gpuTranspose_I32toI32_HW2HW_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    int4 src = read_imagei(input, coord);
+    write_imagei(output, coord, src);
+}
+
+__kernel void gpuTranspose_I32toI32_HW2HW_2D_ALN4
+    (
+        __read_only  image2d_t input,
+        __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    int4 src = read_imagei(input, coord);
+    write_imagei(output, coord, src);
+}

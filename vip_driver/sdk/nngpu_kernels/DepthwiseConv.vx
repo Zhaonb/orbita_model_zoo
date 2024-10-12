@@ -1,0 +1,2687 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+typedef _viv_uchar16_packed   vxc_uchar16;
+typedef _viv_uchar8_packed    vxc_uchar8;
+typedef _viv_uchar4_packed    vxc_uchar4;
+typedef _viv_half4_packed     vxc_half4;
+typedef _viv_half8_packed     vxc_half8;
+typedef _viv_char16_packed    vxc_char16;
+typedef _viv_char4_packed     vxc_char4;
+
+
+__kernel void gpuDepthwiseConv_FP32(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWeight = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inyEnd = inyStart + kernelY;
+    int inxStart = x * strideX - padX;
+    int inxEnd = inxStart + kernelX;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei;
+    float sum = 0;
+    int   kernelXLeft = 0;
+    float4 dst = {0.0};
+    float4 pixel = {0.0};
+    float4 weightValue = {0.0};
+    inyEnd = min(inyEnd, inputHeight);
+    inxEnd = min(inxEnd, inputWeight);
+    kernelXLeft = kernelX - (inxEnd - inxStart);
+    sum = read_imagef(bias, (int2)(z, 0)).x;
+    coord_wei = (int2)(0, z);
+    if (inz < inputDepth)
+    {
+        for (coord_in.y = inyStart; coord_in.y < inyEnd; coord_in.y++)
+        {
+            for (coord_in.x = inxStart; coord_in.x < inxEnd; coord_in.x++)
+            {
+                pixel = read_imagef(input, coord_in);
+                weightValue = read_imagef(weight, coord_wei);
+                sum += (pixel.x * weightValue.x);
+                coord_wei.x += 1;
+            }
+            coord_wei.x += kernelXLeft;
+        }
+    }
+    dst.x = sum;
+    write_imagef(output, coord_out, dst);
+}
+
+__kernel void gpuDepthwiseConv_FP32_Dilation(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    image2d_array_t output,
+    int dilateX,
+    int dilateY)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth  = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth  = get_image_array_size(input);
+    int4 coord_out  = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inyEnd = inyStart + kernelY * dilateY;
+    int inxStart = x * strideX - padX;
+    int inxEnd = inxStart + kernelX * dilateX;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei;
+    float  sum = 0;
+    int    kernelYOffset = 0;
+    float4 dst = {0.0};
+    float4 pixel = {0.0};
+    float4 weightValue = {0.0};
+
+    inyEnd = min(inyEnd, inputHeight);
+    inxEnd = min(inxEnd, inputWidth);
+    sum = read_imagef(bias, (int2)(z, 0)).x;
+    coord_wei = (int2)(0, z);
+
+    if (inz < inputDepth)
+    {
+        for (coord_in.y = inyStart; coord_in.y < inyEnd; coord_in.y = coord_in.y + dilateY)
+        {
+            for (coord_in.x = inxStart; coord_in.x < inxEnd; coord_in.x = coord_in.x + dilateX)
+            {
+                pixel = read_imagef(input, coord_in);
+                weightValue = read_imagef(weight, coord_wei);
+                sum += (pixel.x * weightValue.x);
+                coord_wei.x += 1;
+            }
+            kernelYOffset++;
+            coord_wei.x = kernelX * kernelYOffset;
+        }
+    }
+
+    dst.x = sum;
+    write_imagef(output, coord_out, dst);
+}
+
+#define F32_3x3_PROCESS() \
+    tmp_read = vload16(0, (_viv_uchar_packed *)input_ptr); \
+    _viv_asm(COPY, pixel, tmp_read, 16); \
+    if (inxStart < 0) \
+    {   \
+        switch(inxStart) \
+        { \
+            case -1: \
+                pixel.yz  = pixel.xy; \
+                pixel.x   = 0.0;   \
+            break; \
+            case -2: \
+                pixel.z    = pixel.x; \
+                pixel.xy   = 0.0; \
+            break; \
+            default: \
+                pixel     = 0.0; \
+            break; \
+        } \
+    } \
+    else if (inxEndLeft > 0) \
+    { \
+        switch(inxEndLeft) \
+        { \
+            case 1: \
+                pixel.z = 0.0; \
+            break; \
+            case 2: \
+                pixel.yz = 0.0; \
+            break; \
+            default: \
+                pixel = 0.0; \
+            break; \
+        } \
+    } \
+    tmp_read = vload16(0, (_viv_uchar_packed *)w_ptr); \
+    _viv_asm(COPY, weightValue, tmp_read, 16); \
+    pixel.w = 0.0f; \
+    weightValue.w = 0.0f; \
+    sum  += dot(pixel, weightValue);
+
+__kernel void gpuDepthwiseConv_3x3_FP32(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inxStart = x * strideX - padX;
+    int inxEndLeft = inxStart + kernelX - inputWidth;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei;
+    float sum = 0;
+    float4 dst = {0.0};
+    float4 pixel = {0.0};
+    float4 weightValue = {0.0};
+    int  input_width = get_image_width(input);
+
+    vxc_uchar16 tmp_read;
+    int  byte_width  = 4;
+    sum = read_imagef(bias, (int2)(z, 0)).x;
+    coord_in.x = coord_in.x < 0 ? 0 : coord_in.x;
+    coord_wei = (int2)(0, z);
+    Tensor in_tensor = create_tensor_from_image2d_array(input, byte_width);
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    Image w_tensor = create_image_from_image2d(weight, byte_width);
+    uchar *w_ptr = get_image_ptr_from_coord(w_tensor, coord_wei);
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        F32_3x3_PROCESS()
+    }
+    inyStart++;
+    input_ptr = input_ptr + in_tensor.stride_y;
+    w_ptr = w_ptr + kernelX * byte_width;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        F32_3x3_PROCESS()
+    }
+    inyStart++;
+    input_ptr = input_ptr + in_tensor.stride_y;
+    w_ptr = w_ptr + kernelX * byte_width;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        F32_3x3_PROCESS()
+    }
+    dst.x = sum;
+    write_imagef(output, coord_out, dst);
+}
+
+
+#define F16_3x3_PROCESS() \
+    tmp_read = vload8(0, (_viv_uchar_packed *)input_ptr); \
+    tmp_uchar16.s014589cd = tmp_read; \
+    _viv_asm(COPY, tmp_half4, tmp_uchar16, 16); \
+    _viv_asm(CONV, pixel, tmp_half4); \
+    if (inxStart < 0) \
+    {   \
+        switch(inxStart) \
+        { \
+            case -1: \
+                pixel.yz  = pixel.xy; \
+                pixel.x   = 0.0;   \
+            break; \
+            case -2: \
+                pixel.z    = pixel.x; \
+                pixel.xy   = 0.0; \
+            break; \
+            default: \
+                pixel     = 0.0; \
+            break; \
+        } \
+    } \
+    else if (inxEndLeft > 0) \
+    { \
+        switch(inxEndLeft) \
+        { \
+            case 1: \
+                pixel.z = 0.0; \
+            break; \
+            case 2: \
+                pixel.yz = 0.0; \
+            break; \
+            default: \
+                pixel = 0.0; \
+            break; \
+        } \
+    } \
+    tmp_read = vload8(0, (_viv_uchar_packed *)w_ptr); \
+    tmp_uchar16.s014589cd = tmp_read; \
+    _viv_asm(COPY, tmp_half4, tmp_uchar16, 16); \
+    _viv_asm(CONV, weightValue, tmp_half4); \
+    pixel.w = 0.0f; \
+    weightValue.w = 0.0f; \
+    sum  += dot(pixel, weightValue);
+
+__kernel void gpuDepthwiseConv_3x3_FP16(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inxStart = x * strideX - padX;
+    int inxEndLeft = inxStart + kernelX - inputWidth;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei;
+    float sum = 0;
+    float4 dst = {0.0};
+    float4 pixel = {0.0};
+    float4 weightValue = {0.0};
+    int  input_width = get_image_width(input);
+
+    vxc_uchar8 tmp_read;
+    vxc_half4  tmp_half;
+    int  byte_width  = 2;
+    sum = read_imagef(bias, (int2)(z, 0)).x;
+    coord_in.x = coord_in.x < 0 ? 0 : coord_in.x;
+    coord_wei = (int2)(0, z);
+    Tensor in_tensor = create_tensor_from_image2d_array(input, byte_width);
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    Image w_tensor = create_image_from_image2d(weight, byte_width);
+    uchar *w_ptr = get_image_ptr_from_coord(w_tensor, coord_wei);
+
+    half4      tmp_half4;
+    vxc_uchar16 tmp_uchar16 = (vxc_uchar16)(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        F16_3x3_PROCESS()
+    }
+    inyStart++;
+    input_ptr = input_ptr + in_tensor.stride_y;
+    w_ptr = w_ptr + kernelX * byte_width;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        F16_3x3_PROCESS()
+    }
+    inyStart++;
+    input_ptr = input_ptr + in_tensor.stride_y;
+    w_ptr = w_ptr + kernelX * byte_width;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        F16_3x3_PROCESS()
+    }
+
+    dst.x = sum;
+    write_imagef(output, coord_out, dst);
+}
+
+#define U8_3x3_PROCESS() \
+    input_copy = input_read_tmp.s0123; \
+    _viv_asm(CONV, tmp0, input_copy); \
+    if (inxStart < 0) \
+    {   \
+        switch(inxStart) \
+        { \
+            case -1: \
+                tmp0.yzw = tmp0.xyz; \
+                tmp0.x   = zpIn_int;   \
+            break; \
+            case -2: \
+                tmp0.zw   = tmp0.xy; \
+                tmp0.xy   = zpIn_int; \
+            break; \
+            default: \
+                tmp0     = zpIn_int; \
+            break; \
+        } \
+    } \
+    else if (inxEndLeft > 0) \
+    { \
+        switch(inxEndLeft) \
+        { \
+            case 1: \
+                tmp0.z = zpIn_int; \
+            break; \
+            case 2: \
+                tmp0.yz = zpIn_int; \
+            break; \
+            default: \
+                tmp0 = zpIn_int; \
+            break; \
+        } \
+    } \
+    _viv_asm(CONV, tmp1, w_copy); \
+    pixel = convert_float4(tmp0); \
+    weightValue = convert_float4(tmp1) -  zpWeight; \
+    pixel.w  = 0; \
+    sum  += dot(pixel, weightValue);
+
+__kernel void gpuDepthwiseConv_3x3_c1_Quant8(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth  = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = z;
+    int inyStart = y * strideY - padY;
+    int inxStart = x * strideX - padX;
+    int inxEndLeft = inxStart + kernelX - inputWidth;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float sum = 0;
+    uint4 dst = {0}, tmp0 = {0}, tmp1 = {0};
+    int4 biasData;
+    float4 pixel = {0.0}, weightValue = {0.0};
+    biasData = convert_int(read_imagei(bias, (int2)(z, 0)));
+    sum = biasData.x;
+    coord_in.x = coord_in.x < 0 ? 0 : coord_in.x;
+
+    int  input_width = get_image_width(input);
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *inPtr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    Image w_tensor = create_image_from_image2d(weight, 1);
+    uchar *wPtr = get_image_ptr_from_coord(w_tensor, coord_wei);
+    vxc_uchar16  input_read_tmp, w_read_tmp;
+    vxc_uchar4  input_copy = {0};
+    vxc_uchar4   w_copy = {0};
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_read_tmp     = vload16(0, (_viv_uchar_packed *)wPtr);
+
+    w_copy   = w_read_tmp.s0123;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy   = w_read_tmp.s3456;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy   = w_read_tmp.s6789;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_PROCESS()
+    }
+    dst.x = floor(sum * scaleOut + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+__kernel void gpuDepthwiseConv_3x3_Quant8(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth  = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inxStart = x * strideX - padX;
+    int inxEndLeft = inxStart + kernelX - inputWidth;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float sum = 0;
+    uint4 dst = {0}, tmp0 = {0}, tmp1 = {0};
+    int4 biasData;
+    float4 pixel = {0.0}, weightValue = {0.0};
+    biasData = convert_int(read_imagei(bias, (int2)(z, 0)));
+    sum = biasData.x;
+    coord_in.x = coord_in.x < 0 ? 0 : coord_in.x;
+
+    int  input_width = get_image_width(input);
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *inPtr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    Image w_tensor = create_image_from_image2d(weight, 1);
+    uchar *wPtr = get_image_ptr_from_coord(w_tensor, coord_wei);
+    vxc_uchar16  input_read_tmp, w_read_tmp;
+    vxc_uchar4  input_copy = {0};
+    vxc_uchar4   w_copy = {0};
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_read_tmp     = vload16(0, (_viv_uchar_packed *)wPtr);
+
+    w_copy   = w_read_tmp.s0123;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy   = w_read_tmp.s3456;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy   = w_read_tmp.s6789;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_PROCESS()
+    }
+    dst.x = floor(sum * scaleOut + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+__kernel void gpuDepthwiseConv_PerChannel_3x3_Quant8(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_array_t output,
+    __read_only  image2d_t scales)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth  = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inxStart = x * strideX - padX;
+    int inxEndLeft = inxStart + kernelX - inputWidth;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float sum = 0;
+    uint4 dst = {0}, tmp0 = {0};
+    int4  tmp1 = {0};
+    int4 biasData;
+    float4 pixel = {0.0}, weightValue = {0.0};
+    float4 scaleVal = read_imagef(scales, coord_out.zw);
+
+    biasData = convert_int(read_imagei(bias, (int2)(z, 0)));
+    sum = biasData.x;
+    coord_in.x = coord_in.x < 0 ? 0 : coord_in.x;
+
+    int  input_width = get_image_width(input);
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *inPtr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    Image w_tensor = create_image_from_image2d(weight, 1);
+    uchar *wPtr = get_image_ptr_from_coord(w_tensor, coord_wei);
+    vxc_uchar16  input_read_tmp;
+    vxc_char16   w_read_tmp;
+    vxc_uchar4  input_copy = {0};
+    vxc_char4   w_copy = {0};
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_read_tmp     = vload16(0, (_viv_char_packed *)wPtr);
+
+    w_copy   = w_read_tmp.s0123;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy   = w_read_tmp.s3456;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy   = w_read_tmp.s6789;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_PROCESS()
+    }
+    inyStart++;
+    dst.x = floor(sum * scaleVal.x + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+#define U8_3x3_X2_PROCESS() \
+    input_copy.s048c = input_read_tmp.s0123; \
+    _viv_asm(COPY, tmp0, input_copy, 16); \
+    if (inxStart < 0) \
+    {   \
+        switch(inxStart) \
+        { \
+            case -1: \
+                tmp0.yzw = tmp0.xyz; \
+                tmp0.x   = zpIn_int;   \
+            break; \
+            case -2: \
+                tmp0.zw   = tmp0.xy; \
+                tmp0.xy   = zpIn_int; \
+            break; \
+            default: \
+                tmp0     = zpIn_int; \
+            break; \
+        } \
+    } \
+    else if (inxEndLeft > 0) \
+    { \
+        switch(inxEndLeft) \
+        { \
+            case 1: \
+                tmp0.w = zpIn_int; \
+            break; \
+            case 2: \
+                tmp0.zw = zpIn_int; \
+            break; \
+            case 3: \
+                tmp0.yzw = zpIn_int; \
+            break; \
+            default: \
+                tmp0 = zpIn_int; \
+            break; \
+        } \
+    } \
+    _viv_asm(COPY, tmp1, w_copy, 16); \
+    pixel = convert_float4(tmp0); \
+    weightValue = convert_float4(tmp1) -  zpWeight; \
+    pixel2.xyz = pixel.yzw; \
+    pixel.w  = 0; \
+    sum.x  += dot(pixel, weightValue); \
+    sum.y  += dot(pixel2, weightValue);
+
+__kernel void gpuDepthwiseConv_3x3_c1_s1_Quant8_x2(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth  = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x >> 1, y, z, 0);
+    int inz = z;
+    int inyStart = y * strideY - padY;
+    int inxStart = x * strideX - padX;
+    int inxEndLeft = inxStart + 4 - inputWidth;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float4 sum = 0;
+    uint4 dst = {0}, tmp0 = {0}, tmp1 = {0};
+    float biasData;
+    float4 pixel = {0.0}, weightValue = {0.0}, pixel2 = {0.0};
+    biasData = convert_float(read_imagei(bias, (int2)(z, 0)));
+    sum = biasData;
+    coord_in.x = coord_in.x < 0 ? 0 : coord_in.x;
+
+    int  input_width = get_image_width(input);
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *inPtr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    Image w_tensor = create_image_from_image2d(weight, 1);
+    uchar *wPtr = get_image_ptr_from_coord(w_tensor, coord_wei);
+    vxc_uchar16  input_read_tmp, w_read_tmp;
+    vxc_uchar16  input_copy = {0};
+    vxc_uchar16  w_copy = {0};
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_read_tmp     = vload16(0, (_viv_uchar_packed *)wPtr);
+
+    w_copy.s048c   = w_read_tmp.s0123;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_X2_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy.s048c   = w_read_tmp.s3456;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_X2_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy.s048c   = w_read_tmp.s6789;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_X2_PROCESS()
+    }
+    dst = convert_uint4(sum * scaleOut + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+#define U8_3x3_X2_S2_PROCESS() \
+    input_copy = input_read_tmp.s0123; \
+    _viv_asm(CONV, tmp0, input_copy); \
+    input_copy = input_read_tmp.s2345; \
+    _viv_asm(CONV, tmp2, input_copy); \
+    if (inxStart < 0) \
+    {   \
+        switch(inxStart) \
+        { \
+            case -1: \
+                tmp0.yzw = tmp0.xyz; \
+                tmp0.x   = zpIn_int;   \
+            break; \
+            case -2: \
+                tmp0.zw   = tmp0.xy; \
+                tmp0.xy   = zpIn_int; \
+            break; \
+            default: \
+                tmp0     = zpIn_int; \
+            break; \
+        } \
+    } \
+    if (inxEndLeft > 0) \
+    { \
+        switch(inxEndLeft) \
+        { \
+            case 1: \
+                tmp2.w = zpIn_int; \
+            break; \
+            case 2: \
+                tmp2.zw = zpIn_int; \
+            break; \
+            case 3: \
+                tmp2.yzw = zpIn_int; \
+            break; \
+            default: \
+                tmp2 = zpIn_int; \
+            break; \
+        } \
+    } \
+    _viv_asm(CONV, tmp1, w_copy); \
+    pixel = convert_float4(tmp0); \
+    weightValue = convert_float4(tmp1) -  zpWeight; \
+    pixel2 = convert_float4(tmp2); \
+    weightValue.w  = 0; \
+    sum.x  += dot(pixel, weightValue); \
+    sum.y  += dot(pixel2, weightValue);
+
+__kernel void gpuDepthwiseConv_3x3_c1_s2_Quant8_x2(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth  = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x >> 1, y, z, 0);
+    int inz = z;
+    int inyStart = y * strideY - padY;
+    int inxStart = x * strideX - padX;
+    int inxEndLeft = inxStart + 6 - inputWidth;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float4 sum = 0;
+    uint4 dst = {0}, tmp0 = {0}, tmp1 = {0}, tmp2 = {0};
+    float biasData;
+    float4 pixel = {0.0}, weightValue = {0.0}, pixel2 = {0.0};
+    biasData = convert_float(read_imagei(bias, (int2)(z, 0)));
+    sum = biasData;
+    coord_in.x = coord_in.x < 0 ? 0 : coord_in.x;
+
+    int  input_width = get_image_width(input);
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *inPtr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    Image w_tensor = create_image_from_image2d(weight, 1);
+    uchar *wPtr = get_image_ptr_from_coord(w_tensor, coord_wei);
+    vxc_uchar16  input_read_tmp, w_read_tmp;
+    vxc_uchar4  input_copy = {0};
+    vxc_uchar4  w_copy = {0};
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_read_tmp     = vload16(0, (_viv_uchar_packed *)wPtr);
+
+    w_copy   = w_read_tmp.s0123;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_X2_S2_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy   = w_read_tmp.s3456;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_X2_S2_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy   = w_read_tmp.s6789;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_X2_S2_PROCESS()
+    }
+    dst = convert_uint4(sum * scaleOut + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+#define U8_3x3_X4_S2_PROCESS() \
+    input_copy = input_read_tmp.s0123; \
+    _viv_asm(CONV, tmp0, input_copy); \
+    input_copy = input_read_tmp.s2345; \
+    _viv_asm(CONV, tmp2, input_copy); \
+    input_copy = input_read_tmp.s4567; \
+    _viv_asm(CONV, tmp3, input_copy); \
+    input_copy = input_read_tmp.s6789; \
+    _viv_asm(CONV, tmp4, input_copy); \
+    if (inxStart < 0) \
+    {   \
+        switch(inxStart) \
+        { \
+            case -1: \
+                tmp0.yzw = tmp0.xyz; \
+                tmp0.x   = zpIn_int;   \
+            break; \
+            default: \
+                tmp0     = zpIn_int; \
+            break; \
+        } \
+    } \
+    if (inxEndLeft > 0) \
+    { \
+        switch(inxEndLeft) \
+        { \
+            case 1: \
+                tmp4.w = zpIn_int; \
+            break; \
+            case 2: \
+                tmp4.zw = zpIn_int; \
+            break; \
+            default: \
+                tmp4 = zpIn_int; \
+            break; \
+        } \
+    } \
+    _viv_asm(CONV, tmp1, w_copy); \
+    pixel = convert_float4(tmp0); \
+    weightValue = convert_float4(tmp1) -  zpWeight; \
+    pixel2 = convert_float4(tmp2); \
+    weightValue.w  = 0; \
+    sum.x  += dot(pixel, weightValue); \
+    sum.y  += dot(pixel2, weightValue); \
+    pixel3 = convert_float4(tmp3); \
+    pixel4 = convert_float4(tmp4); \
+    sum.z  += dot(pixel3, weightValue); \
+    sum.w  += dot(pixel4, weightValue);
+
+__kernel void gpuDepthwiseConv_3x3_c1_s2_Quant8_x4(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth  = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x >> 2, y, z, 0);
+    int inz = z;
+    int inyStart = y * strideY - padY;
+    int inxStart = x * strideX - padX;
+    int inxEndLeft = inxStart + 10 - inputWidth;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float4 sum = 0;
+    uint4 dst = {0}, tmp0 = {0}, tmp1 = {0}, tmp2 = {0}, tmp3 = {0}, tmp4 = {0};
+    float biasData;
+    float4 pixel = {0.0}, weightValue = {0.0}, pixel2 = {0.0}, pixel3 = {0.0}, pixel4 = {0.0};
+    biasData = convert_float(read_imagei(bias, (int2)(z, 0)));
+    sum = biasData;
+    coord_in.x = coord_in.x < 0 ? 0 : coord_in.x;
+
+    int  input_width = get_image_width(input);
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *inPtr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    Image w_tensor = create_image_from_image2d(weight, 1);
+    uchar *wPtr = get_image_ptr_from_coord(w_tensor, coord_wei);
+    vxc_uchar16  input_read_tmp, w_read_tmp;
+    vxc_uchar4  input_copy = {0};
+    vxc_uchar4  w_copy = {0};
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_read_tmp     = vload16(0, (_viv_uchar_packed *)wPtr);
+
+    w_copy = w_read_tmp.s0123;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_X4_S2_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy = w_read_tmp.s3456;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_X4_S2_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy = w_read_tmp.s6789;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_X4_S2_PROCESS()
+    }
+    inyStart++;
+    dst = convert_uint4(sum * scaleOut + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+#define U8_3x3_X4_S2_NOPAD_PROCESS() \
+    input_copy = input_read_tmp.s0123; \
+    _viv_asm(CONV, tmp0, input_copy); \
+    input_copy = input_read_tmp.s2345; \
+    _viv_asm(CONV, tmp2, input_copy); \
+    input_copy = input_read_tmp.s4567; \
+    _viv_asm(CONV, tmp3, input_copy); \
+    input_copy = input_read_tmp.s6789; \
+    _viv_asm(CONV, tmp4, input_copy); \
+    _viv_asm(CONV, tmp1, w_copy); \
+    pixel = convert_float4(tmp0); \
+    weightValue = convert_float4(tmp1) -  zpWeight; \
+    pixel2 = convert_float4(tmp2); \
+    weightValue.w  = 0; \
+    sum.x  += dot(pixel, weightValue); \
+    sum.y  += dot(pixel2, weightValue); \
+    pixel3 = convert_float4(tmp3); \
+    pixel4 = convert_float4(tmp4); \
+    sum.z  += dot(pixel3, weightValue); \
+    sum.w  += dot(pixel4, weightValue);
+
+__kernel void gpuDepthwiseConv_3x3_c1_s2_NoPad_Quant8_x4(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth  = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x >> 2, y, z, 0);
+    int inz = z;
+    int inyStart = y * strideY - padY;
+    int inxStart = x * strideX - padX;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float4 sum = 0;
+    uint4 dst = {0}, tmp0 = {0}, tmp1 = {0}, tmp2 = {0}, tmp3 = {0}, tmp4 = {0};
+    float biasData;
+    float4 pixel = {0.0}, weightValue = {0.0}, pixel2 = {0.0}, pixel3 = {0.0}, pixel4 = {0.0};
+    biasData = convert_float(read_imagei(bias, (int2)(z, 0)));
+    sum = biasData;
+    coord_in.x = coord_in.x < 0 ? 0 : coord_in.x;
+
+    int  input_width = get_image_width(input);
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *inPtr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    Image w_tensor = create_image_from_image2d(weight, 1);
+    uchar *wPtr = get_image_ptr_from_coord(w_tensor, coord_wei);
+    vxc_uchar16  input_read_tmp, w_read_tmp;
+    vxc_uchar4  input_copy = {0};
+    vxc_uchar4  w_copy = {0};
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_read_tmp     = vload16(0, (_viv_uchar_packed *)wPtr);
+
+    w_copy = w_read_tmp.s0123;
+    U8_3x3_X4_S2_NOPAD_PROCESS()
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy = w_read_tmp.s3456;
+    U8_3x3_X4_S2_NOPAD_PROCESS()
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy = w_read_tmp.s6789;
+    U8_3x3_X4_S2_NOPAD_PROCESS()
+    dst = convert_uint4(sum * scaleOut + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+#define U8_3x3_X4_PROCESS() \
+    input_copy = input_read_tmp.s0123; \
+    _viv_asm(CONV, tmp0, input_copy); \
+    input_copy = input_read_tmp.s2345; \
+    _viv_asm(CONV, tmp2, input_copy); \
+    if (inxStart < 0) \
+    {   \
+        switch(inxStart) \
+        { \
+            case -1: \
+                tmp0.yzw = tmp0.xyz; \
+                tmp0.x   = zpIn_int;   \
+            break; \
+            default: \
+                tmp0     = zpIn_int; \
+            break; \
+        } \
+    } \
+    if (inxEndLeft > 0) \
+    { \
+        switch(inxEndLeft) \
+        { \
+            case 1: \
+                tmp2.w = zpIn_int; \
+            break; \
+            case 2: \
+                tmp2.zw = zpIn_int; \
+            break; \
+            default: \
+                tmp2 = zpIn_int; \
+            break; \
+        } \
+    } \
+    _viv_asm(CONV, tmp1, w_copy); \
+    pixel = convert_float4(tmp0); \
+    weightValue = convert_float4(tmp1) -  zpWeight; \
+    pixel2.xyz = pixel.yzw; \
+    weightValue.w  = 0; \
+    sum.x  += dot(pixel, weightValue); \
+    sum.y  += dot(pixel2, weightValue); \
+    pixel3 = convert_float4(tmp2); \
+    pixel4.xyz = pixel3.yzw; \
+    sum.z  += dot(pixel3, weightValue); \
+    sum.w  += dot(pixel4, weightValue);
+
+__kernel void gpuDepthwiseConv_3x3_c1_s1_Quant8_x4(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth  = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x >> 2, y, z, 0);
+    int inz = z;
+    int inyStart = y * strideY - padY;
+    int inxStart = x * strideX - padX;
+    int inxEndLeft = inxStart  + 6  - inputWidth;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float4 sum = 0;
+    uint4 dst = {0}, tmp0 = {0}, tmp1 = {0}, tmp2 = {0};
+    float biasData;
+    float4 pixel = {0.0}, weightValue = {0.0}, pixel2 = {0.0}, pixel3 = {0.0}, pixel4 = {0.0};
+    biasData = convert_float(read_imagei(bias, (int2)(z, 0)));
+    sum = biasData;
+    coord_in.x = coord_in.x < 0 ? 0 : coord_in.x;
+
+    int  input_width = get_image_width(input);
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *inPtr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    Image w_tensor = create_image_from_image2d(weight, 1);
+    uchar *wPtr = get_image_ptr_from_coord(w_tensor, coord_wei);
+    vxc_uchar16  input_read_tmp, w_read_tmp;
+    vxc_uchar4  input_copy = {0};
+    vxc_uchar4  w_copy = {0};
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_read_tmp     = vload16(0, (_viv_uchar_packed *)wPtr);
+
+    w_copy = w_read_tmp.s0123;
+    U8_3x3_X4_PROCESS()
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy = w_read_tmp.s3456;
+    U8_3x3_X4_PROCESS()
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy = w_read_tmp.s6789;
+    U8_3x3_X4_PROCESS()
+    dst = convert_uint4(sum * scaleOut + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+
+#define U8_3x3_X4_NOPAD_PROCESS() \
+    input_copy = input_read_tmp.s0123; \
+    _viv_asm(CONV, tmp0, input_copy); \
+    input_copy = input_read_tmp.s1234; \
+    _viv_asm(CONV, tmp2, input_copy); \
+    input_copy = input_read_tmp.s2345; \
+    _viv_asm(CONV, tmp3, input_copy); \
+    _viv_asm(CONV, tmp1, w_copy); \
+    pixel = convert_float4(tmp0); \
+    pixel3 = convert_float4(tmp3); \
+    pixel2 = convert_float4(tmp2); \
+    weightValue = convert_float4(tmp1) -  zpWeight; \
+    sum  +=  pixel  * weightValue.x; \
+    sum  +=  pixel2 * weightValue.y; \
+    sum  +=  pixel3 * weightValue.z;
+
+__kernel void gpuDepthwiseConv_3x3_c1_s1_NoPad_Quant8_x4(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth  = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x >> 2, y, z, 0);
+    int inz = z;
+    int inyStart = y;
+    int inxStart = x;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float4 sum = 0;
+    uint4 dst = {0}, tmp0 = {0}, tmp1 = {0}, tmp2 = {0}, tmp3 = {0};
+    float biasData;
+    float4 pixel = {0.0}, weightValue = {0.0}, pixel2 = {0.0}, pixel3 = {0.0};
+    biasData = convert_float(read_imagei(bias, (int2)(z, 0)));
+    sum = biasData;
+
+    int  input_width = get_image_width(input);
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *inPtr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    Image w_tensor = create_image_from_image2d(weight, 1);
+    uchar *wPtr = get_image_ptr_from_coord(w_tensor, coord_wei);
+    vxc_uchar16  input_read_tmp, w_read_tmp;
+    vxc_uchar4  input_copy = {0};
+    vxc_uchar4  w_copy = {0};
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_read_tmp     = vload16(0, (_viv_uchar_packed *)wPtr);
+
+    w_copy   = w_read_tmp.s0123;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_X4_NOPAD_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy   = w_read_tmp.s3456;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_X4_NOPAD_PROCESS()
+    }
+    inyStart++;
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy   = w_read_tmp.s6789;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        U8_3x3_X4_NOPAD_PROCESS()
+    }
+    dst = convert_uint4(sum * scaleOut + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+
+
+
+__kernel void gpuDepthwiseConv_3x3_c1_s1_NoPad_Quant8_x4_2D(
+    image2d_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int outputHeight,
+    int heigt_diff,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int depth = convert_int(convert_short(y)/convert_short(outputHeight));
+    int inyStart = y + depth * heigt_diff;
+    int2 coord_out = (int2)(x >> 2, y);
+    int inxStart = x;
+    int4 coord_in = (int4)(inxStart, inyStart, inxStart + 1, inxStart + 2);
+    int2 coord_wei = (int2)(0, depth);
+    float4 sum = 0;
+    uint4 dst = {0}, tmp0 = {0}, tmp1 = {0}, tmp2 = {0}, tmp3 = {0};
+    float biasData;
+    float4 pixel = {0.0}, weightValue = {0.0}, pixel2 = {0.0}, pixel3 = {0.0};
+    biasData = convert_float(read_imagei(bias, (int2)(depth, 0)));
+    sum = biasData;
+
+    int  input_width = get_image_width(input);
+    Image in_tensor = create_image_from_image2d(input, 1);
+    uchar *inPtr = get_image_ptr_from_coord(in_tensor, coord_in.xy);
+    Image w_tensor = create_image_from_image2d(weight, 1);
+    uchar *wPtr = get_image_ptr_from_coord(w_tensor, coord_wei);
+    vxc_uchar16  input_read_tmp, w_read_tmp;
+    vxc_uchar4  input_copy = {0};
+    vxc_uchar4  w_copy = {0};
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_read_tmp     = vload16(0, (_viv_uchar_packed *)wPtr);
+
+    w_copy   = w_read_tmp.s0123;
+    U8_3x3_X4_NOPAD_PROCESS()
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy   = w_read_tmp.s3456;
+    U8_3x3_X4_NOPAD_PROCESS()
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy   = w_read_tmp.s6789;
+    U8_3x3_X4_NOPAD_PROCESS()
+    dst = convert_uint4(sum * scaleOut + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+#define U8_3x3_X2_NOPAD_2D_PROCESS() \
+    input_copy.s048c = input_read_tmp.s0123; \
+    _viv_asm(COPY, tmp0, input_copy, 16); \
+    _viv_asm(COPY, tmp1, w_copy, 16); \
+    pixel = convert_float4(tmp0); \
+    pixel2.xyz = pixel.yzw; \
+    weightValue = convert_float4(tmp1) -  zpWeight; \
+    weightValue.w = 0.0f; \
+    sum.x  += dot(pixel, weightValue); \
+    sum.y  += dot(pixel2, weightValue);
+
+__kernel void gpuDepthwiseConv_3x3_c1_s1_NoPad_Quant8_x2_2D(
+    image2d_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int outputHeight,
+    int heigt_diff,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int depth = convert_int(convert_short(y)/convert_short(outputHeight));
+    int inyStart = y + depth * heigt_diff;
+    int2 coord_out = (int2)(x >> 1, y);
+    int inxStart = x;
+    int2 coord_in = (int2)(inxStart, inyStart);
+    int2 coord_wei = (int2)(0, depth);
+    float4 sum = 0;
+    uint4 dst = {0}, tmp0 = {0}, tmp1 = {0};
+    float biasData;
+    float4 pixel = {0.0}, weightValue = {0.0}, pixel2 = {0.0};
+    biasData = convert_float(read_imagei(bias, (int2)(depth, 0)));
+    sum = biasData;
+
+
+    int  input_width = get_image_width(input);
+    Image in_tensor = create_image_from_image2d(input, 1);
+    uchar *inPtr = get_image_ptr_from_coord(in_tensor, coord_in.xy);
+    Image w_tensor = create_image_from_image2d(weight, 1);
+    uchar *wPtr = get_image_ptr_from_coord(w_tensor, coord_wei);
+    vxc_uchar16  input_read_tmp, w_read_tmp;
+    vxc_uchar16  input_copy = {0};
+    vxc_uchar16  w_copy = {0};
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_read_tmp     = vload16(0, (_viv_uchar_packed *)wPtr);
+
+    w_copy.s048c   = w_read_tmp.s0123;
+    U8_3x3_X2_NOPAD_2D_PROCESS()
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy.s048c   = w_read_tmp.s3456;
+    U8_3x3_X2_NOPAD_2D_PROCESS()
+    inPtr += in_tensor.stride_y;
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr);
+    w_copy.s048c   = w_read_tmp.s3456;
+    U8_3x3_X2_NOPAD_2D_PROCESS()
+    dst = convert_uint4(sum * scaleOut + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+__kernel void gpuDepthwiseConv_Quant8(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWeight = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inyEnd = inyStart + kernelY;
+    int inxStart = x * strideX - padX;
+    int inxEnd = inxStart + kernelX;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float sum = 0;
+    int   kernelXLeft = 0;
+    uint4 dst = {0}, tmp0 = {0}, tmp1 = {0};
+    int4 biasData;
+    float pixel = 0.0, weightValue = 0.0;
+
+    inyEnd = min(inyEnd, inputHeight);
+    inxEnd = min(inxEnd, inputWeight);
+    kernelXLeft = kernelX - (inxEnd - inxStart);
+    biasData = convert_int(read_imagei(bias, (int2)(z, 0)));
+    sum = biasData.x;
+
+    if (inz < inputDepth)
+    {
+        for (coord_in.y = inyStart; coord_in.y < inyEnd; coord_in.y++)
+        {
+            for (coord_in.x = inxStart; coord_in.x < inxEnd; coord_in.x++)
+            {
+                tmp0 = read_imageui(input, coord_in);
+                tmp1 = read_imageui(weight, coord_wei);
+                coord_wei.x++;
+
+                pixel = convert_float(tmp0.x) -zpIn;
+                weightValue = convert_float(tmp1.x)-zpWeight;
+                sum += (pixel * weightValue);
+            }
+            coord_wei.x += kernelXLeft;
+        }
+    }
+
+    dst.x = floor(sum * scaleOut + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+
+__kernel void gpuDepthwiseConv_Quant8_Dilation(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_array_t output,
+    int dilateX,
+    int dilateY)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWeight = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inyEnd = inyStart + kernelY * dilateY;
+    int inxStart = x * strideX - padX;
+    int inxEnd = inxStart + kernelX * dilateX;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float sum = 0;
+    int    kernelYOffset = 0;
+    uint4 dst = {0}, tmp0 = {0}, tmp1 = {0};
+    int4 biasData;
+    float pixel = 0.0, weightValue = 0.0;
+
+    inyEnd = min(inyEnd, inputHeight);
+    inxEnd = min(inxEnd, inputWeight);
+    biasData = convert_int(read_imagei(bias, (int2)(z, 0)));
+    sum = biasData.x;
+
+    if (inz < inputDepth)
+    {
+        for (coord_in.y = inyStart; coord_in.y < inyEnd; coord_in.y = coord_in.y + dilateY)
+        {
+            for (coord_in.x = inxStart; coord_in.x < inxEnd; coord_in.x = coord_in.x + dilateX)
+            {
+                tmp0 = read_imageui(input, coord_in);
+                tmp1 = read_imageui(weight, coord_wei);
+                coord_wei.x++;
+
+                pixel = convert_float(tmp0.x) -zpIn;
+                weightValue = convert_float(tmp1.x)-zpWeight;
+                sum += (pixel * weightValue);
+            }
+            kernelYOffset++;
+            coord_wei.x = kernelX * kernelYOffset;
+        }
+    }
+
+    dst.x = floor(sum * scaleOut + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+
+__kernel void gpuDepthwiseConv_PerChannel_Quant8(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_array_t output,
+    __read_only  image2d_t scales)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWeight = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inyEnd = inyStart + kernelY;
+    int inxStart = x * strideX - padX;
+    int inxEnd = inxStart + kernelX;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float sum = 0;
+    int   kernelXLeft = 0;
+    uint4 dst = {0}, tmp0 = {0};
+    int4  weightTmp = {0};
+    int4 biasData;
+    float pixel = 0.0, weightValue = 0.0;
+    float4 scaleVal = read_imagef(scales, coord_out.zw);
+
+    inyEnd = min(inyEnd, inputHeight);
+    inxEnd = min(inxEnd, inputWeight);
+    kernelXLeft = kernelX - (inxEnd - inxStart);
+    biasData = convert_int(read_imagei(bias, (int2)(z, 0)));
+    sum = biasData.x;
+
+    if (inz < inputDepth)
+    {
+        for (coord_in.y = inyStart; coord_in.y < inyEnd; coord_in.y++)
+        {
+            for (coord_in.x = inxStart; coord_in.x < inxEnd; coord_in.x++)
+            {
+                tmp0      = read_imageui(input, coord_in);
+                weightTmp = read_imagei(weight, coord_wei);
+                coord_wei.x++;
+
+                pixel = convert_float(tmp0.x) -zpIn;
+                weightValue = convert_float(weightTmp.x);
+                sum += (pixel * weightValue);
+            }
+            coord_wei.x += kernelXLeft;
+        }
+    }
+
+    dst.x = floor(sum * scaleVal.x + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+__kernel void gpuDepthwiseConv_PerChannel_Quant8_Dilation(
+    image2d_array_t input,
+    image2d_t weight,
+    image2d_t bias,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleOut,
+    float zpIn,
+    float zpWeight,
+    float zpOut,
+    int    zpIn_int,
+    image2d_array_t output,
+    __read_only  image2d_t scales,
+    int dilateX,
+    int dilateY)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWeight = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inyEnd = inyStart + kernelY * dilateY;
+    int inxStart = x * strideX - padX;
+    int inxEnd = inxStart + kernelX * dilateX;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float sum = 0;
+    int    kernelYOffset = 0;
+    uint4 dst = {0}, tmp0 = {0};
+    int4  weightTmp = {0};
+    int4 biasData;
+    float pixel = 0.0, weightValue = 0.0;
+    float4 scaleVal = read_imagef(scales, coord_out.zw);
+
+    inyEnd = min(inyEnd, inputHeight);
+    inxEnd = min(inxEnd, inputWeight);
+    biasData = convert_int(read_imagei(bias, (int2)(z, 0)));
+    sum = biasData.x;
+
+    if (inz < inputDepth)
+    {
+        for (coord_in.y = inyStart; coord_in.y < inyEnd; coord_in.y = coord_in.y + dilateY)
+        {
+            for (coord_in.x = inxStart; coord_in.x < inxEnd; coord_in.x = coord_in.x + dilateX)
+            {
+                tmp0      = read_imageui(input, coord_in);
+                weightTmp = read_imagei(weight, coord_wei);
+                coord_wei.x++;
+
+                pixel = convert_float(tmp0.x) -zpIn;
+                weightValue = convert_float(weightTmp.x);
+                sum += (pixel * weightValue);
+            }
+            kernelYOffset++;
+            coord_wei.x = kernelX * kernelYOffset;
+        }
+    }
+
+    dst.x = floor(sum * scaleVal.x + zpOut);
+    write_imageui(output, coord_out, dst);
+}
+
+__kernel void gpuDepthwiseConvNoBias_3x3_FP32(
+    image2d_array_t input,
+    image2d_t weight,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inxStart = x * strideX - padX;
+    int inxEndLeft = inxStart + kernelX - inputWidth;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei;
+    float sum = 0;
+    float4 dst = {0.0};
+    float4 pixel = {0.0};
+    float4 weightValue = {0.0};
+    int  input_width = get_image_width(input);
+
+    coord_in.x = coord_in.x < 0 ? 0 : coord_in.x;
+    coord_wei = (int2)(0, z);
+
+    vxc_uchar16 tmp_read;
+    int  byte_width  = 4;
+    Tensor in_tensor = create_tensor_from_image2d_array(input, byte_width);
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    Image w_tensor = create_image_from_image2d(weight, byte_width);
+    uchar *w_ptr = get_image_ptr_from_coord(w_tensor, coord_wei);
+
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        F32_3x3_PROCESS()
+    }
+    inyStart++;
+    input_ptr = input_ptr + in_tensor.stride_y;
+    w_ptr = w_ptr + kernelX * byte_width;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        F32_3x3_PROCESS()
+    }
+    inyStart++;
+    input_ptr = input_ptr + in_tensor.stride_y;
+    w_ptr = w_ptr + kernelX * byte_width;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        F32_3x3_PROCESS()
+    }
+
+    dst.x = sum;
+    write_imagef(output, coord_out, dst);
+}
+
+
+
+__kernel void gpuDepthwiseConvNoBias_3x3_FP16(
+    image2d_array_t input,
+    image2d_t weight,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWidth = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inxStart = x * strideX - padX;
+    int inxEndLeft = inxStart + kernelX - inputWidth;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei;
+    float sum = 0;
+    float4 dst = {0.0};
+    float4 pixel = {0.0};
+    float4 weightValue = {0.0};
+    int  input_width = get_image_width(input);
+
+    coord_in.x = coord_in.x < 0 ? 0 : coord_in.x;
+    coord_wei = (int2)(0, z);
+
+    vxc_uchar8 tmp_read;
+    vxc_half4  tmp_half;
+    int  byte_width  = 2;
+    Tensor in_tensor = create_tensor_from_image2d_array(input, byte_width);
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    Image w_tensor = create_image_from_image2d(weight, byte_width);
+    uchar *w_ptr = get_image_ptr_from_coord(w_tensor, coord_wei);
+    half4      tmp_half4;
+    vxc_uchar16 tmp_uchar16 = (vxc_uchar16)(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        F16_3x3_PROCESS()
+    }
+    inyStart++;
+    input_ptr = input_ptr + in_tensor.stride_y;
+    w_ptr = w_ptr + kernelX * byte_width;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        F16_3x3_PROCESS()
+    }
+    inyStart++;
+    input_ptr = input_ptr + in_tensor.stride_y;
+    w_ptr = w_ptr + kernelX * byte_width;
+    if ((inyStart >= 0) && (inyStart < inputHeight))
+    {
+        F16_3x3_PROCESS()
+    }
+
+    dst.x = sum;
+    write_imagef(output, coord_out, dst);
+}
+
+__kernel void gpuDepthwiseConvNoBias_FP32(
+    image2d_array_t input,
+    image2d_t weight,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWeight = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inyEnd = inyStart + kernelY;
+    int inxStart = x * strideX - padX;
+    int inxEnd = inxStart + kernelX;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float sum = 0;
+    int   kernelXLeft = 0;
+    float4 dst = {0.0};
+    float4 pixel = {0.0};
+    float4 weightValue = {0.0};
+
+    inyEnd = min(inyEnd, inputHeight);
+    inxEnd = min(inxEnd, inputWeight);
+    kernelXLeft = kernelX - (inxEnd - inxStart);
+    if (inz < inputDepth)
+    {
+        for (coord_in.y = inyStart; coord_in.y < inyEnd; coord_in.y++)
+        {
+            for (coord_in.x = inxStart; coord_in.x < inxEnd; coord_in.x++)
+            {
+                pixel = read_imagef(input, coord_in);
+                weightValue = read_imagef(weight, coord_wei);
+
+                coord_wei.x++;
+
+                sum += (pixel.x * weightValue.x);
+            }
+            coord_wei.x += kernelXLeft;
+        }
+    }
+
+    dst.x = sum;
+    write_imagef(output, coord_out, dst);
+}
+
+
+__kernel void gpuDepthwiseConvNoBias_FP32_Dilation(
+    image2d_array_t input,
+    image2d_t weight,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    image2d_array_t output,
+    int dilateX,
+    int dilateY)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWeight = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inyEnd = inyStart + kernelY * dilateY;
+    int inxStart = x * strideX - padX;
+    int inxEnd = inxStart + kernelX * dilateX;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float sum = 0;
+    int   kernelYOffset = 0;
+    float4 dst = {0.0};
+    float4 pixel = {0.0};
+    float4 weightValue = {0.0};
+
+    inyEnd = min(inyEnd, inputHeight);
+    inxEnd = min(inxEnd, inputWeight);
+
+    if (inz < inputDepth)
+    {
+        for (coord_in.y = inyStart; coord_in.y < inyEnd; coord_in.y = coord_in.y + dilateY)
+        {
+            for (coord_in.x = inxStart; coord_in.x < inxEnd; coord_in.x = coord_in.x + dilateX)
+            {
+                pixel = read_imagef(input, coord_in);
+                weightValue = read_imagef(weight, coord_wei);
+
+                coord_wei.x++;
+                sum += (pixel.x * weightValue.x);
+            }
+            kernelYOffset++;
+            coord_wei.x = kernelX * kernelYOffset;
+        }
+    }
+
+    dst.x = sum;
+    write_imagef(output, coord_out, dst);
+}
+
+__kernel void gpuDepthwiseConvNoBias_Quant8(
+    image2d_array_t input,
+    image2d_t weight,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleIn,
+    float scaleWeight,
+    float scaleOut,
+    int zpIn,
+    int zpWeight,
+    int zpOut,
+    image2d_array_t output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWeight = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inyEnd = inyStart + kernelY;
+    int inxStart = x * strideX - padX;
+    int inxEnd = inxStart + kernelX;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float sum = 0;
+    int   kernelXLeft = 0;
+    uint4 dst = {0}, tmp = {0};
+    float pixel = 0.0, weightValue = 0.0;
+
+    inyEnd = min(inyEnd, inputHeight);
+    inxEnd = min(inxEnd, inputWeight);
+    kernelXLeft = kernelX - (inxEnd - inxStart);
+    if (inz < inputDepth)
+    {
+        for (coord_in.y = inyStart; coord_in.y < inyEnd; coord_in.y++)
+        {
+            for (coord_in.x = inxStart; coord_in.x < inxEnd; coord_in.x++)
+            {
+                tmp = read_imageui(input, coord_in);
+                pixel = (convert_int(tmp.x-zpIn));
+                tmp = read_imageui(weight, coord_wei);
+                weightValue = (convert_int(tmp.x-zpWeight));
+                sum += (pixel * weightValue);
+                coord_wei.x++;
+            }
+            coord_wei.x += kernelXLeft;
+        }
+    }
+
+    dst.x = floor(sum * scaleOut * scaleIn * scaleWeight + zpOut + 0.5);
+    write_imageui(output, coord_out, dst);
+}
+
+
+__kernel void gpuDepthwiseConvNoBias_Quant8_Dilation(
+    image2d_array_t input,
+    image2d_t weight,
+    int channel_multiplier,
+    int kernelX,
+    int kernelY,
+    int strideX,
+    int strideY,
+    int padX,
+    int padY,
+    float scaleIn,
+    float scaleWeight,
+    float scaleOut,
+    int zpIn,
+    int zpWeight,
+    int zpOut,
+    image2d_array_t output,
+    int dilateX,
+    int dilateY)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inputWeight = get_image_width(input);
+    int inputHeight = get_image_height(input);
+    int inputDepth = get_image_array_size(input);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inz = convert_int(convert_short(z)/convert_short(channel_multiplier));
+    int inyStart = y * strideY - padY;
+    int inyEnd = inyStart + kernelY * dilateY;
+    int inxStart = x * strideX - padX;
+    int inxEnd = inxStart + kernelX * dilateX;
+    int4 coord_in = (int4)(inxStart, inyStart, inz, 0);
+    int2 coord_wei = (int2)(0, z);
+    float sum = 0;
+    int   kernelYOffset = 0;
+    uint4 dst = {0}, tmp = {0};
+    float pixel = 0.0, weightValue = 0.0;
+
+    inyEnd = min(inyEnd, inputHeight);
+    inxEnd = min(inxEnd, inputWeight);
+
+    if (inz < inputDepth)
+    {
+        for (coord_in.y = inyStart; coord_in.y < inyEnd; coord_in.y = coord_in.y + dilateY)
+        {
+            for (coord_in.x = inxStart; coord_in.x < inxEnd; coord_in.x = coord_in.x + dilateX)
+            {
+                tmp = read_imageui(input, coord_in);
+                pixel = (convert_int(tmp.x-zpIn));
+                tmp = read_imageui(weight, coord_wei);
+                weightValue = (convert_int(tmp.x-zpWeight));
+                sum += (pixel * weightValue);
+                coord_wei.x++;
+            }
+            kernelYOffset++;
+            coord_wei.x = kernelX * kernelYOffset;
+        }
+    }
+
+    dst.x = floor(sum * scaleOut * scaleIn * scaleWeight + zpOut + 0.5);
+    write_imageui(output, coord_out, dst);
+}
+
+
+#define DEPTHWISE_U8_NOPAD_S1_PROCESS_PART1() \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int outHeightMod3 = outputHeight - outHeightRem; \
+    int2 coord_out = (int2)(x, y * outputHeight); \
+    int4 coord_in = (int4)(x >> 2, y * height, y * height + 1, y * height + 2); \
+    int2 coord_wei = (int2)(0, y); \
+    float4 sum[3]; \
+    uint4  dst[3]; \
+    Image w_tensor = create_image_from_image2d(weight, 1); \
+    uchar *wPtr = get_image_ptr_from_coord(w_tensor, coord_wei); \
+    vxc_uchar16 w0 = vload16(0, (_viv_uchar_packed *)wPtr); \
+    float4 biasData = convert_float4(read_imagei(bias, coord_wei.yx)); \
+    biasData = biasData.xxxx; \
+    sum[0] = biasData; \
+    sum[1] = biasData; \
+    sum[2] = biasData; \
+    vxc_uchar16  input_read_tmp; \
+    uint4 line0; \
+    uint4 line1; \
+    uint4 line2; \
+    int    input_width = get_image_width(input) * 4; \
+    Image in_tensor = create_image_from_image2d(input, 4); \
+    uchar *inPtr = get_image_ptr_from_coord(in_tensor, coord_in.xy); \
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+    _viv_asm(COPY, line0, input_read_tmp, 16); \
+    inPtr = inPtr + in_tensor.stride_y; \
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+    _viv_asm(COPY, line1, input_read_tmp, 16); \
+    inPtr = inPtr + in_tensor.stride_y; \
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+    _viv_asm(COPY, line2, input_read_tmp, 16); \
+    uint4 bits = (uint4)(8, 8, 8, 8); \
+    uint4 cfg0 = (uint4)(0, 8, 16, 24); \
+    uint4 cfg1 = (uint4)(8, 16, 24, 0); \
+    uint4 cfg2 = (uint4)(16, 24, 0, 8); \
+    uint4 wTmp; \
+    _viv_asm(COPY, wTmp, w0, 16); \
+    uint4 wTmp0 = viv_bitfieldExtract(wTmp.xxxx, cfg0, bits); \
+    uint4 wTmp1 = viv_bitfieldExtract(wTmp.yyyy, cfg0, bits); \
+    uint4 wTmp2 = viv_bitfieldExtract(wTmp.zzzz, cfg0, bits); \
+    float4 w0Data = convert_float4(wTmp0) - zpWeight; \
+    float4 w1Data = convert_float4(wTmp1) - zpWeight; \
+    float4 w2Data = convert_float4(wTmp2) - zpWeight; \
+    uint4 iTmp0  = viv_bitfieldExtract(line0.xxxx, cfg0, bits); \
+    uint4 iTmp1  = viv_bitfieldExtract(line0.xxxy, cfg1, bits); \
+    uint4 iTmp2  = viv_bitfieldExtract(line0.xxyy, cfg2, bits); \
+    float4 iData0 = convert_float4(iTmp0); \
+    float4 iData1 = convert_float4(iTmp1); \
+    float4 iData2 = convert_float4(iTmp2); \
+    sum[0] = iData0 * w0Data.xxxx + sum[0]; \
+    sum[0] = iData1 * w0Data.yyyy + sum[0]; \
+    sum[0] = iData2 * w0Data.zzzz + sum[0]; \
+    iTmp0  = viv_bitfieldExtract(line1.xxxx, cfg0, bits); \
+    iTmp1  = viv_bitfieldExtract(line1.xxxy, cfg1, bits); \
+    iTmp2  = viv_bitfieldExtract(line1.xxyy, cfg2, bits); \
+    iData0 = convert_float4(iTmp0); \
+    iData1 = convert_float4(iTmp1); \
+    iData2 = convert_float4(iTmp2); \
+    sum[0] = iData0 * w0Data.wwww + sum[0]; \
+    sum[0] = iData1 * w1Data.xxxx + sum[0]; \
+    sum[0] = iData2 * w1Data.yyyy + sum[0]; \
+    sum[1] = iData0 * w0Data.xxxx + sum[1]; \
+    sum[1] = iData1 * w0Data.yyyy + sum[1]; \
+    sum[1] = iData2 * w0Data.zzzz + sum[1]; \
+    int index = 0;
+
+#define DEPTHWISE_U8_NOPAD_S1_PROCESS_PART2() \
+        iTmp0  = viv_bitfieldExtract(line2.xxxx, cfg0, bits); \
+        iTmp1  = viv_bitfieldExtract(line2.xxxy, cfg1, bits); \
+        iTmp2  = viv_bitfieldExtract(line2.xxyy, cfg2, bits); \
+        iData0 = convert_float4(iTmp0); \
+        iData1 = convert_float4(iTmp1); \
+        iData2 = convert_float4(iTmp2); \
+        inPtr = inPtr + in_tensor.stride_y; \
+        input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+        _viv_asm(COPY, line0, input_read_tmp, 16); \
+        inPtr = inPtr + in_tensor.stride_y; \
+        input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+        _viv_asm(COPY, line1, input_read_tmp, 16); \
+        inPtr = inPtr + in_tensor.stride_y; \
+        input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+        _viv_asm(COPY, line2, input_read_tmp, 16); \
+        sum[0] = iData0 * w1Data.zzzz + sum[0]; \
+        sum[0] = iData1 * w1Data.wwww + sum[0]; \
+        sum[0] = iData2 * w2Data.xxxx + sum[0]; \
+        sum[1] = iData0 * w0Data.wwww + sum[1]; \
+        sum[1] = iData1 * w1Data.xxxx + sum[1]; \
+        sum[1] = iData2 * w1Data.yyyy + sum[1]; \
+        sum[2] = iData0 * w0Data.xxxx + sum[2]; \
+        sum[2] = iData1 * w0Data.yyyy + sum[2]; \
+        sum[2] = iData2 * w0Data.zzzz + sum[2]; \
+        dst[0] = convert_uint4(sum[0] * scaleOut + zpOut); \
+        sum[0] = biasData;
+
+
+#define DEPTHWISE_U8_NOPAD_S1_PROCESS_PART3() \
+        iTmp0  = viv_bitfieldExtract(line0.xxxx, cfg0, bits); \
+        iTmp1  = viv_bitfieldExtract(line0.xxxy, cfg1, bits); \
+        iTmp2  = viv_bitfieldExtract(line0.xxyy, cfg2, bits); \
+        iData0 = convert_float4(iTmp0); \
+        iData1 = convert_float4(iTmp1); \
+        iData2 = convert_float4(iTmp2); \
+        sum[1] = iData0 * w1Data.zzzz + sum[1]; \
+        sum[1] = iData1 * w1Data.wwww + sum[1]; \
+        sum[1] = iData2 * w2Data.xxxx + sum[1]; \
+        sum[2] = iData0 * w0Data.wwww + sum[2]; \
+        sum[2] = iData1 * w1Data.xxxx + sum[2]; \
+        sum[2] = iData2 * w1Data.yyyy + sum[2]; \
+        sum[0] = iData0 * w0Data.xxxx + sum[0]; \
+        sum[0] = iData1 * w0Data.yyyy + sum[0]; \
+        sum[0] = iData2 * w0Data.zzzz + sum[0]; \
+        dst[1] = convert_uint4(sum[1] * scaleOut + zpOut); \
+        sum[1] = biasData;
+
+
+#define DEPTHWISE_U8_NOPAD_S1_PROCESS_PART4() \
+        iTmp0  = viv_bitfieldExtract(line1.xxxx, cfg0, bits); \
+        iTmp1  = viv_bitfieldExtract(line1.xxxy, cfg1, bits); \
+        iTmp2  = viv_bitfieldExtract(line1.xxyy, cfg2, bits); \
+        iData0 = convert_float4(iTmp0); \
+        iData1 = convert_float4(iTmp1); \
+        iData2 = convert_float4(iTmp2); \
+        sum[2] = iData0 * w1Data.zzzz + sum[2]; \
+        sum[2] = iData1 * w1Data.wwww + sum[2]; \
+        sum[2] = iData2 * w2Data.xxxx + sum[2]; \
+        sum[0] = iData0 * w0Data.wwww + sum[0]; \
+        sum[0] = iData1 * w1Data.xxxx + sum[0]; \
+        sum[0] = iData2 * w1Data.yyyy + sum[0]; \
+        sum[1] = iData0 * w0Data.xxxx + sum[1]; \
+        sum[1] = iData1 * w0Data.yyyy + sum[1]; \
+        sum[1] = iData2 * w0Data.zzzz + sum[1]; \
+        dst[2] = convert_uint4(sum[2] * scaleOut + zpOut); \
+        sum[2] = biasData;
+
+
+__kernel void gpuDepthwiseConv_3x3_s1_Q32_x4_2D
+    (
+    __read_only image2d_t input,
+    __read_only image2d_t weight,
+    __read_only image2d_t       bias,
+    int                         outputHeight,
+    int                         outHeightRem,
+    float                       scaleOut,
+    float                       zpIn,
+    float                       zpWeight,
+    float                       zpOut,
+    int                         height,
+    __write_only image2d_t      output
+    )
+{
+    DEPTHWISE_U8_NOPAD_S1_PROCESS_PART1()
+    coord_out.x >>= 2;
+    do
+    {
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART2()
+        write_imageui(output, coord_out.xy, dst[0]);
+        coord_out.y ++;
+
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART3()
+        write_imageui(output, coord_out.xy, dst[1]);
+        coord_out.y ++;
+
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART4()
+        write_imageui(output, coord_out.xy, dst[2]);
+        coord_out.y ++;
+
+        index += 3;
+    } while (index < outHeightMod3);
+
+    if (outHeightRem)
+    {
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART2()
+        write_imageui(output, coord_out.xy, dst[0]);
+        if (outHeightRem == 1) return;
+        coord_out.y ++;
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART3()
+        write_imageui(output, coord_out.xy, dst[1]);
+    }
+}
+
+
+__kernel void gpuDepthwiseConv_3x3_s1_Q32_s4_2D
+    (
+    __read_only image2d_t input,
+    __read_only image2d_t weight,
+    __read_only image2d_t       bias,
+    int                         outputHeight,
+    int                         outHeightRem,
+    float                       scaleOut,
+    float                       zpIn,
+    float                       zpWeight,
+    float                       zpOut,
+    int                         height,
+    __write_only image2d_t      output
+    )
+{
+    DEPTHWISE_U8_NOPAD_S1_PROCESS_PART1()
+
+    do
+    {
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART2()
+        write_imageui(output, coord_out.xy, dst[0].xxxx);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].yyyy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].zzzz);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].wwww);
+        coord_out.xy += (int2)(-3, 1);
+
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART3()
+        write_imageui(output, coord_out.xy, dst[1].xxxx);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].yyyy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].zzzz);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].wwww);
+        coord_out.xy += (int2)(-3, 1);
+
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART4()
+        write_imageui(output, coord_out.xy, dst[2].xxxx);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[2].yyyy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[2].zzzz);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[2].wwww);
+        coord_out.xy += (int2)(-3, 1);
+
+        index += 3;
+    } while (index < outHeightMod3);
+
+    if (outHeightRem)
+    {
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART2()
+        write_imageui(output, coord_out.xy, dst[0].xxxx);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].yyyy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].zzzz);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].wwww);
+        if (outHeightRem == 1) return;
+        coord_out.xy += (int2)(-3, 1);
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART3()
+        write_imageui(output, coord_out.xy, dst[1].xxxx);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].yyyy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].zzzz);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].wwww);
+    }
+}
+
+
+__kernel void gpuDepthwiseConv_3x3_s1_Q32_s4_r2_2D
+    (
+    __read_only image2d_t input,
+    __read_only image2d_t weight,
+    __read_only image2d_t       bias,
+    int                         outputHeight,
+    int                         outHeightRem,
+    float                       scaleOut,
+    float                       zpIn,
+    float                       zpWeight,
+    float                       zpOut,
+    int                         height,
+    __write_only image2d_t      output
+    )
+{
+    DEPTHWISE_U8_NOPAD_S1_PROCESS_PART1()
+    coord_out.x >>= 1;
+    do
+    {
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART2()
+        write_imageui(output, coord_out.xy, dst[0].xyxy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].zwzw);
+        coord_out.xy += (int2)(-1, 1);
+
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART3()
+        write_imageui(output, coord_out.xy, dst[1].xyxy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].zwzw);
+        coord_out.xy += (int2)(-1, 1);
+
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART4()
+        write_imageui(output, coord_out.xy, dst[2].xyxy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[2].zwzw);
+        coord_out.xy += (int2)(-1, 1);
+
+        index += 3;
+    } while (index < outHeightMod3);
+
+    if (outHeightRem)
+    {
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART2()
+        write_imageui(output, coord_out.xy, dst[0].xyxy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].zwzw);
+        if (outHeightRem == 1) return;
+        coord_out.xy += (int2)(-1, 1);
+        DEPTHWISE_U8_NOPAD_S1_PROCESS_PART3()
+        write_imageui(output, coord_out.xy, dst[1].xyxy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].zwzw);
+    }
+}
+
+#define DEPTHWISE_U8_NOPAD_S2_PROCESS_PART1() \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int outHeightMod3 = outputHeight - outHeightRem; \
+    int2 coord_out = (int2)(x, y * outputHeight); \
+    int4 coord_in = (int4)(x >> 1, y * height, y * height + 1, y * height + 2); \
+    int2 coord_wei = (int2)(0, y); \
+    vxc_uchar16  input_read_tmp; \
+    float4 sum[3]; \
+    uint4  dst[3]; \
+    Image w_tensor = create_image_from_image2d(weight, 1); \
+    uchar *wPtr = get_image_ptr_from_coord(w_tensor, coord_wei); \
+    vxc_uchar16 w0 = vload16(0, (_viv_uchar_packed *)wPtr); \
+    float4 biasData = convert_float4(read_imagei(bias, coord_wei.yx)); \
+    biasData = biasData.xxxx; \
+    sum[0] = biasData; \
+    sum[1] = biasData; \
+    sum[2] = biasData; \
+    uint4 line0; \
+    uint4 line1; \
+    uint4 line2; \
+    int    input_width = get_image_width(input) * 4; \
+    Image in_tensor = create_image_from_image2d(input, 4); \
+    uchar *inPtr = get_image_ptr_from_coord(in_tensor, coord_in.xy); \
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+    _viv_asm(COPY, line0, input_read_tmp, 16); \
+    inPtr = inPtr + in_tensor.stride_y; \
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+    _viv_asm(COPY, line1, input_read_tmp, 16); \
+    inPtr = inPtr + in_tensor.stride_y; \
+    input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+    _viv_asm(COPY, line2, input_read_tmp, 16); \
+    uint4 bits = (uint4)(8, 8, 8, 8); \
+    uint4 cfg0 = (uint4)(0, 8, 16, 24); \
+    uint4 cfg1 = (uint4)(0, 16, 0, 16); \
+    uint4 cfg2 = (uint4)(8, 24, 8, 24); \
+    uint4 cfg3 = (uint4)(16, 0, 16, 0); \
+    uint4 wTmp; \
+    _viv_asm(COPY, wTmp, w0, 16); \
+    uint4 wTmp0 = viv_bitfieldExtract(wTmp.xxxx, cfg0, bits); \
+    uint4 wTmp1 = viv_bitfieldExtract(wTmp.yyyy, cfg0, bits); \
+    uint4 wTmp2 = viv_bitfieldExtract(wTmp.zzzz, cfg0, bits); \
+    float4 w0Data = convert_float4(wTmp0) - zpWeight; \
+    float4 w1Data = convert_float4(wTmp1) - zpWeight; \
+    float4 w2Data = convert_float4(wTmp2) - zpWeight; \
+    uint4 iTmp0  = viv_bitfieldExtract(line0.xxyy, cfg1, bits); \
+    uint4 iTmp1  = viv_bitfieldExtract(line0.xxyy, cfg2, bits); \
+    uint4 iTmp2  = viv_bitfieldExtract(line0.xyyz, cfg3, bits); \
+    float4 iData0 = convert_float4(iTmp0); \
+    float4 iData1 = convert_float4(iTmp1); \
+    float4 iData2 = convert_float4(iTmp2); \
+    sum[0] = iData0 * w0Data.xxxx + sum[0]; \
+    sum[0] = iData1 * w0Data.yyyy + sum[0]; \
+    sum[0] = iData2 * w0Data.zzzz + sum[0]; \
+    iTmp0  = viv_bitfieldExtract(line1.xxyy, cfg1, bits); \
+    iTmp1  = viv_bitfieldExtract(line1.xxyy, cfg2, bits); \
+    iTmp2  = viv_bitfieldExtract(line1.xyyz, cfg3, bits); \
+    iData0 = convert_float4(iTmp0); \
+    iData1 = convert_float4(iTmp1); \
+    iData2 = convert_float4(iTmp2); \
+    sum[0] = iData0 * w0Data.wwww + sum[0]; \
+    sum[0] = iData1 * w1Data.xxxx + sum[0]; \
+    sum[0] = iData2 * w1Data.yyyy + sum[0]; \
+    int index = 0;
+
+#define DEPTHWISE_U8_NOPAD_S2_PROCESS_PART2() \
+        iTmp0  = viv_bitfieldExtract(line2.xxyy, cfg1, bits); \
+        iTmp1  = viv_bitfieldExtract(line2.xxyy, cfg2, bits); \
+        iTmp2  = viv_bitfieldExtract(line2.xyyz, cfg3, bits); \
+        iData0 = convert_float4(iTmp0); \
+        iData1 = convert_float4(iTmp1); \
+        iData2 = convert_float4(iTmp2); \
+        inPtr = inPtr + in_tensor.stride_y; \
+        input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+        _viv_asm(COPY, line0, input_read_tmp, 16); \
+        inPtr = inPtr + in_tensor.stride_y; \
+        input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+        _viv_asm(COPY, line1, input_read_tmp, 16); \
+        inPtr = inPtr + in_tensor.stride_y; \
+        input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+        _viv_asm(COPY, line2, input_read_tmp, 16); \
+        sum[0] = iData0 * w1Data.zzzz + sum[0]; \
+        sum[0] = iData1 * w1Data.wwww + sum[0]; \
+        sum[0] = iData2 * w2Data.xxxx + sum[0]; \
+        sum[1] = iData0 * w0Data.xxxx + sum[1]; \
+        sum[1] = iData1 * w0Data.yyyy + sum[1]; \
+        sum[1] = iData2 * w0Data.zzzz + sum[1]; \
+        dst[0] = convert_uint4(sum[0] * scaleOut + zpOut); \
+        sum[0] = biasData;
+
+#define DEPTHWISE_U8_NOPAD_S2_PROCESS_PART3() \
+        iTmp0  = viv_bitfieldExtract(line0.xxyy, cfg1, bits); \
+        iTmp1  = viv_bitfieldExtract(line0.xxyy, cfg2, bits); \
+        iTmp2  = viv_bitfieldExtract(line0.xyyz, cfg3, bits); \
+        iData0 = convert_float4(iTmp0); \
+        iData1 = convert_float4(iTmp1); \
+        iData2 = convert_float4(iTmp2); \
+        sum[1] = iData0 * w0Data.wwww + sum[1]; \
+        sum[1] = iData1 * w1Data.xxxx + sum[1]; \
+        sum[1] = iData2 * w1Data.yyyy + sum[1]; \
+        iTmp0  = viv_bitfieldExtract(line1.xxyy, cfg1, bits); \
+        iTmp1  = viv_bitfieldExtract(line1.xxyy, cfg2, bits); \
+        iTmp2  = viv_bitfieldExtract(line1.xyyz, cfg3, bits); \
+        iData0 = convert_float4(iTmp0); \
+        iData1 = convert_float4(iTmp1); \
+        iData2 = convert_float4(iTmp2); \
+        sum[1] = iData0 * w1Data.zzzz + sum[1]; \
+        sum[1] = iData1 * w1Data.wwww + sum[1]; \
+        sum[1] = iData2 * w2Data.xxxx + sum[1]; \
+        sum[2] = iData0 * w0Data.xxxx + sum[2]; \
+        sum[2] = iData1 * w0Data.yyyy + sum[2]; \
+        sum[2] = iData2 * w0Data.zzzz + sum[2]; \
+        dst[1] = convert_uint4(sum[1] * scaleOut + zpOut); \
+        sum[1] = biasData;
+
+#define DEPTHWISE_U8_NOPAD_S2_PROCESS_PART4() \
+        iTmp0  = viv_bitfieldExtract(line2.xxyy, cfg1, bits); \
+        iTmp1  = viv_bitfieldExtract(line2.xxyy, cfg2, bits); \
+        iTmp2  = viv_bitfieldExtract(line2.xyyz, cfg3, bits); \
+        iData0 = convert_float4(iTmp0); \
+        iData1 = convert_float4(iTmp1); \
+        iData2 = convert_float4(iTmp2); \
+        inPtr = inPtr + input_width; \
+        input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+        _viv_asm(COPY, line0, input_read_tmp, 16); \
+        inPtr = inPtr + input_width; \
+        input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+        _viv_asm(COPY, line1, input_read_tmp, 16); \
+        inPtr = inPtr + input_width; \
+        input_read_tmp = vload16(0, (_viv_uchar_packed *)inPtr); \
+        _viv_asm(COPY, line2, input_read_tmp, 16); \
+        sum[2] = iData0 * w0Data.wwww + sum[2]; \
+        sum[2] = iData1 * w1Data.xxxx + sum[2]; \
+        sum[2] = iData2 * w1Data.yyyy + sum[2]; \
+        iTmp0  = viv_bitfieldExtract(line0.xxyy, cfg1, bits); \
+        iTmp1  = viv_bitfieldExtract(line0.xxyy, cfg2, bits); \
+        iTmp2  = viv_bitfieldExtract(line0.xyyz, cfg3, bits); \
+        iData0 = convert_float4(iTmp0); \
+        iData1 = convert_float4(iTmp1); \
+        iData2 = convert_float4(iTmp2); \
+        sum[2] = iData0 * w1Data.zzzz + sum[2]; \
+        sum[2] = iData1 * w1Data.wwww + sum[2]; \
+        sum[2] = iData2 * w2Data.xxxx + sum[2]; \
+        dst[2] = convert_uint4(sum[2] * scaleOut + zpOut); \
+        sum[2] = biasData; \
+        sum[0] = iData0 * w0Data.xxxx + sum[0]; \
+        sum[0] = iData1 * w0Data.yyyy + sum[0]; \
+        sum[0] = iData2 * w0Data.zzzz + sum[0]; \
+        iTmp0  = viv_bitfieldExtract(line1.xxyy, cfg1, bits); \
+        iTmp1  = viv_bitfieldExtract(line1.xxyy, cfg2, bits); \
+        iTmp2  = viv_bitfieldExtract(line1.xyyz, cfg3, bits); \
+        iData0 = convert_float4(iTmp0); \
+        iData1 = convert_float4(iTmp1); \
+        iData2 = convert_float4(iTmp2); \
+        sum[0] = iData0 * w0Data.wwww + sum[0]; \
+        sum[0] = iData1 * w1Data.xxxx + sum[0]; \
+        sum[0] = iData2 * w1Data.yyyy + sum[0];
+
+__kernel void gpuDepthwiseConv_3x3_s2_Q32_x4_2D
+    (
+    __read_only image2d_t input,
+    __read_only image2d_t weight,
+    __read_only image2d_t       bias,
+    int                         outputHeight,
+    int                         outHeightRem,
+    float                       scaleOut,
+    float                       zpIn,
+    float                       zpWeight,
+    float                       zpOut,
+    int                         height,
+    __write_only image2d_t      output
+    )
+{
+    DEPTHWISE_U8_NOPAD_S2_PROCESS_PART1()
+    coord_out.x >>= 2;
+    do
+    {
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART2()
+        write_imageui(output, coord_out.xy, dst[0]);
+        coord_out.y ++;
+
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART3()
+        write_imageui(output, coord_out.xy, dst[1]);
+        coord_out.y ++;
+
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART4()
+        write_imageui(output, coord_out.xy, dst[2]);
+        coord_out.y ++;
+
+        index += 3;
+    } while (index < outHeightMod3);
+
+    if (outHeightRem)
+    {
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART2()
+        write_imageui(output, coord_out.xy, dst[0]);
+        if (outHeightRem == 1) return;
+        coord_out.y ++;
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART3()
+        write_imageui(output, coord_out.xy, dst[1]);
+    }
+}
+
+
+__kernel void gpuDepthwiseConv_3x3_s2_Q32_s4_2D
+    (
+    __read_only image2d_t input,
+    __read_only image2d_t weight,
+    __read_only image2d_t       bias,
+    int                         outputHeight,
+    int                         outHeightRem,
+    float                       scaleOut,
+    float                       zpIn,
+    float                       zpWeight,
+    float                       zpOut,
+    int                         height,
+    __write_only image2d_t      output
+    )
+{
+    DEPTHWISE_U8_NOPAD_S2_PROCESS_PART1()
+
+    do
+    {
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART2()
+        write_imageui(output, coord_out.xy, dst[0].xxxx);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].yyyy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].zzzz);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].wwww);
+        coord_out.xy += (int2)(-3, 1);
+
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART3()
+        write_imageui(output, coord_out.xy, dst[1].xxxx);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].yyyy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].zzzz);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].wwww);
+        coord_out.xy += (int2)(-3, 1);
+
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART4()
+        write_imageui(output, coord_out.xy, dst[2].xxxx);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[2].yyyy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[2].zzzz);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[2].wwww);
+        coord_out.xy += (int2)(-3, 1);
+
+        index += 3;
+    } while (index < outHeightMod3);
+
+    if (outHeightRem)
+    {
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART2()
+        write_imageui(output, coord_out.xy, dst[0].xxxx);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].yyyy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].zzzz);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].wwww);
+        if (outHeightRem == 1) return;
+        coord_out.xy += (int2)(-3, 1);
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART3()
+        write_imageui(output, coord_out.xy, dst[1].xxxx);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].yyyy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].zzzz);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].wwww);
+    }
+}
+
+__kernel void gpuDepthwiseConv_3x3_s2_Q32_s4_r2_2D
+    (
+    __read_only image2d_t input,
+    __read_only image2d_t weight,
+    __read_only image2d_t       bias,
+    int                         outputHeight,
+    int                         outHeightRem,
+    float                       scaleOut,
+    float                       zpIn,
+    float                       zpWeight,
+    float                       zpOut,
+    int                         height,
+    __write_only image2d_t      output
+    )
+{
+    DEPTHWISE_U8_NOPAD_S2_PROCESS_PART1()
+    coord_out.x >>= 1;
+    do
+    {
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART2()
+        write_imageui(output, coord_out.xy, dst[0].xyxy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].zwzw);
+        coord_out.xy += (int2)(-1, 1);
+
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART3()
+        write_imageui(output, coord_out.xy, dst[1].xyxy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].zwzw);
+        coord_out.xy += (int2)(-1, 1);
+
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART4()
+        write_imageui(output, coord_out.xy, dst[2].xyxy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[2].zwzw);
+        coord_out.xy += (int2)(-1, 1);
+
+        index += 3;
+    } while (index < outHeightMod3);
+
+    if (outHeightRem)
+    {
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART2()
+        write_imageui(output, coord_out.xy, dst[0].xyxy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[0].zwzw);
+        if (outHeightRem == 1) return;
+        coord_out.xy += (int2)(-1, 1);
+        DEPTHWISE_U8_NOPAD_S2_PROCESS_PART3()
+        write_imageui(output, coord_out.xy, dst[1].xyxy);
+        coord_out.x += 1;
+        write_imageui(output, coord_out.xy, dst[1].zwzw);
+    }
+}

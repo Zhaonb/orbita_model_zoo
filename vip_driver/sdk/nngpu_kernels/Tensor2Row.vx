@@ -1,0 +1,1042 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+typedef _viv_uchar16_packed   vxc_uchar16;
+typedef _viv_uchar8_packed    vxc_uchar8;
+typedef _viv_uchar4_packed    vxc_uchar4;
+typedef _viv_uchar3_packed    vxc_uchar3;
+typedef _viv_uchar2_packed    vxc_uchar2;
+
+typedef _viv_short8_packed    vxc_short8;
+typedef _viv_short4_packed    vxc_short4;
+typedef _viv_short3_packed    vxc_short3;
+typedef _viv_short2_packed    vxc_short2;
+
+
+__kernel void gpuTensor2Row_FP32
+    (
+    image2d_array_t input, int strideX, int strideY, int padX, int padY,
+    int kernelX, int kernelY, int dilateX, int dilateY, image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int xx = 0, yy = 0;
+    float4 pixel;
+    int xRange = kernelX * dilateX;
+    int yRange = kernelY * dilateY;
+
+    int4 coord = (int4)(kernelX * kernelY * z, x, y, 0);
+    int4 coord_in = (int4)(x * strideX - padX, y * strideY - padY, z, 0);
+    int4 coord_in0 = coord_in;
+    do
+    {
+        do
+        {
+            coord_in0.xy = coord_in.xy + (int2)(xx, yy);
+            pixel = read_imagef(input, coord_in0);
+            write_imagef(output, coord, pixel);
+            coord.x ++;
+            xx += dilateX;
+        } while (xx < xRange);
+        yy += dilateY;
+        xx = 0;
+    } while (yy < yRange);
+
+    int width = get_image_width(output);
+    int depth_minus_1 = get_global_size(2) - 1;
+
+    while (coord.x < width && z == depth_minus_1)
+    {
+        pixel = 0;
+        write_imagef(output, coord, pixel);
+        coord.x ++;
+    }
+}
+
+__kernel void gpuTensor2Row_Quant8
+    (
+    image2d_array_t input, int strideX, int strideY, int padX, int padY, int kernelX, int kernelY,
+    int dilateX, int dilateY, image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int xx = 0, yy = 0;
+    uint4 pixel;
+    int xRange = kernelX * dilateX;
+    int yRange = kernelY * dilateY;
+    int4 coord = (int4)(kernelX * kernelY * z, x, y, 0);
+    int4 coord_in = (int4)(x * strideX - padX, y * strideY - padY, z, 0);
+    int4 coord_in0 = coord_in;
+
+    do
+    {
+        do
+        {
+            coord_in0.xy = coord_in.xy + (int2)(xx, yy);
+            pixel = read_imageui(input, coord_in0);
+            write_imageui(output, coord, pixel);
+            coord.x ++;
+            xx += dilateX;
+        } while (xx < xRange);
+        yy += dilateY;
+        xx = 0;
+    } while (yy < yRange);
+
+    int width = get_image_width(output);
+    int depth_minus_1 = get_global_size(2) - 1;
+
+    while (coord.x < width && z == depth_minus_1)
+    {
+        pixel = 0;
+        write_imageui(output, coord, pixel);
+        coord.x ++;
+    }
+}
+
+__kernel void gpuTensor2Row_Quant16
+    (
+    image2d_array_t input, int strideX, int strideY, int padX, int padY, int kernelX, int kernelY,
+    int dilateX, int dilateY, image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int xx = 0, yy = 0;
+    int4 pixel;
+    int xRange = kernelX * dilateX;
+    int yRange = kernelY * dilateY;
+    int4 coord = (int4)(kernelX * kernelY * z, x, y, 0);
+    int4 coord_in = (int4)(x * strideX - padX, y * strideY - padY, z, 0);
+    int4 coord_in0 = coord_in;
+
+    do
+    {
+        do
+        {
+            coord_in0.xy = coord_in.xy + (int2)(xx, yy);
+            pixel = read_imagei(input, coord_in0);
+            write_imagei(output, coord, pixel);
+            coord.x ++;
+            xx += dilateX;
+        } while (xx < xRange);
+        yy += dilateY;
+        xx = 0;
+    } while (yy < yRange);
+
+    int width = get_image_width(output);
+    int depth_minus_1 = get_global_size(2) - 1;
+
+    while (coord.x < width && z == depth_minus_1)
+    {
+        pixel = 0;
+        write_imagei(output, coord, pixel);
+        coord.x ++;
+    }
+}
+
+__kernel void gpuTensor2Row_8Bits_K1S1
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 src0 = read_imageui(input, coord.xy);
+
+    write_imageui(output, coord.yx, src0);
+}
+
+__kernel void gpuTensor2Row_Q32_3x3_s2_dil1_Pad0_x8
+    (
+    image2d_array_t input, int strideX, int strideY, int padX, int padY, int kernelX, unsigned int inputZp,
+    int inputWidth, int outputWidth, image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int xx = 0, yy = 0;
+    int out_x = 3 * z;
+    uint4 tmp0, tmp1, tmp2, tmp3, tmp4, tmp5;
+    uint4 pixel0, pixel1, pixel2;
+    int4 coord_in0 = (int4)(x * strideX, y * strideY - padY, z, 0);
+    int  x_left = coord_in0.x + 17 - inputWidth;
+    int4 coord = (int4)(out_x, y * outputWidth + x, out_x + 1, out_x + 2);
+    int loop = (outputWidth - get_global_id(0)) > 8 ? 8 : outputWidth - get_global_id(0);
+    uint4 bits = (uint4)(8, 8, 8, 8);
+    uint4 cfg = (uint4)(0, 8, 16, 24);
+    uint4 cfg2 = (uint4)(16, 24, 0, 8);
+
+    int  byte_width  = 4;
+
+    int  input_height = get_image_height(input);
+    vxc_uchar16 tmp_read;
+    uint4 zeros = (uint4)(inputZp, inputZp, inputZp, inputZp);
+    Tensor in_tensor = create_tensor_from_image2d_array(input, byte_width);
+    int  input_width  = in_tensor.stride_y;
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in0);
+    tmp_read = vload16(0, (_viv_uchar_packed *)input_ptr);
+    _viv_asm(COPY, tmp0, tmp_read, 16);
+    tmp0 = coord_in0.y >= 0 ? tmp0 : zeros;
+    tmp0 = coord_in0.y < input_height ? tmp0 : zeros;
+    coord_in0.y++;
+
+    input_ptr = input_ptr + input_width;
+    tmp_read = vload16(0, (_viv_uchar_packed *)input_ptr);
+    _viv_asm(COPY, tmp1, tmp_read, 16);
+    tmp1 = coord_in0.y >= 0 ? tmp1 : zeros;
+    tmp1 = coord_in0.y < input_height ? tmp1 : zeros;
+    coord_in0.y++;
+
+    input_ptr = input_ptr + input_width;
+    tmp_read = vload16(0, (_viv_uchar_packed *)input_ptr);
+    _viv_asm(COPY, tmp2, tmp_read, 16);
+    tmp2 = coord_in0.y >= 0 ? tmp2 : zeros;
+    tmp2 = coord_in0.y < input_height ? tmp2 : zeros;
+
+    input_ptr = input_ptr + byte_width * 2;
+
+    tmp_read = vload16(0, (_viv_uchar_packed *)input_ptr);
+    _viv_asm(COPY, tmp5, tmp_read, 16);
+    tmp5 = coord_in0.y >= 0 ? tmp5 : zeros;
+    tmp5 = coord_in0.y < input_height ? tmp5 : zeros;
+    coord_in0.y--;
+
+    input_ptr = input_ptr - input_width;
+    tmp_read = vload16(0, (_viv_uchar_packed *)input_ptr);
+    _viv_asm(COPY, tmp4, tmp_read, 16);
+    tmp4 = coord_in0.y >= 0 ? tmp4 : zeros;
+    tmp4 = coord_in0.y < input_height ? tmp4 : zeros;
+    coord_in0.y--;
+
+    input_ptr = input_ptr - input_width;
+    tmp_read = vload16(0, (_viv_uchar_packed *)input_ptr);
+    _viv_asm(COPY, tmp3, tmp_read, 16);
+    tmp3 = coord_in0.y >= 0 ? tmp3 : zeros;
+    tmp3 = coord_in0.y < input_height ? tmp3 : zeros;
+
+    pixel0 = viv_bitfieldExtract(tmp0.xxxx, cfg, bits);
+    pixel1 = viv_bitfieldExtract(tmp1.xxxx, cfg, bits);
+    pixel2 = viv_bitfieldExtract(tmp2.xxxx, cfg, bits);
+    write_imageui(output, coord.xy, pixel0);
+    write_imageui(output, coord.zy, pixel1);
+    write_imageui(output, coord.wy, pixel2);
+    if (loop == 1) return;
+    coord.y++;
+    pixel0 = viv_bitfieldExtract(tmp0.xxyy, cfg2, bits);
+    pixel1 = viv_bitfieldExtract(tmp1.xxyy, cfg2, bits);
+    pixel2 = viv_bitfieldExtract(tmp2.xxyy, cfg2, bits);
+    write_imageui(output, coord.xy, pixel0);
+    write_imageui(output, coord.zy, pixel1);
+    write_imageui(output, coord.wy, pixel2);
+    if (loop == 2) return;
+    coord.y++;
+    pixel0 = viv_bitfieldExtract(tmp0.yyyy, cfg, bits);
+    pixel1 = viv_bitfieldExtract(tmp1.yyyy, cfg, bits);
+    pixel2 = viv_bitfieldExtract(tmp2.yyyy, cfg, bits);
+    write_imageui(output, coord.xy, pixel0);
+    write_imageui(output, coord.zy, pixel1);
+    write_imageui(output, coord.wy, pixel2);
+    if (loop == 3) return;
+    coord.y++;
+    pixel0 = viv_bitfieldExtract(tmp0.yyzz, cfg2, bits);
+    pixel1 = viv_bitfieldExtract(tmp1.yyzz, cfg2, bits);
+    pixel2 = viv_bitfieldExtract(tmp2.yyzz, cfg2, bits);
+    write_imageui(output, coord.xy, pixel0);
+    write_imageui(output, coord.zy, pixel1);
+    write_imageui(output, coord.wy, pixel2);
+    if (loop == 4) return;
+    coord.y++;
+    pixel0 = viv_bitfieldExtract(tmp3.xxxx, cfg, bits);
+    pixel1 = viv_bitfieldExtract(tmp4.xxxx, cfg, bits);
+    pixel2 = viv_bitfieldExtract(tmp5.xxxx, cfg, bits);
+    write_imageui(output, coord.xy, pixel0);
+    write_imageui(output, coord.zy, pixel1);
+    write_imageui(output, coord.wy, pixel2);
+    if (loop == 5) return;
+    coord.y++;
+    pixel0 = viv_bitfieldExtract(tmp3.xxyy, cfg2, bits);
+    pixel1 = viv_bitfieldExtract(tmp4.xxyy, cfg2, bits);
+    pixel2 = viv_bitfieldExtract(tmp5.xxyy, cfg2, bits);
+    write_imageui(output, coord.xy, pixel0);
+    write_imageui(output, coord.zy, pixel1);
+    write_imageui(output, coord.wy, pixel2);
+    if (loop == 6) return;
+    coord.y++;
+    pixel0 = viv_bitfieldExtract(tmp3.yyyy, cfg, bits);
+    pixel1 = viv_bitfieldExtract(tmp4.yyyy, cfg, bits);
+    pixel2 = viv_bitfieldExtract(tmp5.yyyy, cfg, bits);
+    write_imageui(output, coord.xy, pixel0);
+    write_imageui(output, coord.zy, pixel1);
+    write_imageui(output, coord.wy, pixel2);
+    if (loop == 7) return;
+    coord.y++;
+    pixel0 = viv_bitfieldExtract(tmp3.yyzz, cfg2, bits);
+    pixel1 = viv_bitfieldExtract(tmp4.yyzz, cfg2, bits);
+    pixel2 = viv_bitfieldExtract(tmp5.yyzz, cfg2, bits);
+    pixel0.z = x_left > 0 ? inputZp : pixel0.z;
+    pixel1.z = x_left > 0 ? inputZp : pixel1.z;
+    pixel2.z = x_left > 0 ? inputZp : pixel2.z;
+    write_imageui(output, coord.xy, pixel0);
+    write_imageui(output, coord.zy, pixel1);
+    write_imageui(output, coord.wy, pixel2);
+
+}
+
+
+#define GPUTENSOR2ROW_3x1_S1_DIL1_2D(type_name, src_type, packed_type, byte_width, ZpValue) \
+__kernel void gpuTensor2Row_##type_name##_3x1_s1_dil1_2D \
+    ( \
+    image2d_array_t input, int strideX, int strideY, \
+    int padX, int padY, int kernelX, unsigned int inputZp, \
+    int inputWidth, int outputWidth, image2d_t output \
+    ) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int z = get_global_id(2); \
+    int xx = 0, yy = 0; \
+    int out_x = kernelX * z; \
+    src_type pixel0, pixel1; \
+    int  x_in = x * strideX - padX; \
+    int4 coord_in = (int4)(x_in, y * strideY - padY, z, 0); \
+    int  x_left = coord_in.x + kernelX - inputWidth; \
+    int2 coord = (int2)(out_x, y * outputWidth + x); \
+    coord_in.x = x_in < 0 ? 0 : x_in; \
+    int  input_height = get_image_height(input); \
+    Tensor in_tensor = create_tensor_from_image2d_array(input, byte_width); \
+    int  input_width  = in_tensor.stride_y; \
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in); \
+    pixel0 = vload3(0, (packed_type *)input_ptr); \
+    pixel0 = coord_in.y >= 0 ? pixel0 : ZpValue; \
+    pixel0 = coord_in.y < input_height ? pixel0 : ZpValue; \
+    if (x_in < 0) \
+    { \
+        pixel1 = ZpValue; \
+        switch(x_in) \
+        { \
+            case -1: \
+              pixel1.yz = pixel0.xy; \
+            break; \
+            case -2: \
+              pixel1.z  = pixel0.x; \
+            break; \
+            default: \
+            break; \
+        } \
+    } \
+    else \
+    { \
+        pixel1 = pixel0; \
+    } \
+    if (x_left > 0) \
+    { \
+        switch(x_left) \
+        { \
+            case 1: \
+                pixel1.z = ZpValue; \
+            break; \
+            case 2: \
+                pixel1.yz = ZpValue; \
+            break; \
+            default: \
+                pixel1 = ZpValue; \
+            break; \
+        } \
+    } \
+    Image o_tensor = create_image_from_image2d(output, byte_width); \
+    uchar *output_ptr = get_image_ptr_from_coord(o_tensor, coord.xy); \
+    vstore3(pixel1, 0, (packed_type *)output_ptr); \
+}
+
+GPUTENSOR2ROW_3x1_S1_DIL1_2D(Quant8,  vxc_uchar3, _viv_uchar_packed, 1, ((uchar)inputZp))
+GPUTENSOR2ROW_3x1_S1_DIL1_2D(Quant16, vxc_short3, _viv_short_packed, 2,  0)
+
+
+#define GPUTENSOR2ROW_5x1_S1_DIL1_2D(type_name, src_type, src_type1, src_type2, packed_type, byte_width, ZpValue) \
+__kernel void gpuTensor2Row_##type_name##_5x1_s1_dil1_2D \
+    ( \
+    image2d_array_t input, int strideX, int strideY, \
+    int padX, int padY, int kernelX, unsigned int inputZp, \
+    int inputWidth, int outputWidth, image2d_t output \
+    ) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int z = get_global_id(2); \
+    int xx = 0, yy = 0; \
+    int out_x = kernelX * z; \
+    src_type pixel0, pixel1; \
+    src_type1 pixel2; \
+    src_type2 pixel3; \
+    int  x_in  = x * strideX - padX; \
+    int4 coord_in = (int4)(x_in, y * strideY - padY, z, 0); \
+    int  x_left = coord_in.x + 5 - inputWidth; \
+    int4 coord = (int4)(out_x, y * outputWidth + x, out_x + 1, 0); \
+    coord_in.x = x_in < 0 ? 0 : x_in; \
+    int  input_height = get_image_height(input); \
+    Tensor in_tensor = create_tensor_from_image2d_array(input, byte_width); \
+    int  input_width  = in_tensor.stride_y; \
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in); \
+    pixel0 = vload8(0, (packed_type *)input_ptr); \
+    pixel0 = coord_in.y >= 0 ? pixel0 : ZpValue; \
+    pixel0 = coord_in.y < input_height ? pixel0 : ZpValue; \
+    if (x_in < 0) \
+    { \
+        pixel1 = ZpValue; \
+        switch(x_in) \
+        { \
+            case -1: \
+              pixel1.s1234 = pixel0.s0123; \
+            break; \
+            case -2: \
+              pixel1.s234 = pixel0.s123; \
+            break; \
+            case -3: \
+              pixel1.s34 = pixel0.s12; \
+            break; \
+            case -4: \
+              pixel1.s4 = pixel0.s1; \
+            break; \
+            default: \
+            break; \
+        } \
+    } \
+    else \
+    { \
+        pixel1 = pixel0; \
+    } \
+    if (x_left > 0) \
+    { \
+        switch(x_left) \
+        { \
+            case 1: \
+                pixel1.s4    = ZpValue; \
+            break; \
+            case 2: \
+                pixel1.s34   = ZpValue; \
+            break; \
+            case 3: \
+                pixel1.s234  = ZpValue; \
+            break; \
+            case 4: \
+                pixel1.s1234 = ZpValue; \
+            break; \
+            default: \
+                pixel1 = ZpValue; \
+            break; \
+        } \
+    } \
+    Image o_tensor = create_image_from_image2d(output, byte_width); \
+    uchar *output_ptr = get_image_ptr_from_coord(o_tensor, coord.xy); \
+    pixel2 = pixel1.s012; \
+    vstore3(pixel2, 0, (packed_type *)output_ptr); \
+    output_ptr = output_ptr + 3 * byte_width; \
+    pixel3 = pixel1.s34; \
+    vstore2(pixel3, 0, (packed_type *)output_ptr); \
+}
+
+GPUTENSOR2ROW_5x1_S1_DIL1_2D(Quant8,  vxc_uchar8, vxc_uchar3, vxc_uchar2, _viv_uchar_packed, 1, ((uchar)inputZp))
+GPUTENSOR2ROW_5x1_S1_DIL1_2D(Quant16, vxc_short8, vxc_short3, vxc_short2, _viv_short_packed, 2,  0)
+
+#define GPUTENSOR2ROW_7x1_S1_DIL1_2D(type_name, src_type, src_type1, src_type2, packed_type, byte_width, ZpValue) \
+__kernel void gpuTensor2Row_##type_name##_7x1_s1_dil1_2D \
+    ( \
+    image2d_array_t input, int strideX, int strideY, \
+    int padX, int padY, int kernelX, unsigned int inputZp, \
+    int inputWidth, int outputWidth, image2d_t output \
+    ) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int z = get_global_id(2); \
+    int xx = 0, yy = 0; \
+    int out_x = kernelX * z; \
+    src_type pixel0, pixel1; \
+    src_type1 pixel2; \
+    src_type2 pixel3; \
+    int  x_in  = x * strideX - padX; \
+    int4 coord_in = (int4)(x_in, y * strideY - padY, z, 0); \
+    int  x_left = coord_in.x + 7 - inputWidth; \
+    int4 coord = (int4)(out_x, y * outputWidth + x, out_x + 3, 0); \
+    coord_in.x = x_in < 0 ? 0 : x_in; \
+    int  input_height = get_image_height(input); \
+    Tensor in_tensor = create_tensor_from_image2d_array(input, byte_width); \
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in); \
+    pixel0 = vload8(0, (packed_type *)input_ptr); \
+    pixel0 = coord_in.y >= 0 ? pixel0 : ZpValue; \
+    pixel0 = coord_in.y < input_height ? pixel0 : ZpValue; \
+    if (x_in < 0) \
+    { \
+        pixel1 = ZpValue; \
+        switch(x_in) \
+        { \
+            case -1: \
+              pixel1.s1234 = pixel0.s0123; \
+              pixel1.s56   = pixel0.s45; \
+            break; \
+            case -2: \
+              pixel1.s2345  = pixel0.s0123; \
+              pixel1.s6     = pixel0.s4; \
+            break; \
+            case -3: \
+              pixel1.s3456 = pixel0.s0123; \
+            break; \
+            case -4: \
+              pixel1.s456 = pixel0.s012; \
+            break; \
+            case -5: \
+              pixel1.s56 = pixel0.s01; \
+            break; \
+            case -6: \
+              pixel1.s6 = pixel0.s0; \
+            break; \
+            default: \
+            break; \
+        } \
+    } \
+    else \
+    { \
+        pixel1 = pixel0; \
+    } \
+    if (x_left > 0) \
+    { \
+        switch(x_left) \
+        { \
+            case 1: \
+                pixel1.s6    = ZpValue; \
+            break; \
+            case 2: \
+                pixel1.s56   = ZpValue; \
+            break; \
+            case 3: \
+                pixel1.s456  = ZpValue; \
+            break; \
+            case 4: \
+                pixel1.s3456 = ZpValue; \
+            break; \
+            case 5: \
+                pixel1.s2345 = ZpValue; \
+                pixel1.s6    = ZpValue; \
+            break; \
+            case 6: \
+                pixel1.s1234 = ZpValue; \
+                pixel1.s56   = ZpValue; \
+            break; \
+            default: \
+                pixel1 = ZpValue; \
+            break; \
+        } \
+    } \
+    Image o_tensor = create_image_from_image2d(output, byte_width); \
+    uchar *output_ptr = get_image_ptr_from_coord(o_tensor, coord.xy); \
+    pixel2 = pixel1.s0123; \
+    vstore4(pixel2, 0, (packed_type *)output_ptr); \
+    output_ptr = output_ptr + 4 * byte_width; \
+    pixel3 = pixel1.s456; \
+    vstore3(pixel3, 0, (packed_type *)output_ptr); \
+}
+
+GPUTENSOR2ROW_7x1_S1_DIL1_2D(Quant8,  vxc_uchar8, vxc_uchar4, vxc_uchar3, _viv_uchar_packed, 1, ((uchar)inputZp))
+GPUTENSOR2ROW_7x1_S1_DIL1_2D(Quant16, vxc_short8, vxc_short4, vxc_short3, _viv_short_packed, 2,  0)
+
+#define GPUTENSOR2ROW_1x3_S1_DIL1_2D(type_name, src_type, src_type1, packed_type, byte_width, ZpValue) \
+__kernel void gpuTensor2Row_##type_name##_1x3_s1_dil1_2D \
+    ( \
+    image2d_array_t input, int strideX, int strideY, \
+    int padX, int padY, int kernelX, unsigned int inputZp, \
+    int inputWidth, int outputWidth, image2d_t output \
+    ) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int z = get_global_id(2); \
+    int xx = 0, yy = 0; \
+    int out_x = 3 * z; \
+    src_type pixel[3], pixel1; \
+    src_type1 pixel2; \
+    int4 coord_in = (int4)(x * strideX, y * strideY - padY, z, 0); \
+    int y_out = y * outputWidth + x; \
+    int4 coord = (int4)(out_x, y_out, y_out + 1, y_out + 2); \
+    int loop = (outputWidth - get_global_id(0)) > 4 ? 4 : outputWidth - get_global_id(0); \
+    int  input_height = get_image_height(input); \
+    Tensor in_tensor = create_tensor_from_image2d_array(input, byte_width); \
+    int  input_width  = in_tensor.stride_y; \
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in); \
+    pixel[0] = vload4(0, (packed_type *)input_ptr); \
+    pixel[0] = coord_in.y >= 0 ? pixel[0] : ZpValue; \
+    pixel[0] = coord_in.y < input_height ? pixel[0] : ZpValue; \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[1] = vload4(0, (packed_type *)input_ptr); \
+    pixel[1] = coord_in.y >= 0 ? pixel[1] : ZpValue; \
+    pixel[1] = coord_in.y < input_height ? pixel[1] : ZpValue; \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[2] = vload4(0, (packed_type *)input_ptr); \
+    pixel[2] = coord_in.y >= 0 ? pixel[2] : ZpValue; \
+    pixel[2] = coord_in.y < input_height ? pixel[2] : ZpValue; \
+    pixel1 = pixel[0]; \
+    pixel[0].zw = pixel[1].xy; \
+    pixel[1].xy = pixel1.zw; \
+    pixel1.xy = pixel[0].xz; \
+    pixel1.z  = pixel[2].x; \
+    pixel2    = pixel1.xyz; \
+    Image o_tensor = create_image_from_image2d(output, byte_width); \
+    int  output_width  = o_tensor.stride_y; \
+    uchar *output_ptr = get_image_ptr_from_coord(o_tensor, coord.xy); \
+    vstore3(pixel2, 0, (packed_type *)output_ptr); \
+    if (loop == 1) return; \
+    pixel1.xy = pixel[0].yw; \
+    pixel1.z  = pixel[2].y; \
+    pixel2    = pixel1.xyz; \
+    output_ptr = output_ptr + output_width; \
+    vstore3(pixel2, 0, (packed_type *)output_ptr); \
+    if (loop == 2) return; \
+    pixel1.xy = pixel[1].xz; \
+    pixel1.z  = pixel[2].z; \
+    pixel2    = pixel1.xyz; \
+    output_ptr = output_ptr + output_width; \
+    vstore3(pixel2, 0, (packed_type *)output_ptr); \
+    if (loop == 3) return; \
+    pixel1.xy = pixel[1].yw; \
+    pixel1.z  = pixel[2].w; \
+    pixel2    = pixel1.xyz; \
+    output_ptr = output_ptr + output_width; \
+    vstore3(pixel2, 0, (packed_type *)output_ptr); \
+}
+
+GPUTENSOR2ROW_1x3_S1_DIL1_2D(Quant8,  vxc_uchar4, vxc_uchar3, _viv_uchar_packed, 1, ((uchar)inputZp))
+GPUTENSOR2ROW_1x3_S1_DIL1_2D(Quant16, vxc_short4, vxc_short3, _viv_short_packed, 2,  0)
+
+#define GPUTENSOR2ROW_1x5_S1_DIL1_2D(type_name, src_type, src_type1, src_type2, src_type3, packed_type, byte_width, ZpValue) \
+__kernel void gpuTensor2Row_##type_name##_1x5_s1_dil1_2D \
+    ( \
+    image2d_array_t input, int strideX, int strideY, \
+    int padX, int padY, int kernelX, unsigned int inputZp, \
+    int inputWidth, int outputWidth, image2d_t output \
+    ) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int z = get_global_id(2); \
+    int xx = 0, yy = 0; \
+    int out_x = 5 * z; \
+    src_type pixel[5]; \
+    src_type1 pixel1 = 0; \
+    src_type2 pixel2; \
+    src_type3 pixel3; \
+    int4 coord_in = (int4)(x * strideX, y * strideY - padY, z, 0); \
+    int y_out = y * outputWidth + x; \
+    int4 coord = (int4)(out_x, y_out, out_x + 1, y_out + 1); \
+    int loop = (outputWidth - get_global_id(0)) > 4 ? 4 : outputWidth - get_global_id(0); \
+    int  input_height = get_image_height(input); \
+    Tensor in_tensor = create_tensor_from_image2d_array(input, byte_width); \
+    int  input_width  = in_tensor.stride_y; \
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in); \
+    pixel[0] = vload4(0, (packed_type *)input_ptr); \
+    pixel[0] = coord_in.y >= 0 ? pixel[0] : ZpValue; \
+    pixel[0] = coord_in.y < input_height ? pixel[0] : ZpValue; \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[1] = vload4(0, (packed_type *)input_ptr); \
+    pixel[1] = coord_in.y >= 0 ? pixel[1] : ZpValue; \
+    pixel[1] = coord_in.y < input_height ? pixel[1] : ZpValue; \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[2] = vload4(0, (packed_type *)input_ptr); \
+    pixel[2] = coord_in.y >= 0 ? pixel[2] : ZpValue; \
+    pixel[2] = coord_in.y < input_height ? pixel[2] : ZpValue; \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[3] = vload4(0, (packed_type *)input_ptr); \
+    pixel[3] = coord_in.y >= 0 ? pixel[3] : ZpValue; \
+    pixel[3] = coord_in.y < input_height ? pixel[3] : ZpValue; \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[4] = vload4(0, (packed_type *)input_ptr); \
+    pixel[4] = coord_in.y >= 0 ? pixel[4] : ZpValue; \
+    pixel[4] = coord_in.y < input_height ? pixel[4] : ZpValue; \
+    pixel1.s0123 = pixel[0]; \
+    pixel[0].zw = pixel[1].xy; \
+    pixel[1].xy = pixel1.s23; \
+    pixel1.s0123 = pixel[2]; \
+    pixel[2].zw = pixel[3].xy; \
+    pixel[3].xy = pixel1.s23; \
+    pixel1.s01 = pixel[0].xz; \
+    pixel1.s23 = pixel[2].xz; \
+    pixel1.s4  = pixel[4].x; \
+    Image o_tensor = create_image_from_image2d(output, byte_width); \
+    int  output_width  = o_tensor.stride_y; \
+    uchar *output_ptr = get_image_ptr_from_coord(o_tensor, coord.xy); \
+    pixel2 = pixel1.s012; \
+    vstore3(pixel2, 0, (packed_type *)output_ptr); \
+    pixel3 = pixel1.s34; \
+    output_ptr = output_ptr + 3 * byte_width; \
+    vstore2(pixel3, 0, (packed_type *)output_ptr); \
+    if (loop == 1) return; \
+    pixel1.s01 = pixel[0].yw; \
+    pixel1.s23 = pixel[2].yw; \
+    pixel1.s4  = pixel[4].y; \
+    output_ptr = output_ptr + output_width; \
+    pixel3 = pixel1.s34; \
+    vstore2(pixel3, 0, (packed_type *)output_ptr); \
+    output_ptr = output_ptr - 3 * byte_width; \
+    pixel2 = pixel1.s012; \
+    vstore3(pixel2, 0, (packed_type *)output_ptr); \
+    if (loop == 2) return; \
+    pixel1.s01 = pixel[1].xz; \
+    pixel1.s23 = pixel[3].xz; \
+    pixel1.s4  = pixel[4].z; \
+    output_ptr = output_ptr + output_width; \
+    pixel2 = pixel1.s012; \
+    vstore3(pixel2, 0, (packed_type *)output_ptr); \
+    pixel3 = pixel1.s34; \
+    output_ptr = output_ptr + 3 * byte_width; \
+    vstore2(pixel3, 0, (packed_type *)output_ptr); \
+    if (loop == 3) return; \
+    pixel1.s01 = pixel[1].yw; \
+    pixel1.s23 = pixel[3].yw; \
+    pixel1.s4  = pixel[4].w; \
+    output_ptr = output_ptr + output_width; \
+    pixel3 = pixel1.s34; \
+    vstore2(pixel3, 0, (packed_type *)output_ptr); \
+    output_ptr = output_ptr - 3 * byte_width; \
+    pixel2 = pixel1.s012; \
+    vstore3(pixel2, 0, (packed_type *)output_ptr); \
+}
+
+GPUTENSOR2ROW_1x5_S1_DIL1_2D(Quant8,  vxc_uchar4, vxc_uchar8, vxc_uchar3, vxc_uchar2, _viv_uchar_packed, 1, ((uchar)inputZp))
+GPUTENSOR2ROW_1x5_S1_DIL1_2D(Quant16, vxc_short4, vxc_short8, vxc_short3, vxc_short2, _viv_short_packed, 2,  0)
+
+#define GPUTENSOR2ROW_1x7_S1_DIL1_2D(type_name, src_type, packed_type, byte_width, ZpValue) \
+__kernel void gpuTensor2Row_##type_name##_1x7_s1_dil1_2D \
+    ( \
+    image2d_array_t input, int strideX, int strideY, \
+    int padX, int padY, int kernelX, unsigned int inputZp, \
+    int inputWidth, int outputWidth, image2d_t output \
+    ) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int z = get_global_id(2); \
+    int xx = 0, yy = 0; \
+    int out_x = 7 * z; \
+    src_type pixel[8]; \
+    src_type pixel1; \
+    src_type pixel2; \
+    src_type pixel3; \
+    int4 coord_in = (int4)(x * strideX, y * strideY - padY, z, 0); \
+    int y_out = y * outputWidth + x; \
+    int4 coord = (int4)(out_x, y_out, out_x + 3, y_out + 1); \
+    int loop = (outputWidth - get_global_id(0)) > 4 ? 4 : outputWidth - get_global_id(0); \
+    int  input_height = get_image_height(input); \
+    Tensor in_tensor = create_tensor_from_image2d_array(input, byte_width); \
+    int  input_width  = in_tensor.stride_y; \
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in); \
+    pixel[0] = vload4(0, (packed_type *)input_ptr); \
+    pixel[0] = coord_in.y >= 0 ? pixel[0] : ZpValue; \
+    pixel[0] = coord_in.y < input_height ? pixel[0] : ZpValue; \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[1] = vload4(0, (packed_type *)input_ptr); \
+    pixel[1] = coord_in.y >= 0 ? pixel[1] : ZpValue; \
+    pixel[1] = coord_in.y < input_height ? pixel[1] : ZpValue; \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[2] = vload4(0, (packed_type *)input_ptr); \
+    pixel[2] = coord_in.y >= 0 ? pixel[2] : ZpValue; \
+    pixel[2] = coord_in.y < input_height ? pixel[2] : ZpValue; \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[3] = vload4(0, (packed_type *)input_ptr); \
+    pixel[3] = coord_in.y >= 0 ? pixel[3] : ZpValue; \
+    pixel[3] = coord_in.y < input_height ? pixel[3] : ZpValue; \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[5] = vload4(0, (packed_type *)input_ptr); \
+    pixel[5] = coord_in.y >= 0 ? pixel[5] : ZpValue; \
+    pixel[5] = coord_in.y < input_height ? pixel[5] : ZpValue; \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[6] = vload4(0, (packed_type *)input_ptr); \
+    pixel[6] = coord_in.y >= 0 ? pixel[6] : ZpValue; \
+    pixel[6] = coord_in.y < input_height ? pixel[6] : ZpValue; \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[7] = vload4(0, (packed_type *)input_ptr); \
+    pixel[7] = coord_in.y >= 0 ? pixel[7] : ZpValue; \
+    pixel[7] = coord_in.y < input_height ? pixel[7] : ZpValue; \
+    pixel[4] = pixel[3]; \
+    pixel1 = pixel[0]; \
+    pixel[0].yw = pixel[1].xz; \
+    pixel[1].xz = pixel1.yw; \
+    pixel1 = pixel[2]; \
+    pixel[2].yw = pixel[3].xz; \
+    pixel[3].xz = pixel1.yw; \
+    pixel1 = pixel[4]; \
+    pixel[4].yw = pixel[5].xz; \
+    pixel[5].xz = pixel1.yw; \
+    pixel1 = pixel[6]; \
+    pixel[6].yw = pixel[7].xz; \
+    pixel[7].xz = pixel1.yw; \
+    pixel1 = pixel[0]; \
+    pixel[0].zw = pixel[2].xy; \
+    pixel[2].xy = pixel1.zw; \
+    Image o_tensor = create_image_from_image2d(output, byte_width); \
+    int  output_width  = o_tensor.stride_y; \
+    uchar *output_ptr = get_image_ptr_from_coord(o_tensor, coord.xy); \
+    vstore4(pixel[0], 0, (packed_type *)output_ptr); \
+    pixel1 = pixel[4]; \
+    pixel[4].zw = pixel[6].xy; \
+    pixel[6].xy = pixel1.zw; \
+    output_ptr = output_ptr + 3 * byte_width; \
+    vstore4(pixel[4], 0, (packed_type *)output_ptr); \
+    if (loop == 1) return; \
+    pixel1 = pixel[1]; \
+    pixel[1].zw = pixel[3].xy; \
+    pixel[3].xy = pixel1.zw; \
+    output_ptr = output_ptr - 3 * byte_width + output_width; \
+    vstore4(pixel[1], 0, (packed_type *)output_ptr); \
+    pixel1 = pixel[5]; \
+    pixel[5].zw = pixel[7].xy; \
+    pixel[7].xy = pixel1.zw; \
+    output_ptr = output_ptr + 3 * byte_width; \
+    vstore4(pixel[5], 0, (packed_type *)output_ptr); \
+    if (loop == 2) return; \
+    output_ptr = output_ptr + output_width; \
+    vstore4(pixel[6], 0, (packed_type *)output_ptr); \
+    output_ptr = output_ptr - 3 * byte_width; \
+    vstore4(pixel[2], 0, (packed_type *)output_ptr); \
+    if (loop == 3) return; \
+    output_ptr = output_ptr + output_width; \
+    vstore4(pixel[3], 0, (packed_type *)output_ptr); \
+    output_ptr = output_ptr + 3 * byte_width; \
+    vstore4(pixel[7], 0, (packed_type *)output_ptr); \
+}
+
+GPUTENSOR2ROW_1x7_S1_DIL1_2D(Quant8,  vxc_uchar4, _viv_uchar_packed, 1, ((uchar)inputZp))
+GPUTENSOR2ROW_1x7_S1_DIL1_2D(Quant16, vxc_short4, _viv_short_packed, 2,  0)
+
+
+#define GPUTENSOR2ROW_3x3_DIL1_PAD0_2D(type_name, src_type,  packed_type, byte_width, ZpValue) \
+__kernel void gpuTensor2Row_##type_name##_3x3_dil1_Pad0 \
+    ( \
+    image2d_array_t input, int strideX, int strideY, int padX, int padY, int kernelX, unsigned int inputZp, \
+    int inputWidth, int outputWidth, image2d_t output \
+    ) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int z = get_global_id(2); \
+    int xx = 0, yy = 0; \
+    int out_x = 9 * z; \
+    src_type pixel[3]; \
+    int4 coord_in = (int4)(x * strideX, y * strideY - padY, z, 0); \
+    int  x_left = coord_in.x + 3 - inputWidth; \
+    int4 coord = (int4)(out_x, y * outputWidth + x, out_x + 3, out_x + 6); \
+    int  input_height = get_image_height(input); \
+    Tensor in_tensor = create_tensor_from_image2d_array(input, byte_width); \
+    int  input_width  = in_tensor.stride_y; \
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in); \
+    pixel[0] = vload3(0, (packed_type *)input_ptr); \
+    pixel[0] = coord_in.y >= 0 ? pixel[0] : (ZpValue); \
+    pixel[0] = coord_in.y < input_height ? pixel[0] : (ZpValue); \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[1] = vload3(0, (packed_type *)input_ptr); \
+    pixel[1] = coord_in.y >= 0 ? pixel[1] : (ZpValue); \
+    pixel[1] = coord_in.y < input_height ? pixel[1] : (ZpValue); \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel[2] = vload3(0, (packed_type *)input_ptr); \
+    pixel[2] = coord_in.y >= 0 ? pixel[2] : (ZpValue); \
+    pixel[2] = coord_in.y < input_height ? pixel[2] : (ZpValue); \
+    pixel[0].z = x_left > 0 ? ZpValue : pixel[0].z; \
+    pixel[1].z = x_left > 0 ? ZpValue : pixel[1].z; \
+    pixel[2].z = x_left > 0 ? ZpValue : pixel[2].z; \
+    Image o_tensor = create_image_from_image2d(output, byte_width); \
+    int  output_width  = o_tensor.stride_y; \
+    uchar *output_ptr = get_image_ptr_from_coord(o_tensor, coord.xy); \
+    vstore3(pixel[0], 0, (packed_type *)output_ptr); \
+    output_ptr = output_ptr + 3 * byte_width; \
+    vstore3(pixel[1], 0, (packed_type *)output_ptr); \
+    output_ptr = output_ptr + 3 * byte_width; \
+    vstore3(pixel[2], 0, (packed_type *)output_ptr); \
+}
+
+GPUTENSOR2ROW_3x3_DIL1_PAD0_2D(Quant8,  vxc_uchar3, _viv_uchar_packed, 1, ((uchar)inputZp))
+GPUTENSOR2ROW_3x3_DIL1_PAD0_2D(Quant16, vxc_short3, _viv_short_packed, 2, 0)
+
+
+__kernel void gpuTensor2Row_FP32_3x3_dil1_Pad0
+    (
+    image2d_array_t input, int strideX, int strideY, int padX, int padY, int kernelX, unsigned int inputZp,
+    int inputWidth, int outputWidth, image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int xx = 0, yy = 0;
+    int out_x = 3 * z;
+    float4 pixel[3];
+    int4 coord_in = (int4)(x * strideX, y * strideY - padY, z, 0);
+    int  x_left = coord_in.x + 3 - inputWidth;
+    int4 coord = (int4)(out_x, y * outputWidth + x, out_x + 1, out_x + 2);
+    int  input_height = get_image_height(input);
+    vxc_uchar16 tmp_read;
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 4); \
+    int  input_width  = in_tensor.stride_y; \
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in); \
+    tmp_read = vload16(0, (_viv_uchar_packed *)input_ptr);
+    _viv_asm(COPY, pixel[0], tmp_read, 16);
+    pixel[0] = coord_in.y >= 0 ? pixel[0] : 0.0f;
+    pixel[0] = coord_in.y < input_height ? pixel[0] : 0.0f;
+    coord_in.y++;
+    input_ptr = input_ptr + input_width;
+    tmp_read = vload16(0, (_viv_uchar_packed *)input_ptr);
+    _viv_asm(COPY, pixel[1], tmp_read, 16);
+    pixel[1] = coord_in.y >= 0 ? pixel[1] : 0.0f;
+    pixel[1] = coord_in.y < input_height ? pixel[1] : 0.0f;
+    coord_in.y++;
+    input_ptr = input_ptr + input_width;
+    tmp_read = vload16(0, (_viv_uchar_packed *)input_ptr);
+    _viv_asm(COPY, pixel[2], tmp_read, 16);
+    pixel[2] = coord_in.y >= 0 ? pixel[2] : 0.0f;
+    pixel[2] = coord_in.y < input_height ? pixel[2] : 0.0f;
+    pixel[0].z = x_left > 0 ? 0.0f : pixel[0].z;
+    pixel[1].z = x_left > 0 ? 0.0f : pixel[1].z;
+    pixel[2].z = x_left > 0 ? 0.0f : pixel[2].z;
+    write_imagef(output, coord.xy, pixel[0]);
+    write_imagef(output, coord.zy, pixel[1]);
+    write_imagef(output, coord.wy, pixel[2]);
+}
+
+
+#define GPUTENSOR2ROW_3x3_S1_DIL1_PAD1_2D(type_name, src_type,  packed_type, byte_width, ZpValue) \
+__kernel void gpuTensor2Row_##type_name##_3x3_s1_dil1_Pad1 \
+    ( \
+    image2d_array_t input, int strideX, int strideY, int padX, int padY, int kernelX, unsigned int inputZp, \
+    int inputWidth, int outputWidth, image2d_t output \
+    ) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int z = get_global_id(2); \
+    int xx = 0, yy = 0; \
+    int out_x = 9 * z; \
+    src_type pixel0, pixel1, pixel2; \
+    int  x_in = x * strideX - padX; \
+    int4 coord_in = (int4)(x_in, y * strideY - padY, z, 0); \
+    int  x_left0 = coord_in.x + 3 - inputWidth; \
+    int  x_left1 = coord_in.x + 2 - inputWidth; \
+    int4 coord = (int4)(out_x, y * outputWidth + x, out_x + 3, out_x + 6); \
+    coord_in.x = x_in < 0 ? 0 : x_in; \
+    int  input_height = get_image_height(input); \
+    Tensor in_tensor = create_tensor_from_image2d_array(input, byte_width); \
+    int  input_width  = in_tensor.stride_y; \
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in); \
+    pixel0 = vload3(0, (packed_type *)input_ptr); \
+    pixel0 = coord_in.y >= 0 ? pixel0 : (ZpValue); \
+    pixel0 = coord_in.y < input_height ? pixel0 : (ZpValue); \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel1 = vload3(0, (packed_type *)input_ptr); \
+    pixel1 = coord_in.y >= 0 ? pixel1 : (ZpValue); \
+    pixel1 = coord_in.y < input_height ? pixel1 : (ZpValue); \
+    coord_in.y++; \
+    input_ptr = input_ptr + input_width; \
+    pixel2 = vload3(0, (packed_type *)input_ptr); \
+    pixel2 = coord_in.y >= 0 ? pixel2 : (ZpValue); \
+    pixel2 = coord_in.y < input_height ? pixel2 : (ZpValue); \
+    if (x_in < 0) \
+    { \
+        pixel0.yz  = pixel0.xy; \
+        pixel1.yz  = pixel1.xy; \
+        pixel2.yz  = pixel2.xy; \
+        pixel0.x   = ZpValue; \
+        pixel1.x   = ZpValue; \
+        pixel2.x   = ZpValue; \
+    } \
+    pixel0.z = x_left0 > 0 ? ZpValue : pixel0.z; \
+    pixel1.z = x_left0 > 0 ? ZpValue : pixel1.z; \
+    pixel2.z = x_left0 > 0 ? ZpValue : pixel2.z; \
+    pixel0.y = x_left1 > 0 ? ZpValue : pixel0.y; \
+    pixel1.y = x_left1 > 0 ? ZpValue : pixel1.y; \
+    pixel2.y = x_left1 > 0 ? ZpValue : pixel2.y; \
+    Image o_tensor = create_image_from_image2d(output, byte_width); \
+    int  output_width  = o_tensor.stride_y; \
+    uchar *output_ptr = get_image_ptr_from_coord(o_tensor, coord.xy); \
+    vstore3(pixel0, 0, (packed_type *)output_ptr); \
+    output_ptr = output_ptr + 3 * byte_width; \
+    vstore3(pixel1, 0, (packed_type *)output_ptr); \
+    output_ptr = output_ptr + 3 * byte_width; \
+    vstore3(pixel2, 0, (packed_type *)output_ptr); \
+}
+
+GPUTENSOR2ROW_3x3_S1_DIL1_PAD1_2D(Quant8,  vxc_uchar3, _viv_uchar_packed, 1, ((uchar)inputZp))
+GPUTENSOR2ROW_3x3_S1_DIL1_PAD1_2D(Quant16, vxc_short3, _viv_short_packed, 2, 0)
+
+__kernel void gpuTensor2Row_FP32_3x3_s1_dil1_Pad1
+    (
+    image2d_array_t input, int strideX, int strideY, int padX, int padY, int kernelX, unsigned int inputZp,
+    int inputWidth, int outputWidth, image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int xx = 0, yy = 0;
+    int out_x = 3 * z;
+    float4 pixel0, pixel1, pixel2;
+    int  x_in = x * strideX - padX;
+    int4 coord_in = (int4)(x_in, y * strideY - padY, z, 0);
+    int  x_left = coord_in.x + 3 - inputWidth;
+    int4 coord = (int4)(out_x, y * outputWidth + x, out_x + 1, out_x + 2);
+    coord_in.x = x_in < 0 ? 0 : x_in;
+    int  input_height = get_image_height(input);
+    vxc_uchar16 tmp_read;
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 4); \
+    int  input_width  = in_tensor.stride_y; \
+    uchar *input_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in); \
+    tmp_read = vload16(0, (_viv_uchar_packed *)input_ptr);
+    _viv_asm(COPY, pixel0, tmp_read, 16);
+    pixel0 = coord_in.y >= 0 ? pixel0 : 0.0f;
+    pixel0 = coord_in.y < input_height ? pixel0 : 0.0f;
+    coord_in.y++;
+    input_ptr = input_ptr + input_width;
+    tmp_read = vload16(0, (_viv_uchar_packed *)input_ptr);
+    _viv_asm(COPY, pixel1, tmp_read, 16);
+    pixel1 = coord_in.y >= 0 ? pixel1 : 0.0f;
+    pixel1 = coord_in.y < input_height ? pixel1 : 0.0f;
+    coord_in.y++;
+    input_ptr = input_ptr + input_width;
+    tmp_read = vload16(0, (_viv_uchar_packed *)input_ptr);
+    _viv_asm(COPY, pixel2, tmp_read, 16);
+    pixel2 = coord_in.y >= 0 ? pixel2 : 0.0f;
+    pixel2 = coord_in.y < input_height ? pixel2 : 0.0f;
+
+    if (x_in < 0)
+    {
+        pixel0.yzw = pixel0.xyz;
+        pixel1.yzw = pixel1.xyz;
+        pixel2.yzw = pixel2.xyz;
+        pixel0.x   = 0.0f;
+        pixel1.x   = 0.0f;
+        pixel2.x   = 0.0f;
+    }
+    pixel0.z = x_left > 0 ? 0.0f : pixel0.z;
+    pixel1.z = x_left > 0 ? 0.0f : pixel1.z;
+    pixel2.z = x_left > 0 ? 0.0f : pixel2.z;
+    write_imagef(output, coord.xy, pixel0);
+    write_imagef(output, coord.zy, pixel1);
+    write_imagef(output, coord.wy, pixel2);
+}
+

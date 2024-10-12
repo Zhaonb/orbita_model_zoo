@@ -1,0 +1,395 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+__kernel void non_max_suppression_mask_u8
+    (
+    __read_only    image2d_t     input_img,
+    __read_only    image2d_t     mask_image,
+    __read_only    int           wsize,
+    __write_only   image2d_t     out_image
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int border = wsize >> 1;
+    int i, j;
+    uchar mask_data;
+    uchar nmask_data;
+    uchar neighbor;
+    uchar source;
+    uchar flag;
+    int2 coord_nb;
+
+    VXC_ReadImage(mask_data, mask_image, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(source, input_img, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    if(mask_data != 0)
+    {
+        VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        flag = 1;
+        for(i = -border; i <= border; i++)
+        {
+            for(j = -border; j <= border; j++)
+            {
+                coord_nb = (int2)(coord.x+i, coord.y+j);
+
+                VXC_ReadImage(neighbor, input_img, coord_nb, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+                VXC_ReadImage(nmask_data, mask_image, coord_nb, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+                if((nmask_data == 0)
+                    && ((((j < 0 || (j == 0 && i <= 0)) && (source < neighbor)))
+                    || ((j > 0 || (j == 0 && i > 0)) && (source <= neighbor))))
+                {
+                    flag = 0;
+                    break;
+                }
+            }
+
+            if(flag == 0)
+                break;
+        }
+
+        if(flag == 0)
+            source = 0;
+
+        VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void non_max_suppression_mask_s16
+    (
+    __read_only    image2d_t     input_img,
+    __read_only    image2d_t     mask_image,
+    __read_only    int           wsize,
+    __write_only   image2d_t     out_image
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int border = wsize >> 1;
+    int i, j;
+    uchar mask_data;
+    uchar nmask_data;
+    short neighbor;
+    short source;
+    uchar flag;
+    int2 coord_nb;
+
+    VXC_ReadImage(mask_data, mask_image, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(source, input_img, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    if(mask_data != 0)
+    {
+        VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        flag = 1;
+        for(i = -border; i <= border; i++)
+        {
+            for(j = -border; j <= border; j++)
+            {
+                coord_nb = (int2)(coord.x+i, coord.y+j);
+
+                VXC_ReadImage(neighbor, input_img, coord_nb, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+                VXC_ReadImage(nmask_data, mask_image, coord_nb, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+                if ((nmask_data == 0)
+                    && (((j < 0 || (j == 0 && i <= 0)) && (source < neighbor))
+                    || ((j > 0 || (j == 0 && i > 0)) && (source <= neighbor))))
+                {
+                    flag = 0;
+                    break;
+                }
+            }
+
+            if(flag == 0)
+                break;
+        }
+
+        if(flag == 0)
+            source = -32768;
+
+        VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+
+}
+
+__kernel void non_max_suppression_nomask_u8
+    (
+    __read_only    image2d_t     input_img,
+    __read_only    image2d_t     mask_image,
+    __read_only    int           wsize,
+    __write_only   image2d_t     out_image
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int border = wsize >> 1;
+    int x, y;
+    uchar neighbor;
+    uchar source;
+    int2 coord_nb;
+
+    VXC_ReadImage(source, input_img, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    for (y = -border; y < 0; y++)
+    {
+        for (x = -border; x <= border; x++)
+        {
+            coord_nb = (int2)(coord.x + x, coord.y + y);
+            VXC_ReadImage(neighbor, input_img, coord_nb, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+            if (source < neighbor)
+            {
+                source = 0;
+
+                VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                return;
+            }
+        }
+    }
+
+    for (x = -border; x <= border; x++)
+    {
+        coord_nb = (int2)(coord.x + x, coord.y);
+        VXC_ReadImage(neighbor, input_img, coord_nb, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+        if ((x <= 0 && source < neighbor)
+         || (x > 0 && source <= neighbor))
+        {
+            source = 0;
+
+            VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            return;
+        }
+    }
+
+    for (y = 1; y <= border; y++)
+    {
+        for (x = -border; x <= border; x++)
+        {
+            coord_nb = (int2)(coord.x + x, coord.y + y);
+            VXC_ReadImage(neighbor, input_img, coord_nb, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+            if (source <= neighbor)
+            {
+                source = 0;
+
+                VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                return;
+            }
+        }
+    }
+
+    VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void non_max_suppression_nomask_s16
+    (
+    __read_only    image2d_t     input_img,
+    __read_only    image2d_t     mask_image,
+    __read_only    int           wsize,
+    __write_only   image2d_t     out_image
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int border = wsize >> 1;
+    int x, y;
+    short neighbor;
+    short source;
+    int2 coord_nb;
+
+    VXC_ReadImage(source, input_img, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    for (y = -border; y < 0; y++)
+    {
+        for (x = -border; x <= border; x++)
+        {
+            coord_nb = (int2)(coord.x + x, coord.y + y);
+            VXC_ReadImage(neighbor, input_img, coord_nb, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+            if (source < neighbor)
+            {
+                source = -32768;
+
+                VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                return;
+            }
+        }
+    }
+
+    for (x = -border; x <= border; x++)
+    {
+        coord_nb = (int2)(coord.x + x, coord.y);
+        VXC_ReadImage(neighbor, input_img, coord_nb, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+        if ((x <= 0 && source < neighbor)
+         || (x > 0 && source <= neighbor))
+        {
+            source = -32768;
+
+            VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            return;
+        }
+    }
+
+    for (y = 1; y <= border; y++)
+    {
+        for (x = -border; x <= border; x++)
+        {
+            coord_nb = (int2)(coord.x + x, coord.y + y);
+            VXC_ReadImage(neighbor, input_img, coord_nb, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+            if (source <= neighbor)
+            {
+                source = -32768;
+
+                VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                return;
+            }
+        }
+    }
+
+    VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void non_max_suppression_maskU1_u8
+    (
+    __read_only    image2d_t     input_img,
+    __read_only    image2d_t     mask_image,
+    __read_only    int           wsize,
+    __write_only   image2d_t     out_image
+    )
+{
+    int gidx = get_global_id(0);
+    int2 coord = (int2)(gidx, get_global_id(1));
+    int border = wsize >> 1;
+    int i, j;
+    uchar mask_data;
+    uchar nmask_data;
+    uchar neighbor;
+    uchar source;
+    uchar flag;
+    int2 coord_nb;
+
+    int2 coord_mask = (int2)(gidx >> 3, get_global_id(1));
+    int resPos = gidx & 7;
+    VXC_ReadImage(mask_data, mask_image, coord_mask, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    mask_data = mask_data & (1 << resPos);
+
+    VXC_ReadImage(source, input_img, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    if(mask_data != 0)
+    {
+        VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        flag = 1;
+        for(i = -border; i <= border; i++)
+        {
+            for(j = -border; j <= border; j++)
+            {
+                coord_nb = (int2)(coord.x+i, coord.y+j);
+
+                VXC_ReadImage(neighbor, input_img, coord_nb, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                coord_mask = coord_nb;
+                coord_mask.x >>= 3;
+                resPos = coord_nb.x & 7;
+
+                VXC_ReadImage(nmask_data, mask_image, coord_mask, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                nmask_data = nmask_data & (1 << resPos);
+
+                if((nmask_data == 0)
+                    && ((((j < 0 || (j == 0 && i <= 0)) && (source < neighbor)))
+                    || ((j > 0 || (j == 0 && i > 0)) && (source <= neighbor))))
+                {
+                    flag = 0;
+                    break;
+                }
+            }
+
+            if(flag == 0)
+                break;
+        }
+
+        if(flag == 0)
+            source = 0;
+
+        VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void non_max_suppression_maskU1_s16
+    (
+    __read_only    image2d_t     input_img,
+    __read_only    image2d_t     mask_image,
+    __read_only    int           wsize,
+    __write_only   image2d_t     out_image
+    )
+{
+    int gidx = get_global_id(0);
+    int2 coord = (int2)(gidx, get_global_id(1));
+    int border = wsize >> 1;
+    int i, j;
+    uchar mask_data;
+    uchar nmask_data;
+    short neighbor;
+    short source;
+    uchar flag;
+    int2 coord_nb;
+
+    int2 coord_mask = (int2)(gidx >> 3, get_global_id(1));
+    int resPos = gidx & 7;
+    VXC_ReadImage(mask_data, mask_image, coord_mask, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    mask_data = mask_data & (1 << resPos);
+
+    VXC_ReadImage(source, input_img, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    if(mask_data != 0)
+    {
+        VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        flag = 1;
+        for(i = -border; i <= border; i++)
+        {
+            for(j = -border; j <= border; j++)
+            {
+                coord_nb = (int2)(coord.x+i, coord.y+j);
+
+                VXC_ReadImage(neighbor, input_img, coord_nb, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                coord_mask = coord_nb;
+                coord_mask.x >>= 3;
+                resPos = coord_nb.x & 7;
+
+                VXC_ReadImage(nmask_data, mask_image, coord_mask, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                nmask_data = nmask_data & (1 << resPos);
+
+                if ((nmask_data == 0)
+                    && (((j < 0 || (j == 0 && i <= 0)) && (source < neighbor))
+                    || ((j > 0 || (j == 0 && i > 0)) && (source <= neighbor))))
+                {
+                    flag = 0;
+                    break;
+                }
+            }
+
+            if(flag == 0)
+                break;
+        }
+
+        if(flag == 0)
+            source = -32768;
+
+        VXC_WriteImage(out_image, coord, source, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+
+}

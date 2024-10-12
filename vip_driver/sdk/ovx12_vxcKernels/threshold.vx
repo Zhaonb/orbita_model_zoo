@@ -1,0 +1,347 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+#define FV(t) ((t) | ((t) << 8) | ((t) << 16) | ((t) << 24))
+#define FV2(t) ((t) | ((t) << 16))
+#define FV4(a0, a8, a16, a24) ((a0) | ((a8) << 8) | ((a16) << 16) | ((a24) << 24))
+
+_viv_uniform vxc_int4 packedValueArray;
+_viv_uniform vxc_int4 packedUpperArray;
+_viv_uniform vxc_int4 packedLowerArray;
+_viv_uniform vxc_int4 packedTrueArray;
+_viv_uniform vxc_int4 packedFalseArray;
+
+__kernel void threshold_U8toU8_Binary
+(
+    __read_only  image2d_t input,
+    int nouse,
+    int ture_false,
+    int upper_lower,
+    int type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, value;
+    vxc_uchar16 trueVal, falseVal;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(COPY, value, packedValueArray, 16);
+    _viv_asm(COPY, trueVal, packedTrueArray, 16);
+    _viv_asm(COPY, falseVal, packedFalseArray, 16);
+
+    src0 = src0 > value ? trueVal : falseVal;
+    src1 = src1 > value ? trueVal : falseVal;
+
+    VXC_WriteImage(output, coord, src0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord.y ++;
+    VXC_WriteImage(output, coord, src1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void threshold_S16toU8_Binary
+(
+    __read_only  image2d_t input,
+    int nouse,
+    int ture_false,
+    int upper_lower,
+    int type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_short8 src0, src1, value, trueVal, falseVal;
+    vxc_uchar16 dst0, dst1;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(COPY, value, packedValueArray, 16);
+    _viv_asm(COPY, trueVal, packedTrueArray, 16);
+    _viv_asm(COPY, falseVal, packedFalseArray, 16);
+
+    src0 = src0 > value ? trueVal : falseVal;
+    src1 = src1 > value ? trueVal : falseVal;
+
+    _viv_asm(COPY, dst0, src0, 16);
+    _viv_asm(COPY, dst1, src1, 16);
+    dst0.lo = dst0.s02468ace;
+    dst1.lo = dst1.s02468ace;
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.y ++;
+    VXC_WriteImage(output, coord, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void threshold_U8toU8_Range
+(
+    __read_only  image2d_t input,
+    int nouse,
+    int ture_false,
+    int upper_lower,
+    int type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, upper, lower;
+    vxc_uchar16 trueVal, falseVal;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(COPY, upper, packedUpperArray, 16);
+    _viv_asm(COPY, lower, packedLowerArray, 16);
+    _viv_asm(COPY, trueVal, packedTrueArray, 16);
+    _viv_asm(COPY, falseVal, packedFalseArray, 16);
+
+    src0 = src0 > upper ? falseVal : src0 < lower ? falseVal : trueVal;
+    src1 = src1 > upper ? falseVal : src1 < lower ? falseVal : trueVal;
+
+    VXC_WriteImage(output, coord, src0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord.y ++;
+    VXC_WriteImage(output, coord, src1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void threshold_S16toU8_Range
+(
+    __read_only  image2d_t input,
+    int nouse,
+    int ture_false,
+    int upper_lower,
+    int type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_short8 src0, src1, upper, lower, trueVal, falseVal;
+    vxc_uchar16 dst0, dst1;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(COPY, upper, packedUpperArray, 16);
+    _viv_asm(COPY, lower, packedLowerArray, 16);
+    _viv_asm(COPY, trueVal, packedTrueArray, 16);
+    _viv_asm(COPY, falseVal, packedFalseArray, 16);
+
+    src0 = src0 > upper ? falseVal : src0 < lower ? falseVal : trueVal;
+    src1 = src1 > upper ? falseVal : src1 < lower ? falseVal : trueVal;
+
+    _viv_asm(COPY, dst0, src0, 16);
+    _viv_asm(COPY, dst1, src1, 16);
+    dst0.lo = dst0.s02468ace;
+    dst1.lo = dst1.s02468ace;
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.y ++;
+    VXC_WriteImage(output, coord, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void threshold_U8toU8_Range_Opt
+(
+    __read_only  image2d_t input,
+    int nouse,
+    int ture_false,
+    int upper_lower,
+    int type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, upper, lower;
+    vxc_uchar16 trueVal, falseVal;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(COPY, upper, packedUpperArray, 16);
+    _viv_asm(COPY, lower, packedLowerArray, 16);
+    _viv_asm(COPY, trueVal, packedTrueArray, 16);
+    _viv_asm(COPY, falseVal, packedFalseArray, 16);
+
+    VXC_Clamp(src0, src0, lower, upper, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    VXC_Clamp(src1, src1, lower, upper, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+
+    VXC_WriteImage(output, coord, src0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord.y ++;
+    VXC_WriteImage(output, coord, src1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void threshold_S16toU8_Range_Opt
+(
+    __read_only  image2d_t input,
+    int nouse,
+    int ture_false,
+    int upper_lower,
+    int type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_short8 src0, src1, upper, lower, trueVal, falseVal;
+    vxc_uchar16 dst0, dst1;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(COPY, upper, packedUpperArray, 16);
+    _viv_asm(COPY, lower, packedLowerArray, 16);
+    _viv_asm(COPY, trueVal, packedTrueArray, 16);
+    _viv_asm(COPY, falseVal, packedFalseArray, 16);
+
+    VXC_Clamp(src0, src0, lower, upper, VXC_MODIFIER_CLAMP(0, 7, 0, 1));
+    VXC_Clamp(src1, src1, lower, upper, VXC_MODIFIER_CLAMP(0, 7, 0, 1));
+
+    _viv_asm(COPY, dst0, src0, 16);
+    _viv_asm(COPY, dst1, src1, 16);
+    dst0.lo = dst0.s02468ace;
+    dst1.lo = dst1.s02468ace;
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.y ++;
+    VXC_WriteImage(output, coord, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+
+_viv_uniform VXC_512Bits uniPackedU1toU8_8x4;
+__kernel void threshold_U8toU1_Binary
+(
+    __read_only  image2d_t input,
+    int nouse,
+    int ture_false,
+    int upper_lower,
+    int type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, value, dst;
+    vxc_uchar16 trueVal, falseVal;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.x >>= 3;
+
+    _viv_asm(COPY, value, packedValueArray, 16);
+    _viv_asm(COPY, trueVal, packedTrueArray, 16);
+    _viv_asm(COPY, falseVal, packedFalseArray, 16);
+
+    src0 = src0 > value ? trueVal : falseVal;
+    src1 = src1 > value ? trueVal : falseVal;
+
+    VXC_DP8x4(dst, src0, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniPackedU1toU8_8x4);
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+    coord.y ++;
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void threshold_S16toU1_Binary
+(
+    __read_only  image2d_t input,
+    int nouse,
+    int ture_false,
+    int upper_lower,
+    int type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_short8 src0, src1, value, trueVal, falseVal;
+    vxc_uchar16 dst0, dst1,dst;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord.x >>= 3;
+
+    _viv_asm(COPY, value, packedValueArray, 16);
+    _viv_asm(COPY, trueVal, packedTrueArray, 16);
+    _viv_asm(COPY, falseVal, packedFalseArray, 16);
+
+    src0 = src0 > value ? trueVal : falseVal;
+    src1 = src1 > value ? trueVal : falseVal;
+
+    _viv_asm(COPY, dst0, src0, 16);
+    _viv_asm(COPY, dst1, src1, 16);
+    dst.lo = dst0.s02468ace;
+    dst.hi = dst1.s02468ace;
+
+    VXC_DP8x4(dst, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniPackedU1toU8_8x4);
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    coord.y ++;
+    VXC_WriteImage(output, coord, dst1, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0));
+}
+
+
+__kernel void threshold_U8toU1_Range
+(
+    __read_only  image2d_t input,
+    int nouse,
+    int ture_false,
+    int upper_lower,
+    int type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, upper, lower;
+    vxc_uchar16 trueVal, falseVal, dst;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.x >>= 3;
+
+    _viv_asm(COPY, upper, packedUpperArray, 16);
+    _viv_asm(COPY, lower, packedLowerArray, 16);
+    _viv_asm(COPY, trueVal, packedTrueArray, 16);
+    _viv_asm(COPY, falseVal, packedFalseArray, 16);
+
+    src0 = src0 > upper ? falseVal : src0 < lower ? falseVal : trueVal;
+    src1 = src1 > upper ? falseVal : src1 < lower ? falseVal : trueVal;
+
+    VXC_DP8x4(dst, src0, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniPackedU1toU8_8x4);
+
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+    coord.y ++;
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void threshold_S16toU1_Range
+(
+    __read_only  image2d_t input,
+    int nouse,
+    int ture_false,
+    int upper_lower,
+    int type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_short8 src0, src1, upper, lower, trueVal, falseVal;
+    vxc_uchar16 dst0, dst1, dst;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord.x >>= 3;
+
+    _viv_asm(COPY, upper, packedUpperArray, 16);
+    _viv_asm(COPY, lower, packedLowerArray, 16);
+    _viv_asm(COPY, trueVal, packedTrueArray, 16);
+    _viv_asm(COPY, falseVal, packedFalseArray, 16);
+
+    src0 = src0 > upper ? falseVal : src0 < lower ? falseVal : trueVal;
+    src1 = src1 > upper ? falseVal : src1 < lower ? falseVal : trueVal;
+
+    _viv_asm(COPY, dst0, src0, 16);
+    _viv_asm(COPY, dst1, src1, 16);
+    dst.lo = dst0.s02468ace;
+    dst.hi = dst1.s02468ace;
+
+    VXC_DP8x4(dst, dst, dst, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniPackedU1toU8_8x4);
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    coord.y ++;
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0));
+}

@@ -1,0 +1,33 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#define VX_TAU_PHASE 6.28318530717958647692
+
+__kernel void phase
+(
+    __read_only image2d_t input0,
+    __read_only image2d_t input1,
+    __write_only image2d_t output
+)
+{
+    int2  coord = (int2)(get_global_id(0), get_global_id(1));
+
+    int4 src0 = read_imagei(input0, coord);
+    int4 src1 = read_imagei(input1, coord);
+
+    float val_x = convert_float(src0.x);
+    float val_y = convert_float(src1.x);
+    float arct = atan2(val_y,val_x);
+
+    float norm = arct;
+    if (arct < 0.0f)
+    {
+        norm = VX_TAU_PHASE + arct;
+    }
+
+    norm = norm / VX_TAU_PHASE;
+
+    uint4 dst;
+    dst.x = (uint)((uint)(norm * 256u + 0.5) & 0xFFu);
+    write_imageui(output, coord, dst.xxxx);
+}

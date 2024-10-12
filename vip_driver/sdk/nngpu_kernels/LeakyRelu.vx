@@ -1,0 +1,255 @@
+#define LEAKRELU_FP32_4X_PROCESS() \
+    float4 src0, src1, dst; \
+    src0 = read_imagef(input, coord); \
+    src1 = alpha * src0; \
+    dst = src0 >= 0 ? src0 : src1; \
+    write_imagef(output, coord, dst);
+
+__kernel void gpuLeakyRelu_F32toF32_4X
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           alpha,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    LEAKRELU_FP32_4X_PROCESS()
+}
+
+__kernel void gpuLeakyRelu_F32toF32_2D_4X
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     alpha,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    LEAKRELU_FP32_4X_PROCESS()
+}
+
+#define LEAKRELU_U32_4X_PROCESS() \
+    uint4 src, dst; \
+    float4 inPixel0, inPixel1, outPixel; \
+    src = read_imageui(input, coord); \
+    inPixel0 = convert_float4(src) * input_scale + input_tail; \
+    inPixel1 = alpha * inPixel0; \
+    outPixel = inPixel0 > 0 ? inPixel0 : inPixel1; \
+    dst = convert_uint4_rte(outPixel * output_scale + output_zp); \
+    write_imageui(output, coord, dst);
+
+__kernel void gpuLeakyRelu_U32toU32_4X
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           alpha,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    LEAKRELU_U32_4X_PROCESS()
+}
+
+__kernel void gpuLeakyRelu_U32toU32_2D_4X
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     alpha,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    LEAKRELU_U32_4X_PROCESS()
+}
+
+
+#define LEAKRELU_FP32_4S_PROCESS() \
+    float4 src0, src1, dst; \
+    src0 = read_imagef(input, coord); \
+    coord.x *= 4; \
+    src1 = alpha * src0; \
+    dst = src0 >= 0 ? src0 : src1; \
+    write_imagef(output, coord, dst.xxxx); \
+    coord.x++; \
+    write_imagef(output, coord, dst.yyyy); \
+    coord.x++; \
+    write_imagef(output, coord, dst.zzzz); \
+    coord.x++; \
+    write_imagef(output, coord, dst.wwww);
+
+__kernel void gpuLeakyRelu_F32toF32_4S
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           alpha,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    LEAKRELU_FP32_4S_PROCESS()
+}
+
+__kernel void gpuLeakyRelu_F32toF32_2D_4S
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     alpha,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    LEAKRELU_FP32_4S_PROCESS()
+}
+
+#define LEAKRELU_U32_4S_PROCESS() \
+    uint4 src, dst; \
+    float4 inPixel0, inPixel1, outPixel; \
+    src = read_imageui(input, coord); \
+    coord.x *= 4; \
+    inPixel0 = convert_float4(src) * input_scale + input_tail; \
+    inPixel1 = alpha * inPixel0; \
+    outPixel = inPixel0 > 0 ? inPixel0 : inPixel1; \
+    dst = convert_uint4_rte(outPixel * output_scale + output_zp); \
+    write_imageui(output, coord, dst.xxxx); \
+    coord.x++; \
+    write_imageui(output, coord, dst.yyyy); \
+    coord.x++; \
+    write_imageui(output, coord, dst.zzzz); \
+    coord.x++; \
+    write_imageui(output, coord, dst.wwww);
+
+__kernel void gpuLeakyRelu_U32toU32_4S
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           alpha,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    LEAKRELU_U32_4S_PROCESS()
+}
+
+__kernel void gpuLeakyRelu_U32toU32_2D_4S
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     alpha,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    LEAKRELU_U32_4S_PROCESS()
+}
+
+#define LEAKRELU_I32_4X_PROCESS() \
+    int4 src, dst; \
+    float4 inPixel0, inPixel1, outPixel; \
+    src = read_imagei(input, coord); \
+    inPixel0 = convert_float4(src) * input_scale + input_tail; \
+    inPixel1 = alpha * inPixel0; \
+    outPixel = inPixel0 > 0 ? inPixel0 : inPixel1; \
+    dst = convert_int4_rte(outPixel * output_scale + output_zp); \
+    write_imagei(output, coord, dst);
+
+__kernel void gpuLeakyRelu_I32toI32_4X
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           alpha,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    LEAKRELU_I32_4X_PROCESS()
+}
+
+__kernel void gpuLeakyRelu_I32toI32_2D_4X
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     alpha,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    LEAKRELU_I32_4X_PROCESS()
+}
+
+#define LEAKRELU_I32_4S_PROCESS() \
+    int4 src, dst; \
+    float4 inPixel0, inPixel1, outPixel; \
+    src = read_imagei(input, coord); \
+    coord.x *= 4; \
+    inPixel0 = convert_float4(src) * input_scale + input_tail; \
+    inPixel1 = alpha * inPixel0; \
+    outPixel = inPixel0 > 0 ? inPixel0 : inPixel1; \
+    dst = convert_int4_rte(outPixel * output_scale + output_zp); \
+    write_imagei(output, coord, dst.xxxx); \
+    coord.x++; \
+    write_imagei(output, coord, dst.yyyy); \
+    coord.x++; \
+    write_imagei(output, coord, dst.zzzz); \
+    coord.x++; \
+    write_imagei(output, coord, dst.wwww);
+
+__kernel void gpuLeakyRelu_I32toI32_4S
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           alpha,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    LEAKRELU_I32_4S_PROCESS()
+}
+
+__kernel void gpuLeakyRelu_I32toI32_2D_4S
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     alpha,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    LEAKRELU_I32_4S_PROCESS()
+}

@@ -1,0 +1,131 @@
+int IsFastCorner(
+    uint  buf[16],
+    uint  src,
+    uint  _threshold
+)
+{
+    int i = 0;
+    int count = 0;
+    int MoreOrLess = 0;
+    int tempMaxDiffrence = 0;
+    int MaxDiffrence = 0;
+    int head_count = 0;
+    int head_MoreOrLess = 0;
+    int head_tempMaxDiffrence = 0;
+    int ifhead = 2;
+    for (i = 0; i < 16; i++)
+    {
+        if (src + _threshold < buf[i])
+        {
+            if (MoreOrLess != -1)
+            {
+                ifhead--;
+                tempMaxDiffrence = 0;
+                count = 1;
+            }
+            else
+            {
+                count++;
+            }
+            tempMaxDiffrence = buf[i] - src > tempMaxDiffrence? buf[i] - src : tempMaxDiffrence;
+            MoreOrLess = -1;
+        }
+        else if (src > buf[i] + _threshold)
+        {
+            if (MoreOrLess != 1)
+            {
+                ifhead--;
+                tempMaxDiffrence = 0;
+                count = 1;
+            }
+            else
+            {
+                count++;
+            }
+            tempMaxDiffrence = src - buf[i] > tempMaxDiffrence? src - buf[i] : tempMaxDiffrence;
+            MoreOrLess = 1;
+        }
+        else
+        {
+            tempMaxDiffrence = 0;
+            MoreOrLess = 0;
+            count = 0;
+            ifhead--;
+        }
+
+        if (count >= 9)
+        {
+            MaxDiffrence = max(MaxDiffrence,tempMaxDiffrence);
+        }
+
+        if (ifhead > 0)
+        {
+            head_count = count;
+            head_MoreOrLess = MoreOrLess;
+            head_tempMaxDiffrence = tempMaxDiffrence;
+        }
+    }
+
+    if (head_MoreOrLess == MoreOrLess && head_MoreOrLess != 0 && count + head_count >= 9)
+    {
+        MaxDiffrence = max(MaxDiffrence, max(tempMaxDiffrence,head_tempMaxDiffrence));
+    }
+    return MaxDiffrence;
+}
+
+__kernel void fast9corners_strength(
+    __read_only    image2d_t     input,
+                   float         threshold,
+                   int           do_nonmax,
+    __write_only   image2d_t     output
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+
+    uint strength = convert_uint(threshold);
+    uint MaxDiffrence = 255;
+    uint c = 0;
+    uint buf[16];
+    int width = get_image_width(input);
+    int height = get_image_height(input);
+
+    if (x < 3 || y < 3 || x >= width - 3 || y >= height - 3)
+    {
+        write_imageui(output, (int2)(x,y), (uint4)(0,0,0,0));
+        return;
+    }
+
+    uint src = read_imageui(input, (int2)(x,y)).x;
+    buf[0] = read_imageui(input, (int2)(x,y - 3)).x;
+    buf[1] = read_imageui(input, (int2)(x + 1,y - 3)).x;
+    buf[2] = read_imageui(input, (int2)(x + 2,y - 2)).x;
+    buf[3] = read_imageui(input, (int2)(x + 3,y - 1)).x;
+    buf[4] = read_imageui(input, (int2)(x + 3,y)).x;
+    buf[5] = read_imageui(input, (int2)(x + 3,y + 1)).x;
+    buf[6] = read_imageui(input, (int2)(x + 2,y + 2)).x;
+    buf[7] = read_imageui(input, (int2)(x + 1,y + 3)).x;
+    buf[8] = read_imageui(input, (int2)(x,y + 3)).x;
+    buf[9] = read_imageui(input, (int2)(x - 1,y + 3)).x;
+    buf[10] = read_imageui(input, (int2)(x - 2,y + 2)).x;
+    buf[11] = read_imageui(input, (int2)(x - 3,y + 1)).x;
+    buf[12] = read_imageui(input, (int2)(x - 3,y)).x;
+    buf[13] = read_imageui(input, (int2)(x - 3,y - 1)).x;
+    buf[14] = read_imageui(input, (int2)(x - 2,y - 2)).x;
+    buf[15] = read_imageui(input, (int2)(x - 1,y - 3)).x;
+
+    MaxDiffrence = convert_uint(IsFastCorner(buf, src, strength));
+    if (MaxDiffrence == 0)
+    {
+        write_imageui(output, (int2)(x,y), (uint4)(0,0,0,0));
+        return;
+    }
+    while (MaxDiffrence > strength + 1)
+    {
+        c = (MaxDiffrence + strength) >> 1;
+        if (IsFastCorner(buf, src, c) != 0) strength = c;
+        else MaxDiffrence = c;
+    }
+    write_imageui(output, (int2)(x,y), (uint4)(strength,0,0,0));
+
+}

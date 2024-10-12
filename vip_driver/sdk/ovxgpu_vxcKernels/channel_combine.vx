@@ -1,0 +1,246 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int height_y;
+_viv_uniform int height_rsYu;
+_viv_uniform int height_rsy;
+_viv_uniform int height_u;
+_viv_uniform int width;
+
+__kernel void channel_combine_rgb
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __read_only  image2d_t input2,
+    __read_only  image2d_t input3,
+    __write_only image2d_t output,
+    __write_only image2d_t output0,
+    __write_only image2d_t output1,
+    __write_only image2d_t output2
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 rgb;
+    rgb.x = read_imageui(input0, coord).x;
+    rgb.y = read_imageui(input1, coord).x;
+    rgb.z = read_imageui(input2, coord).x;
+    write_imageui(output, coord, rgb);
+}
+
+__kernel void channel_combine_rgbx
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __read_only  image2d_t input2,
+    __read_only  image2d_t input3,
+    __write_only image2d_t output,
+    __write_only image2d_t output0,
+    __write_only image2d_t output1,
+    __write_only image2d_t output2
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 rgba;
+    rgba.x = read_imageui(input0, coord).x;
+    rgba.y = read_imageui(input1, coord).x;
+    rgba.z = read_imageui(input2, coord).x;
+    rgba.w = read_imageui(input3, coord).x;
+    write_imageui(output, coord, rgba);
+}
+
+// 4:2:2
+// u0 y0 v0 y1    u1 y2 v1 y3
+// follow uv width
+__kernel void channel_combine_uyvy
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __read_only  image2d_t input2,
+    __read_only  image2d_t input3,
+    __write_only image2d_t output,
+    __write_only image2d_t output0,
+    __write_only image2d_t output1,
+    __write_only image2d_t output2
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) * 2, get_global_id(0) * 2 + 1);
+    int4 coord_out = (int4)(get_global_id(0) * 4, get_global_id(1), get_global_id(0) * 4 + 1, get_global_id(0) * 4 + 2);
+    uint4 u = read_imageui(input1, coord.xy);
+    uint4 y0 = read_imageui(input0, coord.zy);
+    uint4 v = read_imageui(input2, coord.xy);
+    uint4 y1 = read_imageui(input0, coord.wy);
+    write_imageui(output, coord_out.xy, u);
+    write_imageui(output, coord_out.zy, y0);
+    write_imageui(output, coord_out.wy, v);
+    coord_out.w+=1;
+    write_imageui(output, coord_out.wy, y1);
+}
+
+// 4:2:2
+// y0 u0 y1 v0    y2 u1 y3 v1
+// follow uv width
+__kernel void channel_combine_yuyv
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __read_only  image2d_t input2,
+    __read_only  image2d_t input3,
+    __write_only image2d_t output,
+    __write_only image2d_t output0,
+    __write_only image2d_t output1,
+    __write_only image2d_t output2
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) * 2, get_global_id(0) * 2 + 1);
+    int4 coord_out = (int4)(get_global_id(0) * 4, get_global_id(1), get_global_id(0) * 4 + 1, get_global_id(0) * 4 + 2);
+
+    uint4 y0 = read_imageui(input0, coord.zy);
+    uint4 u = read_imageui(input1, coord.xy);
+    uint4 y1 = read_imageui(input0, coord.wy);
+    uint4 v = read_imageui(input2, coord.xy);
+
+    write_imageui(output, coord_out.xy, y0);
+    write_imageui(output, coord_out.zy, u);
+    write_imageui(output, coord_out.wy, y1);
+    coord_out.w+=1;
+    write_imageui(output, coord_out.wy, v);
+}
+
+// 4:2:0
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 v0 u1 v1
+// follow uv width
+__kernel void channel_combine_nv12
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __read_only  image2d_t input2,
+    __read_only  image2d_t input3,
+    __write_only image2d_t output,
+    __write_only image2d_t output0,
+    __write_only image2d_t output1,
+    __write_only image2d_t output2
+    )
+{
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1));
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+
+    uint4 y00 = read_imageui(input0, coord.xy);
+    uint4 y01 = read_imageui(input0, coord.zy);
+    uint4 y10 = read_imageui(input0, coord.xw);
+    uint4 y11 = read_imageui(input0, coord.zw);
+
+    uint4 u = read_imageui(input1, coord_c);
+    uint4 v = read_imageui(input2, coord_c);
+
+    write_imageui(output0, coord.xy, y00);
+    write_imageui(output0, coord.zy, y01);
+    write_imageui(output0, coord.xw, y10);
+    write_imageui(output0, coord.zw, y11);
+    coord.y = get_global_id(1);
+
+    write_imageui(output1, coord.xy, u);
+    write_imageui(output1, coord.zy, v);
+}
+
+// 4:2:0
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// v0 u0 v1 u1
+// follow uv width
+__kernel void channel_combine_nv21
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __read_only  image2d_t input2,
+    __read_only  image2d_t input3,
+    __write_only image2d_t output,
+    __write_only image2d_t output0,
+    __write_only image2d_t output1,
+    __write_only image2d_t output2
+    )
+{
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1));
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+
+    uint4 y00 = read_imageui(input0, coord.xy);
+    uint4 y01 = read_imageui(input0, coord.zy);
+    uint4 y10 = read_imageui(input0, coord.xw);
+    uint4 y11 = read_imageui(input0, coord.zw);
+
+    uint4 u = read_imageui(input1, coord_c);
+    uint4 v = read_imageui(input2, coord_c);
+
+    write_imageui(output0, coord.xy, y00);
+    write_imageui(output0, coord.zy, y01);
+    write_imageui(output0, coord.xw, y10);
+    write_imageui(output0, coord.zw, y11);
+    coord.y = get_global_id(1);
+
+    write_imageui(output1, coord.xy, v);
+    write_imageui(output1, coord.zy, u);
+}
+
+// 4:2:0
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 u1
+// v0 v1
+// reshape y width to uv width, main uv
+__kernel void channel_combine_iyuv
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __read_only  image2d_t input2,
+    __read_only  image2d_t input3,
+    __write_only image2d_t output,
+    __write_only image2d_t output0,
+    __write_only image2d_t output1,
+    __write_only image2d_t output2
+    )
+{
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1));
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+
+    uint4 y00 = read_imageui(input0, coord.xy);
+    uint4 y01 = read_imageui(input0, coord.zy);
+    uint4 y10 = read_imageui(input0, coord.xw);
+    uint4 y11 = read_imageui(input0, coord.zw);
+
+    uint4 u = read_imageui(input1, coord_c);
+    uint4 v = read_imageui(input2, coord_c);
+
+    write_imageui(output0, coord.xy, y00);
+    write_imageui(output0, coord.zy, y01);
+    write_imageui(output0, coord.xw, y10);
+    write_imageui(output0, coord.zw, y11);
+
+    write_imageui(output1, coord_c, u);
+    write_imageui(output2, coord_c, v);
+}
+
+// yuv4:4:4
+__kernel void channel_combine_yuv4
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __read_only  image2d_t input2,
+    __read_only  image2d_t input3,
+    __write_only image2d_t output,
+    __write_only image2d_t output0,
+    __write_only image2d_t output1,
+    __write_only image2d_t output2
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 y = read_imageui(input0, coord);
+    uint4 u = read_imageui(input1, coord);
+    uint4 v = read_imageui(input2, coord);
+
+    write_imageui(output0, coord, y);
+    write_imageui(output1, coord, u);
+    write_imageui(output2, coord, v);
+}

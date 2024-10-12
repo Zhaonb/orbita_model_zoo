@@ -1,0 +1,304 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+
+#define MULTIPLY_A_TIMES_B(name0, name1, name2, name3, name4, type0, type1, type2, read_func0, read_func1, write_func, conv_func) \
+    __kernel void multiply_##name0##Times##name1##to##name2##_##name3##_##name4 \
+    ( \
+    __read_only  image2d_t input0, \
+    __read_only  image2d_t input1, \
+                 float     scale, \
+                 int       overflow_policy, \
+                 int       round_policy, \
+    __write_only image2d_t output \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+ \
+    type0 src0 = read_func0(input0, coord); \
+    type1 src1 = read_func1(input1, coord); \
+ \
+    int4 t0, t1; \
+    _viv_asm(CONV, t0, src0); \
+    _viv_asm(CONV, t1, src1); \
+    int tmp = convert_int(convert_float(t0.x * t1.x) * scale); \
+ \
+    type2 dst;\
+    dst.x = conv_func(tmp); \
+ \
+    write_func(output, coord, dst); \
+}
+MULTIPLY_A_TIMES_B(U8,  U8,  U8,  Sat,  RTE, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B(U8,  U8,  U8,  Sat,  RTZ, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B(U8,  U8,  U8,  Wrap, RTE, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B(U8,  U8,  U8,  Wrap, RTZ, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B(U8,  U8,  I16, Sat,  RTE, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B(U8,  U8,  I16, Sat,  RTZ, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B(U8,  U8,  I16, Wrap, RTE, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B(U8,  U8,  I16, Wrap, RTZ, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_rtz)
+
+MULTIPLY_A_TIMES_B(U8,  I16, U8,  Sat,  RTE, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B(U8,  I16, U8,  Sat,  RTZ, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B(U8,  I16, U8,  Wrap, RTE, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B(U8,  I16, U8,  Wrap, RTZ, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B(U8,  I16, I16, Sat,  RTE, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B(U8,  I16, I16, Sat,  RTZ, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B(U8,  I16, I16, Wrap, RTE, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B(U8,  I16, I16, Wrap, RTZ, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_rtz)
+
+MULTIPLY_A_TIMES_B(I16, U8,  U8,  Sat,  RTE, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B(I16, U8,  U8,  Sat,  RTZ, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B(I16, U8,  U8,  Wrap, RTE, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B(I16, U8,  U8,  Wrap, RTZ, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B(I16, U8,  I16, Sat,  RTE, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B(I16, U8,  I16, Sat,  RTZ, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B(I16, U8,  I16, Wrap, RTE, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B(I16, U8,  I16, Wrap, RTZ, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_rtz)
+
+//MULTIPLY_A_TIMES_B(I16, I16, U8,  Sat,  RTE, short4, short4, uchar4, 2, 2, 1, convert_uchar4_sat_rte)
+//MULTIPLY_A_TIMES_B(I16, I16, U8,  Sat,  RTZ, short4, short4, uchar4, 2, 2, 1, convert_uchar4_sat_rtz)
+//MULTIPLY_A_TIMES_B(I16, I16, U8,  Wrap, RTE, short4, short4, uchar4, 2, 2, 1, convert_uchar4_rte)
+//MULTIPLY_A_TIMES_B(I16, I16, U8,  Wrap, RTZ, short4, short4, uchar4, 2, 2, 1, convert_uchar4_rtz)
+
+//MULTIPLY_A_TIMES_B(I16, I16, I16, Sat,  RTE, short4, short4, short4, 2, 2, 2, convert_short4_sat_rte)
+//MULTIPLY_A_TIMES_B(I16, I16, I16, Sat,  RTZ, short4, short4, short4, 2, 2, 2, convert_short4_sat_rtz)
+//MULTIPLY_A_TIMES_B(I16, I16, I16, Wrap, RTE, short4, short4, short4, 2, 2, 2, convert_short4_rte)
+//MULTIPLY_A_TIMES_B(I16, I16, I16, Wrap, RTZ, short4, short4, short4, 2, 2, 2, convert_short4_rtz)
+
+#define MULTIPLY_I16_TIMES_I16(name0, name1, name2, dst_type, write_func, conv_func) \
+    __kernel void multiply_I16TimesI16to##name0##_##name1##_##name2 \
+    ( \
+    __read_only  image2d_t input0, \
+    __read_only  image2d_t input1, \
+                 float     scale, \
+                 int       overflow_policy, \
+                 int       round_policy, \
+    __write_only image2d_t output \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+ \
+    int4 src0 = read_imagei(input0, coord); \
+    int4 src1 = read_imagei(input1, coord); \
+ \
+    float sum = convert_float(src0.x) * scale * convert_float(src1.x); \
+    int tmp; \
+    _viv_asm(CONV_##name2, tmp, sum); \
+ \
+    dst_type dst; \
+    dst.x = conv_func(tmp); \
+ \
+    write_func(output, coord, dst); \
+}
+MULTIPLY_I16_TIMES_I16(U8,  Sat,  RTE, uint4, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_I16_TIMES_I16(U8,  Sat,  RTZ, uint4, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_I16_TIMES_I16(U8,  Wrap, RTE, uint4, write_imageui, convert_uchar_rte)
+MULTIPLY_I16_TIMES_I16(U8,  Wrap, RTZ, uint4, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_I16_TIMES_I16(I16, Sat,  RTE, int4, write_imagei, convert_short_sat_rte)
+MULTIPLY_I16_TIMES_I16(I16, Sat,  RTZ, int4, write_imagei, convert_short_sat_rtz)
+MULTIPLY_I16_TIMES_I16(I16, Wrap, RTE, int4, write_imagei, convert_short_rte)
+MULTIPLY_I16_TIMES_I16(I16, Wrap, RTZ, int4, write_imagei, convert_short_rtz)
+
+_viv_uniform int postshift;
+#define MULTIPLY_A_TIMES_B_POSTSHIFT(name0, name1, name2, name3, name4, type0, type1, type2, read_func0, read_func1, write_func, conv_func) \
+    __kernel void multiply_##name0##Times##name1##to##name2##_##name3##_##name4##_postshift \
+    ( \
+    __read_only  image2d_t input0, \
+    __read_only  image2d_t input1, \
+                 float     scale, \
+                 int       overflow_policy, \
+                 int       round_policy, \
+    __write_only image2d_t output \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+ \
+    type0 src0 = read_func0(input0, coord); \
+    type1 src1 = read_func1(input1, coord); \
+ \
+    int t0, t1; \
+    _viv_asm(CONV, t0, src0.x); \
+    _viv_asm(CONV, t1, src1.x); \
+    int tmp = t0 * t1 >> postshift; \
+ \
+    type2 dst; \
+    dst.x = conv_func(tmp); \
+ \
+    write_func(output, coord, dst); \
+}
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  U8,  U8,  Sat,  RTE, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  U8,  U8,  Sat,  RTZ, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  U8,  U8,  Wrap, RTE, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  U8,  U8,  Wrap, RTZ, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  U8,  I16, Sat,  RTE, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  U8,  I16, Sat,  RTZ, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  U8,  I16, Wrap, RTE, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  U8,  I16, Wrap, RTZ, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_rtz)
+
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  I16, U8,  Sat,  RTE, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  I16, U8,  Sat,  RTZ, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  I16, U8,  Wrap, RTE, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  I16, U8,  Wrap, RTZ, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  I16, I16, Sat,  RTE, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  I16, I16, Sat,  RTZ, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  I16, I16, Wrap, RTE, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(U8,  I16, I16, Wrap, RTZ, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_rtz)
+
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, U8,  U8,  Sat,  RTE, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, U8,  U8,  Sat,  RTZ, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, U8,  U8,  Wrap, RTE, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, U8,  U8,  Wrap, RTZ, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, U8,  I16, Sat,  RTE, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, U8,  I16, Sat,  RTZ, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, U8,  I16, Wrap, RTE, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, U8,  I16, Wrap, RTZ, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_rtz)
+
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, I16, U8,  Sat,  RTE, int4, int4, uint4, read_imagei, read_imagei, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, I16, U8,  Sat,  RTZ, int4, int4, uint4, read_imagei, read_imagei, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, I16, U8,  Wrap, RTE, int4, int4, uint4, read_imagei, read_imagei, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, I16, U8,  Wrap, RTZ, int4, int4, uint4, read_imagei, read_imagei, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, I16, I16, Sat,  RTE, int4, int4, int4, read_imagei, read_imagei, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, I16, I16, Sat,  RTZ, int4, int4, int4, read_imagei, read_imagei, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, I16, I16, Wrap, RTE, int4, int4, int4, read_imagei, read_imagei, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B_POSTSHIFT(I16, I16, I16, Wrap, RTZ, int4, int4, int4, read_imagei, read_imagei, write_imagei, convert_short_rtz)
+
+_viv_uniform int int_part;
+_viv_uniform float frac_part;
+#define MULTIPLY_A_TIMES_B_INTEGER(name0, name1, name2, name3, name4, type0, type1, type2, read_func0, read_func1, write_func, conv_func) \
+    __kernel void multiply_##name0##Times##name1##to##name2##_##name3##_##name4##_integer \
+    ( \
+    __read_only  image2d_t input0, \
+    __read_only  image2d_t input1, \
+                 float     scale, \
+                 int       overflow_policy, \
+                 int       round_policy, \
+    __write_only image2d_t output \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+ \
+    type0 src0 = read_func0(input0, coord); \
+    type1 src1 = read_func1(input1, coord); \
+ \
+    int t0, t1; \
+    _viv_asm(CONV, t0, src0.x); \
+    _viv_asm(CONV, t1, src1.x); \
+    int tmp = t0 * t1 * int_part; \
+ \
+    type2 dst; \
+    dst.x = conv_func(tmp); \
+ \
+    write_func(output, coord, dst); \
+}
+MULTIPLY_A_TIMES_B_INTEGER(U8,  U8,  U8,  Sat,  RTE, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER(U8,  U8,  U8,  Sat,  RTZ, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER(U8,  U8,  U8,  Wrap, RTE, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B_INTEGER(U8,  U8,  U8,  Wrap, RTZ, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER(U8,  U8,  I16, Sat,  RTE, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER(U8,  U8,  I16, Sat,  RTZ, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER(U8,  U8,  I16, Wrap, RTE, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B_INTEGER(U8,  U8,  I16, Wrap, RTZ, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER(U8,  I16, U8,  Sat,  RTE, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER(U8,  I16, U8,  Sat,  RTZ, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER(U8,  I16, U8,  Wrap, RTE, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B_INTEGER(U8,  I16, U8,  Wrap, RTZ, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER(U8,  I16, I16, Sat,  RTE, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER(U8,  I16, I16, Sat,  RTZ, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER(U8,  I16, I16, Wrap, RTE, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B_INTEGER(U8,  I16, I16, Wrap, RTZ, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER(I16, U8,  U8,  Sat,  RTE, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER(I16, U8,  U8,  Sat,  RTZ, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER(I16, U8,  U8,  Wrap, RTE, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B_INTEGER(I16, U8,  U8,  Wrap, RTZ, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER(I16, U8,  I16, Sat,  RTE, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER(I16, U8,  I16, Sat,  RTZ, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER(I16, U8,  I16, Wrap, RTE, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B_INTEGER(I16, U8,  I16, Wrap, RTZ, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER(I16, I16, U8,  Sat,  RTE, int4, int4, uint4, read_imagei, read_imagei, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER(I16, I16, U8,  Sat,  RTZ, int4, int4, uint4, read_imagei, read_imagei, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER(I16, I16, U8,  Wrap, RTE, int4, int4, uint4, read_imagei, read_imagei, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B_INTEGER(I16, I16, U8,  Wrap, RTZ, int4, int4, uint4, read_imagei, read_imagei, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER(I16, I16, I16, Sat,  RTE, int4, int4, int4, read_imagei, read_imagei, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER(I16, I16, I16, Sat,  RTZ, int4, int4, int4, read_imagei, read_imagei, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER(I16, I16, I16, Wrap, RTE, int4, int4, int4, read_imagei, read_imagei, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B_INTEGER(I16, I16, I16, Wrap, RTZ, int4, int4, int4, read_imagei, read_imagei, write_imagei, convert_short_rtz)
+
+#define MULTIPLY_A_TIMES_B_INTEGER_PS(name0, name1, name2, name3, name4, type0, type1, type2, read_func0, read_func1, write_func, conv_func) \
+    __kernel void multiply_##name0##Times##name1##to##name2##_##name3##_##name4##_integer_postshift \
+    ( \
+    __read_only  image2d_t input0, \
+    __read_only  image2d_t input1, \
+                 float     scale, \
+                 int       overflow_policy, \
+                 int       round_policy, \
+    __write_only image2d_t output \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+ \
+    type0 src0 = read_func0(input0, coord); \
+    type1 src1 = read_func1(input1, coord); \
+ \
+    int t0, t1; \
+    _viv_asm(CONV, t0, src0.x); \
+    _viv_asm(CONV, t1, src1.x); \
+    int tmp = t0 * t1 * int_part + (t0 * t1 >> postshift); \
+ \
+    type2 dst; \
+    dst.x = conv_func(tmp); \
+ \
+    write_func(output, coord, dst); \
+}
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  U8,  U8,  Sat,  RTE, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  U8,  U8,  Sat,  RTZ, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  U8,  U8,  Wrap, RTE, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  U8,  U8,  Wrap, RTZ, uint4, uint4, uint4, read_imageui, read_imageui, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  U8,  I16, Sat,  RTE, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  U8,  I16, Sat,  RTZ, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  U8,  I16, Wrap, RTE, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  U8,  I16, Wrap, RTZ, uint4, uint4, int4, read_imageui, read_imageui, write_imagei, convert_short_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  I16, U8,  Sat,  RTE, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  I16, U8,  Sat,  RTZ, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  I16, U8,  Wrap, RTE, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  I16, U8,  Wrap, RTZ, uint4, int4, uint4, read_imageui, read_imagei, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  I16, I16, Sat,  RTE, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  I16, I16, Sat,  RTZ, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  I16, I16, Wrap, RTE, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(U8,  I16, I16, Wrap, RTZ, uint4, int4, int4, read_imageui, read_imagei, write_imagei, convert_short_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, U8,  U8,  Sat,  RTE, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, U8,  U8,  Sat,  RTZ, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, U8,  U8,  Wrap, RTE, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, U8,  U8,  Wrap, RTZ, int4, uint4, uint4, read_imagei, read_imageui, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, U8,  I16, Sat,  RTE, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, U8,  I16, Sat,  RTZ, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, U8,  I16, Wrap, RTE, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, U8,  I16, Wrap, RTZ, int4, uint4, int4, read_imagei, read_imageui, write_imagei, convert_short_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, I16, U8,  Sat,  RTE, int4, int4, uint4, read_imagei, read_imagei, write_imageui, convert_uchar_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, I16, U8,  Sat,  RTZ, int4, int4, uint4, read_imagei, read_imagei, write_imageui, convert_uchar_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, I16, U8,  Wrap, RTE, int4, int4, uint4, read_imagei, read_imagei, write_imageui, convert_uchar_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, I16, U8,  Wrap, RTZ, int4, int4, uint4, read_imagei, read_imagei, write_imageui, convert_uchar_rtz)
+
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, I16, I16, Sat,  RTE, int4, int4, int4, read_imagei, read_imagei, write_imagei, convert_short_sat_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, I16, I16, Sat,  RTZ, int4, int4, int4, read_imagei, read_imagei, write_imagei, convert_short_sat_rtz)
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, I16, I16, Wrap, RTE, int4, int4, int4, read_imagei, read_imagei, write_imagei, convert_short_rte)
+MULTIPLY_A_TIMES_B_INTEGER_PS(I16, I16, I16, Wrap, RTZ, int4, int4, int4, read_imagei, read_imagei, write_imagei, convert_short_rtz)

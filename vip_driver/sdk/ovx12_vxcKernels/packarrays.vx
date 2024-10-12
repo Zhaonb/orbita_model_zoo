@@ -1,0 +1,68 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int item_size;
+_viv_uniform int cap;
+_viv_uniform int width_item_size;
+
+__kernel void packarrays
+    (
+                   image2d_t      srcImage,
+                   image2d_t      countImage,
+         global    unsigned char* tempArray,
+                   int            width,
+                   int            height,
+         global    unsigned char* outArray,
+         global    int*           numArray
+    )
+{
+    int2 coord = (int2)(get_global_id(0), 0);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 r1 = 0, r2, r3;
+    int4   cnt = 0;
+    int4   key_val = {0, 0, 1, 0};
+    int4   cntSum = 0;
+    int    i;
+    unsigned char* in_arry_ptr ;
+    unsigned char* out_arry_ptr;
+    unsigned char* out_arry_ptr2;
+    _viv_asm(COPY, r3, key_val, 16);
+
+    while (coord.y < coord_out.y)
+    {
+        VXC_ReadImage(r1, countImage, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, cnt, r1, 16);
+        cntSum.x += cnt.x;
+        coord.y ++;
+    }
+
+    VXC_ReadImage(r1, countImage, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, cnt, r1, 16);
+    cntSum.y = cntSum.x + cnt.x;
+    if (cnt.x > 0)
+    {
+        in_arry_ptr   = tempArray + coord_out.y * width_item_size;
+        out_arry_ptr  = outArray + cntSum.x * item_size;
+
+        while((cntSum.x < cap) && (cntSum.x < cntSum.y))
+        {
+            out_arry_ptr2 = out_arry_ptr + 12;
+            VXC_Vload16(r2, in_arry_ptr, 0);
+            VXC_Vstore16(out_arry_ptr, 0, r2);
+            VXC_Vstore16(out_arry_ptr2, 0, r3);
+            out_arry_ptr  = out_arry_ptr + item_size;
+            in_arry_ptr   = in_arry_ptr + item_size;
+            cntSum.x++;
+        }
+    }
+
+    if (coord_out.y == (height - 1))
+    {
+        numArray[0] = cntSum.x;
+        //_viv_asm(COPY, r1, cntSum, 16);
+        //VXC_WriteImage(countImage, coord_out, r1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    }
+
+}
+

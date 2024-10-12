@@ -1,0 +1,58 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform int width;
+_viv_uniform int height;
+_viv_uniform float radio;
+
+__kernel __attribute__((reqd_work_group_size(128, 1, 1))) void mean_stddev_U8
+(
+    __read_only image2d_t input,
+    __global float* mean,
+    __global float* stddev
+)
+{
+    int lidx = get_local_id(0);
+    int2 coord;
+    uint sum = 0;
+    uint sqr = 0;
+    __local uint lcl_sum[1];
+    __local float lcl_sumSqr[128];
+
+    if(lidx == 0)
+    {
+        lcl_sum[0] = 0;
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for(coord.x = lidx; coord.x < width; coord.x+=128)
+    {
+        for(coord.y = 0; coord.y < height;)
+        {
+            uint src = read_imageui(input, coord).x;
+            coord.y++;
+            sum += src;
+            sqr = src * src + sqr;
+        }
+    }
+    atom_add(lcl_sum, sum);
+    lcl_sumSqr[lidx] = convert_float(sqr);
+    barrier(CLK_LOCAL_MEM_FENCE);
+    if(lidx == 0)
+    {
+        int tmpSum = convert_int(lcl_sum[0]);
+        float m = convert_float(tmpSum) * radio;
+        float sumSqr = 0;
+        float4 ones = (float4)(1.0, 1.0, 1.0, 1.0);
+
+        for(int i = 0; i < 32; i++)
+        {
+            float4 tmpLcl = vload4(i, lcl_sumSqr);
+            sumSqr += dot(tmpLcl, ones);
+        }
+        float sum_diff_sqrs = sumSqr * radio - m * m;
+
+        stddev[0] = sqrt(sum_diff_sqrs);
+        mean[0] = m;
+    }
+}

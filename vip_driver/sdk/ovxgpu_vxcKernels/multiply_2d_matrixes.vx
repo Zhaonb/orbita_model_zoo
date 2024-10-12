@@ -1,0 +1,169 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform int K;
+
+__kernel void multiply_2d_matrixes_u8_mul(
+                __read_only image2d_t input0,
+                __read_only image2d_t input1,
+                __read_only image2d_t input2,
+                                       int  enableTensorC,
+                __write_only image2d_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    uint4 sum = (uint4)(0);
+
+    for(; coord.z < K;)
+    {
+        uint4 tempA0;
+        uint4 tempB0;
+
+        tempA0 = read_imageui(input0, coord.zy);
+        tempB0 = read_imageui(input1, coord.zx);
+        coord.z++;
+
+        sum = sum + tempA0 * tempB0;
+    }
+    sum.x = sum.x > 255 ? 255 : sum.x;
+    write_imageui(output, coord.xy, sum);
+}
+
+__kernel void multiply_2d_matrixes_i8_mul(
+                __read_only image2d_t input0,
+                __read_only image2d_t input1,
+                __read_only image2d_t input2,
+                                       int  enableTensorC,
+                __write_only image2d_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    int4 sum = (int4)(0);
+
+    for(; coord.z < K;)
+    {
+        int4 tempA0;
+        int4 tempB0;
+
+        tempA0 = read_imagei(input0, coord.zy);
+        tempB0 = read_imagei(input1, coord.zx);
+        coord.z++;
+
+        sum = sum + tempA0 * tempB0;
+    }
+    sum.x = sum.x > 127 ? 127 : sum.x;
+    sum.x = sum.x < -128 ? -128 : sum.x;
+    write_imagei(output, coord.xy, sum);
+}
+
+__kernel void multiply_2d_matrixes_i16_mul(
+                __read_only image2d_t input0,
+                __read_only image2d_t input1,
+                __read_only image2d_t input2,
+                                       int  enableTensorC,
+                __write_only image2d_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    int4 sum = (int4)(0);
+
+    for(; coord.z < K;)
+    {
+        int4 tempA0;
+        int4 tempB0;
+
+        tempA0 = read_imagei(input0, coord.zy);
+        tempB0 = read_imagei(input1, coord.zx);
+        coord.z++;
+
+        sum = sum + tempA0 * tempB0;
+    }
+    sum >>= 8;
+    sum.x = sum.x > 32767 ? 32767 : sum.x;
+    sum.x = sum.x < -32768 ? -32768 : sum.x;
+    write_imagei(output, coord.xy, sum);
+}
+
+__kernel void multiply_2d_matrixes_u8_mad(
+                __read_only image2d_t input0,
+                __read_only image2d_t input1,
+                __read_only image2d_t input2,
+                                       int  enableTensorC,
+                __write_only image2d_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    uint4 sum = (uint4)(0);
+
+    for(; coord.z < K;)
+    {
+        uint4 tempA0;
+        uint4 tempB0;
+
+        tempA0 = read_imageui(input0, coord.zy);
+        tempB0 = read_imageui(input1, coord.zx);
+        coord.z++;
+
+        sum = sum + tempA0 * tempB0;
+    }
+    uint4 tempC = read_imageui(input2, coord.xy);
+    sum += tempC;
+
+    sum.x = sum.x > 255 ? 255 : sum.x;
+    write_imageui(output, coord.xy, sum);
+}
+
+__kernel void multiply_2d_matrixes_i8_mad(
+                __read_only image2d_t input0,
+                __read_only image2d_t input1,
+                __read_only image2d_t input2,
+                                       int  enableTensorC,
+                __write_only image2d_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    int4 sum = (int4)(0);
+
+    for(; coord.z < K;)
+    {
+        int4 tempA0;
+        int4 tempB0;
+
+        tempA0 = read_imagei(input0, coord.zy);
+        tempB0 = read_imagei(input1, coord.zx);
+        coord.z++;
+
+        sum = sum + tempA0 * tempB0;
+    }
+    int4 tempC = read_imagei(input2, coord.xy);
+    sum += tempC;
+
+    sum.x = sum.x > 127 ? 127 : sum.x;
+    sum.x = sum.x < -128 ? -128 : sum.x;
+    write_imagei(output, coord.xy, sum);
+}
+
+__kernel void multiply_2d_matrixes_i16_mad(
+                __read_only image2d_t input0,
+                __read_only image2d_t input1,
+                __read_only image2d_t input2,
+                                       int  enableTensorC,
+                __write_only image2d_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    int4 sum = (int4)(0);
+
+    for(; coord.z < K;)
+    {
+        int4 tempA0;
+        int4 tempB0;
+
+        tempA0 = read_imagei(input0, coord.zy);
+        tempB0 = read_imagei(input1, coord.zx);
+        coord.z++;
+
+        sum = sum + tempA0 * tempB0;
+    }
+    sum >>= 8;
+    int4 tempC = read_imagei(input2, coord.xy);
+    sum += tempC;
+
+    sum.x = sum.x > 32767 ? 32767 : sum.x;
+    sum.x = sum.x < -32768 ? -32768 : sum.x;
+    write_imagei(output, coord.xy, sum);
+}

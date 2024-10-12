@@ -1,0 +1,116 @@
+
+__kernel void gpuTensor_rounding_floor_F32toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                           float input_scale,
+                           float input_tail,
+                           float output_scale,
+                           float output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    float4 dst = {0.0};
+
+    float4 src = read_imagef(input, coord);
+    dst.x = floor(src.x);
+    write_imagef(output, coord, dst.xxxx);
+}
+
+__kernel void gpuTensor_rounding_ceiling_F32toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                           float input_scale,
+                           float input_tail,
+                           float output_scale,
+                           float output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    float4 dst = {0.0};
+
+    float4 src = read_imagef(input, coord);
+    dst.x = ceil(src.x);
+    write_imagef(output, coord, dst.xxxx);
+}
+
+__kernel void gpuTensor_rounding_floor_U32toU32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                           float input_scale,
+                           float input_tail,
+                           float output_scale,
+                           float output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    float4 tmp;
+    uint4 dst = {0};
+
+    float4 src = convert_float4(read_imageui(input, coord));
+    tmp.x = floor(src.x * input_scale + input_tail);
+    dst.x = convert_uint_rte(tmp.x * output_scale + output_zp);
+    write_imageui(output, coord, dst.xxxx);
+}
+
+__kernel void gpuTensor_rounding_ceiling_U32toU32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                           float input_scale,
+                           float input_tail,
+                           float output_scale,
+                           float output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    float4 tmp;
+    uint4 dst = {0};
+
+    float4 src = convert_float4(read_imageui(input, coord));
+    tmp.x = ceil(src.x * input_scale + input_tail);
+    dst.x = convert_uint_rte(tmp.x * output_scale + output_zp);
+    write_imageui(output, coord, dst.xxxx);
+}
+
+__kernel void gpuTensor_rounding_floor_I32toI32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                           float input_scale,
+                           float input_tail,
+                           float output_scale,
+                           float output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    float4 tmp;
+    int4 dst = {0};
+
+    float4 src = convert_float4(read_imagei(input, coord));
+    tmp.x = floor(src.x * input_scale + input_tail);
+    dst.x = convert_int_rte(tmp.x * output_scale + output_zp);
+    write_imagei(output, coord, dst.xxxx);
+}
+
+__kernel void gpuTensor_rounding_ceiling_I32toI32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                           float input_scale,
+                           float input_tail,
+                           float output_scale,
+                           float output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    float4 tmp;
+    int4 dst = {0};
+
+    float4 src = convert_float4(read_imagei(input, coord));
+    tmp.x = ceil(src.x * input_scale + input_tail);
+    dst.x = convert_int_rte(tmp.x * output_scale + output_zp);
+    write_imagei(output, coord, dst.xxxx);
+}

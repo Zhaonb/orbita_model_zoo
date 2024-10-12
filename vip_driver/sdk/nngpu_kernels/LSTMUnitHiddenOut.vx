@@ -1,0 +1,509 @@
+float4 sigmoid(float4 x, float logE)
+{
+    x *= -logE;
+    x = 1 + exp2(x);
+    return 1 / x;
+}
+
+float4 tangentH(float4 x, float twoLogE)
+{
+    x *= -twoLogE;
+    x = 1 + exp2(x);
+    x = 1 / x;
+    return 2 * x - 1;
+}
+
+
+__kernel void vxcLSTMUnitHiddenOut_I16toU8_P3(
+    __read_only  image2d_t  input_conv,
+                 image2d_t  cell_state,
+    __write_only image2d_t  output,
+                     float  logE,
+                     float  twoLogE,
+                       int  num_units,
+                     float  forget_bias,
+                     float  inputScale,
+                     float  outputScale,
+                     float  outputZP
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), 0);
+    float4 data_i_t, data_f_t, data_g_t, data_o_t;
+
+    data_i_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    coord_in.x += num_units;
+    coord_in.x += num_units;
+    data_g_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    coord_in.x += num_units;
+    data_o_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = data_i_t * data_g_t;
+    write_imagef(cell_state, coord_in.zy, data_i_t);
+
+    data_o_t = sigmoid(data_o_t, logE);
+    data_f_t = tangentH(data_i_t, twoLogE);
+    data_o_t = data_o_t * data_f_t;
+    data_o_t = data_o_t * outputScale + outputZP;
+    uint4  dst  = convert_uint4_rte(data_o_t);
+    write_imageui(output, coord_in.zy, dst);
+}
+
+__kernel void vxcLSTMUnitHiddenOut_I16toU8_P4_I(
+    __read_only  image2d_t  input_conv,
+                 image2d_t  cell_state,
+    __write_only image2d_t  output,
+                     float  logE,
+                     float  twoLogE,
+                       int  num_units,
+                     float  forget_bias,
+    __read_only  image2d_t  hidden_conv,
+                     float  inputScale,
+                     float  outputScale,
+                     float  outputZP,
+                     float  hidden_inScale
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), 0);
+    float4 data_i_t, data_f_t, data_g_t, data_o_t, data_c_t;
+    float4 src0, src1, src2, src3, src4, src10, src11, src12, src13;
+    src0  = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    src10 = convert_float4(read_imagei(hidden_conv, coord_in.xy)) * hidden_inScale;
+    coord_in.x += num_units;
+    src1  = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    src11 = convert_float4(read_imagei(hidden_conv, coord_in.xy)) * hidden_inScale;
+    coord_in.x += num_units;
+    src2  = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    src12 = convert_float4(read_imagei(hidden_conv, coord_in.xy)) * hidden_inScale;
+    coord_in.x += num_units;
+    src3  = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    src13 = convert_float4(read_imagei(hidden_conv, coord_in.xy)) * hidden_inScale;
+    src4  = read_imagef(cell_state, coord_in.zy);
+
+    data_i_t = src0 + src10;
+    data_f_t = src1 + src11;
+    data_g_t = src2 + src12;
+    data_o_t = src3 + src13;
+    data_c_t = src4;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t + forget_bias, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = data_i_t * data_g_t;
+    data_c_t = data_c_t * data_f_t + data_i_t;
+    write_imagef(cell_state, coord_in.zy, data_c_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_f_t = tangentH(data_c_t, twoLogE);
+    data_o_t = data_o_t * data_f_t;
+    data_o_t = data_o_t * outputScale + outputZP;
+    uint4  dst  = convert_uint4_rte(data_o_t);
+    write_imageui(output, coord_in.zy, dst);
+}
+
+
+__kernel void vxcLSTMUnitHiddenOut_I16toU8_P4_O(
+    __read_only  image2d_t  input_conv,
+                 image2d_t  cell_state,
+    __write_only image2d_t  output,
+                     float  logE,
+                     float  twoLogE,
+                       int  num_units,
+                     float  forget_bias,
+    __write_only image2d_t  hidden_state_out,
+                     float  inputScale,
+                     float  outputScale,
+                     float  outputZP,
+                     float  hidden_outScale
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), 0);
+    float4 data_i_t, data_f_t, data_g_t, data_o_t, data_c_t;
+    data_i_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    coord_in.x += num_units;
+    data_f_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    coord_in.x += num_units;
+    data_g_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    coord_in.x += num_units;
+    data_c_t = read_imagef(cell_state, coord_in.zy);
+    data_o_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t + forget_bias, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = data_i_t * data_g_t;
+    data_c_t = data_c_t * data_f_t + data_i_t;
+    write_imagef(cell_state, coord_in.zy, data_c_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_f_t = tangentH(data_c_t, twoLogE);
+    data_o_t = data_o_t * data_f_t;
+    uint4  dst  = convert_uint4_rte(data_o_t * outputScale + outputZP);
+    write_imageui(output, coord_in.zy, dst);
+    int4   dst_state = convert_int4_rte(data_o_t * hidden_outScale);
+    write_imagei(hidden_state_out, coord_in.zy, dst_state);
+}
+
+__kernel void vxcLSTMUnitHiddenOut_I16toU8_P3_cell(
+    __read_only  image2d_t  input_conv,
+                 image2d_t  cell_state,
+    __write_only image2d_t  output,
+                     float  logE,
+                     float  twoLogE,
+                       int  num_units,
+                     float  forget_bias,
+                     float  inputScale,
+                     float  outputScale,
+                     float  outputZP
+
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), 0);
+    float4 data_i_t, data_f_t, data_g_t, data_o_t, data_c_t;
+
+    data_i_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    coord_in.x += num_units;
+    data_f_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    coord_in.x += num_units;
+    data_g_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    coord_in.x += num_units;
+    data_c_t = read_imagef(cell_state, coord_in.zy);
+    data_o_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t + forget_bias, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = data_i_t * data_g_t;
+    data_c_t = data_c_t * data_f_t + data_i_t;
+    write_imagef(cell_state, coord_in.zy, data_c_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_f_t = tangentH(data_c_t, twoLogE);
+    data_o_t = data_o_t * data_f_t;
+    data_o_t = data_o_t * outputScale + outputZP;
+    uint4  dst  = convert_uint4_rte(data_o_t);
+    write_imageui(output, coord_in.zy, dst);
+}
+
+__kernel void vxcLSTMUnitHiddenOut_I16toU8_projection(
+    __read_only  image2d_t  input_conv,
+    __read_only  image2d_t  cell_state_in,
+    __write_only image2d_t  output,
+                     float  logE,
+                     float  twoLogE,
+                       int  num_units,
+                     float  forget_bias,
+    __write_only image2d_t  cell_state_out,
+                     float  inputScale,
+                     float  outputScale,
+                     float  outputZP
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), 0);
+    float4 data_i_t, data_f_t, data_g_t, data_o_t, data_c_t;
+
+    data_i_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    coord_in.x += num_units;
+    data_f_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    coord_in.x += num_units;
+    data_g_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    coord_in.x += num_units;
+    data_c_t = read_imagef(cell_state_in, coord_in.zy);
+    data_o_t = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t + forget_bias, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = data_i_t * data_g_t;
+    data_c_t = data_c_t * data_f_t + data_i_t;
+    write_imagef(cell_state_out, coord_in.zy, data_c_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_f_t = tangentH(data_c_t, twoLogE);
+    data_o_t = data_o_t * data_f_t;
+    data_o_t = data_o_t * outputScale + outputZP;
+    uint4  dst  = convert_uint4_rte(data_o_t);
+    write_imageui(output, coord_in.zy, dst);
+}
+
+__kernel void vxcLSTMUnitHiddenOut_I16toU8_P5_Projection(
+    __read_only  image2d_t  input_conv,
+    __read_only  image2d_t  cell_state_in,
+    __write_only image2d_t  output,
+                     float  logE,
+                     float  twoLogE,
+                       int  num_units,
+                     float  forget_bias,
+    __write_only image2d_t  cell_state_out,
+    __read_only  image2d_t  hidden_conv,
+                     float  inputScale,
+                     float  outputScale,
+                     float  outputZP,
+                     float  hidden_inScale
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), 0);
+    float4 data_i_t, data_f_t, data_g_t, data_o_t, data_c_t;
+    float4 src0, src1, src2, src3, src4, src10, src11, src12, src13;
+
+    src0  = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    src10 = convert_float4(read_imagei(hidden_conv, coord_in.xy)) * hidden_inScale;
+    coord_in.x += num_units;
+    src1  = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    src11 = convert_float4(read_imagei(hidden_conv, coord_in.xy)) * hidden_inScale;
+    coord_in.x += num_units;
+    src2  = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    src12 = convert_float4(read_imagei(hidden_conv, coord_in.xy)) * hidden_inScale;
+    coord_in.x += num_units;
+    src3  = convert_float4(read_imagei(input_conv, coord_in.xy)) * inputScale;
+    src13 = convert_float4(read_imagei(hidden_conv, coord_in.xy)) * hidden_inScale;
+    src4  = read_imagef(cell_state_in, coord_in.zy);
+
+    data_i_t = src0 + src10;
+    data_f_t = src1 + src11;
+    data_g_t = src2 + src12;
+    data_o_t = src3 + src13;
+    data_c_t = src4;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t + forget_bias, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = data_i_t * data_g_t;
+    data_c_t = data_c_t * data_f_t + data_i_t;
+    write_imagef(cell_state_out, coord_in.zy, data_c_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_f_t = tangentH(data_c_t, twoLogE);
+    data_o_t = data_o_t * data_f_t;
+    data_o_t = data_o_t * outputScale + outputZP;
+    uint4  dst  = convert_uint4_rte(data_o_t);
+    write_imageui(output, coord_in.zy, dst);
+}
+
+
+__kernel void vxcLSTMUnitHiddenOut_Fp32_P3(
+    __read_only  image2d_t  input_conv,
+                 image2d_t  cell_state,
+    __write_only image2d_t  output,
+                     float  logE,
+                     float  twoLogE,
+                       int  num_units,
+                     float  forget_bias
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), 0);
+    float4 data_i_t, data_f_t, data_g_t, data_o_t;
+
+    data_i_t = read_imagef(input_conv, coord_in.xy);
+    coord_in.x += num_units;
+    coord_in.x += num_units;
+    data_g_t = read_imagef(input_conv, coord_in.xy);
+    coord_in.x += num_units;
+    data_o_t = read_imagef(input_conv, coord_in.xy);
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = data_i_t * data_g_t;
+    write_imagef(cell_state, coord_in.zy, data_i_t);
+
+    data_o_t = sigmoid(data_o_t, logE);
+    data_f_t = tangentH(data_i_t, twoLogE);
+    data_o_t = data_o_t * data_f_t;
+    write_imagef(output, coord_in.zy, data_o_t);
+}
+
+
+__kernel void vxcLSTMUnitHiddenOut_Fp32_P4_I(
+    __read_only  image2d_t  input_conv,
+                 image2d_t  cell_state,
+    __write_only image2d_t  output,
+                     float  logE,
+                     float  twoLogE,
+                       int  num_units,
+                     float  forget_bias,
+    __read_only  image2d_t  hidden_conv
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), 0);
+    float4 data_i_t, data_f_t, data_g_t, data_o_t, data_c_t;
+    float4 src0, src1, src2, src3, src4, src10, src11, src12, src13;
+    src0  = read_imagef(input_conv, coord_in.xy);
+    src10 = read_imagef(hidden_conv, coord_in.xy);
+    coord_in.x += num_units;
+    src1  = read_imagef(input_conv, coord_in.xy);
+    src11 = read_imagef(hidden_conv, coord_in.xy);
+    coord_in.x += num_units;
+    src2  = read_imagef(input_conv, coord_in.xy);
+    src12 = read_imagef(hidden_conv, coord_in.xy);
+    coord_in.x += num_units;
+    src3  = read_imagef(input_conv, coord_in.xy);
+    src13 = read_imagef(hidden_conv, coord_in.xy);
+    src4  = read_imagef(cell_state, coord_in.zy);
+
+    data_i_t = src0 + src10;
+    data_f_t = src1 + src11;
+    data_g_t = src2 + src12;
+    data_o_t = src3 + src13;
+    data_c_t = src4;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t + forget_bias, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = data_i_t * data_g_t;
+    data_c_t = data_c_t * data_f_t + data_i_t;
+    write_imagef(cell_state, coord_in.zy, data_c_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_f_t = tangentH(data_c_t, twoLogE);
+    data_o_t = data_o_t * data_f_t;
+    write_imagef(output, coord_in.zy, data_o_t);
+}
+
+__kernel void vxcLSTMUnitHiddenOut_Fp32_P4_O(
+    __read_only  image2d_t  input_conv,
+                 image2d_t  cell_state,
+    __write_only image2d_t  output,
+                     float  logE,
+                     float  twoLogE,
+                       int  num_units,
+                     float  forget_bias,
+    __write_only image2d_t  hidden_state_out
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), 0);
+    float4 data_i_t, data_f_t, data_g_t, data_o_t, data_c_t;
+    data_i_t = read_imagef(input_conv, coord_in.xy);
+    coord_in.x += num_units;
+    data_f_t = read_imagef(input_conv, coord_in.xy);
+    coord_in.x += num_units;
+    data_g_t = read_imagef(input_conv, coord_in.xy);
+    coord_in.x += num_units;
+    data_c_t = read_imagef(cell_state, coord_in.zy);
+    data_o_t = read_imagef(input_conv, coord_in.xy);
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t + forget_bias, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = data_i_t * data_g_t;
+    data_c_t = data_c_t * data_f_t + data_i_t;
+    write_imagef(cell_state, coord_in.zy, data_c_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_f_t = tangentH(data_c_t, twoLogE);
+    data_o_t = data_o_t * data_f_t;
+    write_imagef(output, coord_in.zy, data_o_t);
+    write_imagef(hidden_state_out, coord_in.zy, data_o_t);
+}
+
+__kernel void vxcLSTMUnitHiddenOut_Fp32_P3_cell(
+    __read_only  image2d_t  input_conv,
+                 image2d_t  cell_state,
+    __write_only image2d_t  output,
+                     float  logE,
+                     float  twoLogE,
+                       int  num_units,
+                     float  forget_bias
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), 0);
+    float4 data_i_t, data_f_t, data_g_t, data_o_t, data_c_t;
+
+    data_i_t = read_imagef(input_conv, coord_in.xy);
+    coord_in.x += num_units;
+    data_f_t = read_imagef(input_conv, coord_in.xy);
+    coord_in.x += num_units;
+    data_g_t = read_imagef(input_conv, coord_in.xy);
+    coord_in.x += num_units;
+    data_c_t = read_imagef(cell_state, coord_in.zy);
+    data_o_t = read_imagef(input_conv, coord_in.xy);
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t + forget_bias, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = data_i_t * data_g_t;
+    data_c_t = data_c_t * data_f_t + data_i_t;
+    write_imagef(cell_state, coord_in.zy, data_c_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_f_t = tangentH(data_c_t, twoLogE);
+    data_o_t = data_o_t * data_f_t;
+    write_imagef(output, coord_in.zy, data_o_t);
+}
+
+__kernel void vxcLSTMUnitHiddenOut_Fp32_projection(
+    __read_only  image2d_t  input_conv,
+    __read_only  image2d_t  cell_state_in,
+    __write_only image2d_t  output,
+                     float  logE,
+                     float  twoLogE,
+                       int  num_units,
+                     float  forget_bias,
+    __write_only image2d_t  cell_state_out
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), 0);
+    float4 data_i_t, data_f_t, data_g_t, data_o_t, data_c_t;
+
+    data_i_t = read_imagef(input_conv, coord_in.xy);
+    coord_in.x += num_units;
+    data_f_t = read_imagef(input_conv, coord_in.xy);
+    coord_in.x += num_units;
+    data_g_t = read_imagef(input_conv, coord_in.xy);
+    coord_in.x += num_units;
+    data_c_t = read_imagef(cell_state_in, coord_in.zy);
+    data_o_t = read_imagef(input_conv, coord_in.xy);
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t + forget_bias, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = data_i_t * data_g_t;
+    data_c_t = data_c_t * data_f_t + data_i_t;
+    write_imagef(cell_state_out, coord_in.zy, data_c_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_f_t = tangentH(data_c_t, twoLogE);
+    data_o_t = data_o_t * data_f_t;
+    write_imagef(output, coord_in.zy, data_o_t);
+}
+
+
+__kernel void vxcLSTMUnitHiddenOut_Fp32_P5_Projection(
+    __read_only  image2d_t  input_conv,
+    __read_only  image2d_t  cell_state_in,
+    __write_only image2d_t  output,
+                     float  logE,
+                     float  twoLogE,
+                       int  num_units,
+                     float  forget_bias,
+    __write_only image2d_t  cell_state_out,
+    __read_only  image2d_t  hidden_conv
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), 0);
+    float4 data_i_t, data_f_t, data_g_t, data_o_t, data_c_t;
+    float4 src0, src1, src2, src3, src4, src10, src11, src12, src13;
+
+    src0  = read_imagef(input_conv, coord_in.xy);
+    src10 = read_imagef(hidden_conv, coord_in.xy);
+    coord_in.x += num_units;
+    src1  = read_imagef(input_conv, coord_in.xy);
+    src11 = read_imagef(hidden_conv, coord_in.xy);
+    coord_in.x += num_units;
+    src2  = read_imagef(input_conv, coord_in.xy);
+    src12 = read_imagef(hidden_conv, coord_in.xy);
+    coord_in.x += num_units;
+    src3  = read_imagef(input_conv, coord_in.xy);
+    src13 = read_imagef(hidden_conv, coord_in.xy);
+    src4  = read_imagef(cell_state_in, coord_in.zy);
+
+    data_i_t = src0 + src10;
+    data_f_t = src1 + src11;
+    data_g_t = src2 + src12;
+    data_o_t = src3 + src13;
+    data_c_t = src4;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t + forget_bias, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = data_i_t * data_g_t;
+    data_c_t = data_c_t * data_f_t + data_i_t;
+    write_imagef(cell_state_out, coord_in.zy, data_c_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_f_t = tangentH(data_c_t, twoLogE);
+    data_o_t = data_o_t * data_f_t;
+
+    write_imagef(output, coord_in.zy, data_o_t);
+}
+

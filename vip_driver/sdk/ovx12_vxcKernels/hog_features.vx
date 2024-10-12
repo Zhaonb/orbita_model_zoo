@@ -1,0 +1,122 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+#define EPSILON (0.00000000000001f)
+
+_viv_uniform int num_windowsW;
+_viv_uniform int blocks_per_window_w;
+_viv_uniform int blocks_per_window_h;
+
+typedef struct {
+    int cell_width;
+    int cell_height;
+    int block_width;
+    int block_height;
+    int block_stride;
+    int num_bins;
+    int window_width;
+    int window_height;
+    int window_stride;
+    float threshold;
+} vx_hog_t;
+
+__kernel void hog_features(
+    __read_only  image2d_t in_image,
+    global void* magnitudes_data,
+    global void* bins_data,
+    global void* hog_param,
+    global int*  hog_size,
+    global void* features_data,
+    global int*  data_type
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int   x, y, k;
+    int   bins_index;
+    int   binIdx_win;
+    int   binIdx_blk;
+    int   binIdx_cell;
+    int   block_index;
+    int   renorm_block_index_end;
+    int   renorm_block_index_st;
+    int   renorm_count;
+    int   index;
+    int   width;
+    int   winH, winW;
+    int   blkH, blkW;
+    int   n_cellsx;
+    int   num_blockW;
+    int   cells_per_block_w;
+    int   cells_per_block_h;
+    float hist;
+    float sum;
+    float renorm_sum;
+    float feature_val;
+    void* mag_ptr;
+    void* features_ptr;
+    vx_hog_t *hog_params_t = (vx_hog_t*)hog_param;
+
+    width = get_image_width(in_image);
+    cells_per_block_w = hog_params_t->block_width/hog_params_t->cell_width;
+    cells_per_block_h = hog_params_t->block_height/hog_params_t->cell_height;
+    sum = 0;
+    renorm_sum = 0;
+    n_cellsx = width / hog_params_t->cell_width;
+    winW = coord.x / blocks_per_window_w;
+    winH = coord.y / blocks_per_window_h;
+    blkW = coord.x % blocks_per_window_w;
+    blkH = coord.y % blocks_per_window_h;
+
+    binIdx_win = (winH * (n_cellsx * hog_params_t->window_stride / hog_params_t->cell_height)
+    + winW * (hog_params_t->window_stride / hog_params_t->cell_width)) * hog_params_t->num_bins;
+    binIdx_blk = binIdx_win + (blkH * (n_cellsx * hog_params_t->block_stride / hog_params_t->cell_height)
+    * hog_params_t->num_bins) +(blkW * hog_params_t->block_stride / hog_params_t->cell_width) * hog_params_t->num_bins;
+    block_index = (winH * num_windowsW + winW) * (blocks_per_window_h * blocks_per_window_w)
+    * (cells_per_block_h * cells_per_block_w) * hog_params_t->num_bins;
+    block_index = block_index + (blkH * blocks_per_window_w + blkW)
+    * (cells_per_block_h * cells_per_block_w) * hog_params_t->num_bins;
+    renorm_block_index_st = block_index;
+    for (y = 0; y < cells_per_block_h; y++)
+    {
+        for (x = 0; x < cells_per_block_w; x++)
+        {
+            index = binIdx_blk / hog_params_t->num_bins + (y * n_cellsx + x);
+            mag_ptr = (short*)magnitudes_data + index;
+            sum += (*(short*)mag_ptr) * (*(short*)mag_ptr);
+        }
+    }
+
+    sum = sqrt(sum + EPSILON);
+    for (y = 0; y < cells_per_block_h; y++)
+    {
+        for (x = 0; x < cells_per_block_w; x++)
+        {
+            binIdx_cell =  binIdx_blk + (y * n_cellsx + x) * hog_params_t->num_bins;
+            for (k = 0; k < hog_params_t->num_bins; k++)
+            {
+                bins_index = binIdx_cell + k;
+                hist = min((short)(*((short*)bins_data + bins_index)) / sum, hog_params_t->threshold);
+                features_ptr = (short*)features_data + block_index;
+                hist = hist * 256;
+                *(short*)features_ptr = (short)hist;
+                block_index = block_index + 1;
+            }
+        }
+    }
+    renorm_block_index_end = block_index;
+
+    for (renorm_count = renorm_block_index_st; renorm_count < renorm_block_index_end; renorm_count++)
+    {
+        features_ptr = (short *)features_data + renorm_count;
+        renorm_sum += (convert_float(*(short*)features_ptr) / 256) * (convert_float(*(short*)features_ptr) / 256);
+    }
+    renorm_sum = sqrt(renorm_sum + EPSILON);
+
+    for (renorm_count = renorm_block_index_st; renorm_count < renorm_block_index_end; renorm_count++)
+    {
+        features_ptr = (short*)features_data + renorm_count;
+        feature_val = convert_float(*((short*)features_ptr)) / 256;
+        *((short *)features_ptr) = convert_short((feature_val / renorm_sum) * 256);
+    }
+}

@@ -1,0 +1,390 @@
+__kernel void gpuActivation_relu_F32toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           min_value,
+                 float           max_value,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    float4 src, dst;
+
+    src = read_imagef(input, coord);
+    dst.x = src.x > 0 ? src.x : 0;
+    write_imagef(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_relun_F32toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           min_value,
+                 float           max_value,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    float4 src, dst;
+
+    src = read_imagef(input, coord);
+    src.x = src.x > min_value ? src.x : min_value;
+    dst.x = src.x < max_value ? src.x : max_value;
+    write_imagef(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_relu_F32toF32_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     min_value,
+                 float     max_value,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    float4 src, dst;
+
+    src = read_imagef(input, coord);
+    dst.x = src.x > 0 ? src.x : 0;
+    write_imagef(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_relun_F32toF32_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     min_value,
+                 float     max_value,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    float4 src, dst;
+
+    src = read_imagef(input, coord);
+    src.x = src.x > min_value ? src.x : min_value;
+    dst.x = src.x < max_value ? src.x : max_value;
+    write_imagef(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_relu_U32toU32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           min_value,
+                 float           max_value,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    uint4 src, dst;
+
+    src = read_imageui(input, coord);
+    float data = convert_float(src.x) * input_scale + input_tail;
+    data = data >= 0.0 ? data : 0.0;
+    dst.x = floor(data * output_scale + output_zp + 0.5);
+    write_imageui(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_relun_U32toU32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           min_value,
+                 float           max_value,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    uint4 src, dst;
+
+    src = read_imageui(input, coord);
+    float data = convert_float(src.x) * input_scale + input_tail;
+    data = data > min_value ? data : min_value;
+    data = data < max_value ? data : max_value;
+    dst.x = floor(data * output_scale + output_zp + 0.5);
+    write_imageui(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_relu_U32toU32_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     min_value,
+                 float     max_value,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src, dst;
+
+    src = read_imageui(input, coord);
+    float data = convert_float(src.x) * input_scale + input_tail;
+    data = data >= 0.0 ? data : 0.0;
+    dst.x = floor(data * output_scale + output_zp + 0.5);
+    write_imageui(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_relun_U32toU32_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     min_value,
+                 float     max_value,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src, dst;
+
+    src = read_imageui(input, coord);
+    float data = convert_float(src.x) * input_scale + input_tail;
+    data = data > min_value ? data : min_value;
+    data = data < max_value ? data : max_value;
+    dst.x = floor(data * output_scale + output_zp + 0.5);
+    write_imageui(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_relu_I32toI32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           min_value,
+                 float           max_value,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 src, dst;
+
+    src = read_imagei(input, coord);
+    float data = convert_float(src.x) * input_scale + input_tail;
+    data = data >= 0.0 ? data : 0.0;
+    dst.x = floor(data * output_scale + output_zp + 0.5);
+    write_imagei(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_relun_I32toI32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           min_value,
+                 float           max_value,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 src, dst;
+
+    src = read_imagei(input, coord);
+    float data = convert_float(src.x) * input_scale + input_tail;
+    data = data > min_value ? data : min_value;
+    data = data < max_value ? data : max_value;
+    dst.x = floor(data * output_scale + output_zp + 0.5);
+    write_imagei(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_relu_I32toI32_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     min_value,
+                 float     max_value,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4 src, dst;
+
+    src = read_imagei(input, coord);
+    float data = convert_float(src.x) * input_scale + input_tail;
+    data = data >= 0.0 ? data : 0.0;
+    dst.x = floor(data * output_scale + output_zp + 0.5);
+    write_imagei(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_relun_I32toI32_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     min_value,
+                 float     max_value,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4 src, dst;
+
+    src = read_imagei(input, coord);
+    float data = convert_float(src.x) * input_scale + input_tail;
+    data = data > min_value ? data : min_value;
+    data = data < max_value ? data : max_value;
+    dst.x = floor(data * output_scale + output_zp + 0.5);
+    write_imagei(output, coord, dst.xxxx);
+}
+
+
+__kernel void gpuActivation_abs_F32toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           min_value,
+                 float           max_value,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    float4 src, dst;
+
+    src = read_imagef(input, coord);
+    dst.x = fabs(src.x);
+    write_imagef(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_abs_F32toF32_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     min_value,
+                 float     max_value,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    float4 src, dst;
+
+    src = read_imagef(input, coord);
+    dst.x = fabs(src.x);
+    write_imagef(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_abs_U32toU32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           min_value,
+                 float           max_value,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    uint4 src, dst;
+
+    src = read_imageui(input, coord);
+    float data = convert_float(src.x) * input_scale + input_tail;
+    data = fabs(data);
+    dst.x = floor(data * output_scale + output_zp + 0.5);
+    write_imageui(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_abs_U32toU32_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     min_value,
+                 float     max_value,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src, dst;
+
+    src = read_imageui(input, coord);
+    float data = convert_float(src.x) * input_scale + input_tail;
+    data = fabs(data);
+    dst.x = floor(data * output_scale + output_zp + 0.5);
+    write_imageui(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_abs_I32toI32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           min_value,
+                 float           max_value,
+                 float           input_scale,
+                 float           input_tail,
+                 float           output_scale,
+                 float           output_zp
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 src, dst;
+
+    src = read_imagei(input, coord);
+    float data = convert_float(src.x) * input_scale + input_tail;
+    data = fabs(data);
+    dst.x = floor(data * output_scale + output_zp + 0.5);
+    write_imagei(output, coord, dst.xxxx);
+}
+
+__kernel void gpuActivation_abs_I32toI32_2D
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     min_value,
+                 float     max_value,
+                 float     input_scale,
+                 float     input_tail,
+                 float     output_scale,
+                 float     output_zp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4 src, dst;
+
+    src = read_imagei(input, coord);
+    float data = convert_float(src.x) * input_scale + input_tail;
+    data = fabs(data);
+    dst.x = floor(data * output_scale + output_zp + 0.5);
+    write_imagei(output, coord, dst.xxxx);
+}

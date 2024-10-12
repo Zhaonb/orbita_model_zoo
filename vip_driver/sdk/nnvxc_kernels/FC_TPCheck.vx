@@ -1,0 +1,22 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform uint       tp_fc_ksize;
+_viv_uniform uint       elementCount;
+
+__kernel void vxcFC_TPCheck_fp16
+    (
+     image2d_t input
+    )
+{
+    uint gidx = (uint)get_global_id(0) + 1;
+    uint offset = gidx * tp_fc_ksize;
+    offset = offset > elementCount ? elementCount - 1 : offset - 1;
+    Image src_image = create_image_from_image2d(input, 2);
+    ushort *src_ptr = (ushort *)src_image.ptr;
+    src_ptr += offset;
+    ushort val = *src_ptr;
+    val = val == 0x8000 ? 0x0 : val;
+    *src_ptr = val;
+}

@@ -1,0 +1,124 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniGaussAdd4x_2x8;
+_viv_uniform VXC_512Bits uniGaussAdd6x_2x8;
+_viv_uniform VXC_512Bits uniGaussAdd1x_shift8_2x8;
+_viv_uniform VXC_512Bits uniGaussConv_2x_down_8x4;
+_viv_uniform int height;
+
+__kernel void gaussian5x5_scale_U8toU8_2x_down
+(
+    __read_only image2d_t   in_image,
+    global short*           conv_base_ptr,
+    float                   scale,
+    __write_only image2d_t  out_image
+)
+{
+    int  Px        = get_global_id(0);
+    int  Py        = 0;
+    int2 coord_in  = (int2)( 2 * Px - 1, -1 );
+    int2 coord_out = (int2)( Px, Py );
+    int i;
+    vxc_uchar16 v[10];
+    vxc_ushort8 sum[5];
+    vxc_ushort8 sum_result;
+    vxc_uchar16 dst = 0;
+
+    VXC_ReadImage(v[0], in_image, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(v[1], in_image, coord_in, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(v[2], in_image, coord_in, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(v[3], in_image, coord_in, VXC_5BITOFFSET_XY(8, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(v[4], in_image, coord_in, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(v[5], in_image, coord_in, VXC_5BITOFFSET_XY(8, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP8x4(sum[0], v[0], v[0], VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+    VXC_DP8x4(sum[0], v[1], v[1], VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+    VXC_DP8x4(sum[1], v[2], v[2], VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+    VXC_DP8x4(sum[1], v[3], v[3], VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+    VXC_DP8x4(sum[2], v[4], v[4], VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+    VXC_DP8x4(sum[2], v[5], v[5], VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+
+    while (coord_out.y <  height)
+    {
+        VXC_ReadImage(v[6], in_image, coord_in, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v[7], in_image, coord_in, VXC_5BITOFFSET_XY(8, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP8x4(sum[3], v[6], v[6], VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP8x4(sum[3], v[7], v[7], VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_ReadImage(v[8], in_image, coord_in, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v[9], in_image, coord_in, VXC_5BITOFFSET_XY(8, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP8x4(sum[4], v[8], v[8], VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP8x4(sum[4], v[9], v[9], VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP2x8(sum_result, sum[0],     sum[1], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd4x_2x8);
+        VXC_DP2x8(sum_result, sum_result, sum[2], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd6x_2x8);
+        VXC_DP2x8(sum_result, sum_result, sum[3], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd4x_2x8);
+        VXC_DP2x8(dst,        sum_result, sum[4], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd1x_shift8_2x8);
+        VXC_WriteImage(out_image, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+
+        VXC_ReadImage(v[6], in_image, coord_in, VXC_5BITOFFSET_XY(0, 5), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v[7], in_image, coord_in, VXC_5BITOFFSET_XY(8, 5), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP8x4(sum[0], v[6], v[6], VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP8x4(sum[0], v[7], v[7], VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_ReadImage(v[8], in_image, coord_in, VXC_5BITOFFSET_XY(0, 6), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v[9], in_image, coord_in, VXC_5BITOFFSET_XY(8, 6), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP8x4(sum[1], v[8], v[8], VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP8x4(sum[1], v[9], v[9], VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP2x8(sum_result, sum[2],     sum[3], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd4x_2x8);
+        VXC_DP2x8(sum_result, sum_result, sum[4], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd6x_2x8);
+        VXC_DP2x8(sum_result, sum_result, sum[0], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd4x_2x8);
+        VXC_DP2x8(dst,        sum_result, sum[1], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd1x_shift8_2x8);
+        VXC_WriteImage(out_image, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+
+
+        VXC_ReadImage(v[6], in_image, coord_in, VXC_5BITOFFSET_XY(0, 7), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v[7], in_image, coord_in, VXC_5BITOFFSET_XY(8, 7), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP8x4(sum[2], v[6], v[6], VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP8x4(sum[2], v[7], v[7], VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_ReadImage(v[8], in_image, coord_in, VXC_5BITOFFSET_XY(0, 8), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v[9], in_image, coord_in, VXC_5BITOFFSET_XY(8, 8), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP8x4(sum[3], v[8], v[8], VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP8x4(sum[3], v[9], v[9], VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP2x8(sum_result, sum[4],     sum[0], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd4x_2x8);
+        VXC_DP2x8(sum_result, sum_result, sum[1], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd6x_2x8);
+        VXC_DP2x8(sum_result, sum_result, sum[2], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd4x_2x8);
+        VXC_DP2x8(dst,        sum_result, sum[3], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd1x_shift8_2x8);
+        VXC_WriteImage(out_image, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+
+        VXC_ReadImage(v[6], in_image, coord_in, VXC_5BITOFFSET_XY(0, 9), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v[7], in_image, coord_in, VXC_5BITOFFSET_XY(8, 9), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP8x4(sum[4], v[6], v[6], VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP8x4(sum[4], v[7], v[7], VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_ReadImage(v[8], in_image, coord_in, VXC_5BITOFFSET_XY(0, 10), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v[9], in_image, coord_in, VXC_5BITOFFSET_XY(8, 10), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP8x4(sum[0], v[8], v[8], VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP8x4(sum[0], v[9], v[9], VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP2x8(sum_result, sum[1],     sum[2], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd4x_2x8);
+        VXC_DP2x8(sum_result, sum_result, sum[3], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd6x_2x8);
+        VXC_DP2x8(sum_result, sum_result, sum[4], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd4x_2x8);
+        VXC_DP2x8(dst,        sum_result, sum[0], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd1x_shift8_2x8);
+        VXC_WriteImage(out_image, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+
+        VXC_ReadImage(v[6], in_image, coord_in, VXC_5BITOFFSET_XY(0, 11), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v[7], in_image, coord_in, VXC_5BITOFFSET_XY(8, 11), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP8x4(sum[1], v[6], v[6], VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP8x4(sum[1], v[7], v[7], VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_ReadImage(v[8], in_image, coord_in, VXC_5BITOFFSET_XY(0, 12), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v[9], in_image, coord_in, VXC_5BITOFFSET_XY(8, 12), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP8x4(sum[2], v[8], v[8], VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP8x4(sum[2], v[9], v[9], VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussConv_2x_down_8x4);
+        VXC_DP2x8(sum_result, sum[3],     sum[4], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd4x_2x8);
+        VXC_DP2x8(sum_result, sum_result, sum[0], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd6x_2x8);
+        VXC_DP2x8(sum_result, sum_result, sum[1], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd4x_2x8);
+        VXC_DP2x8(dst,        sum_result, sum[2], VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniGaussAdd1x_shift8_2x8);
+        VXC_WriteImage(out_image, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_in.y += 10;
+        coord_out.y++;
+
+    }
+}
+

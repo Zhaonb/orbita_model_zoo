@@ -1,0 +1,315 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniSobel3x3VertA_4x8;
+_viv_uniform VXC_512Bits uniSobel3x3VertB_4x8;
+_viv_uniform VXC_512Bits uniSobel3x3VertC_4x8;
+_viv_uniform VXC_512Bits uniSobel3x3VertD_4x8;
+_viv_uniform VXC_512Bits uniSobel3x3HorA_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3HorB_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3HorC_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3HorD_8x4;
+_viv_uniform int height;
+
+#if (VX_VERSION==1)
+__kernel void sobel_3x3_xy(
+        __read_only  image2d_t input,
+        __write_only image2d_t output_x,
+         __write_only image2d_t output_y)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, src2;
+    vxc_short8 grad_x, grad_y;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Filter(grad_x, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelX, 1));
+    VXC_Filter(grad_y, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelY, 1));
+    VXC_WriteImage(output_x, coord_out, grad_x, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord_out, grad_y, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    for(coord_out.y = 1; coord_out.y < height;)
+    {
+        VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_Filter(grad_x, src1, src2, src0, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelX, 1));
+        VXC_Filter(grad_y, src1, src2, src0, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelY, 1));
+        VXC_WriteImage(output_x, coord_out, grad_x, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out, grad_y, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_Filter(grad_x, src2, src0, src1, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelX, 1));
+        VXC_Filter(grad_y, src2, src0, src1, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelY, 1));
+        VXC_WriteImage(output_x, coord_out, grad_x, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out, grad_y, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        coord.y+=3;
+        VXC_Filter(grad_x, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelX, 1));
+        VXC_Filter(grad_y, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelY, 1));
+        VXC_WriteImage(output_x, coord_out, grad_x, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out, grad_y, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+    }
+}
+
+__kernel void sobel_3x3_x(
+        __read_only  image2d_t input,
+        __write_only image2d_t output_x,
+         __write_only image2d_t output_y)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, src2;
+    vxc_short8 grad_x;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Filter(grad_x, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelX, 1));
+    VXC_WriteImage(output_x, coord_out, grad_x, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    for(coord_out.y = 1; coord_out.y < height;)
+    {
+        VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_Filter(grad_x, src1, src2, src0, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelX, 1));
+        VXC_WriteImage(output_x, coord_out, grad_x, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_Filter(grad_x, src2, src0, src1, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelX, 1));
+        VXC_WriteImage(output_x, coord_out, grad_x, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        coord.y+=3;
+        VXC_Filter(grad_x, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelX, 1));
+        VXC_WriteImage(output_x, coord_out, grad_x, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+    }
+}
+
+__kernel void sobel_3x3_y(
+        __read_only  image2d_t input,
+        __write_only image2d_t output_x,
+         __write_only image2d_t output_y)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, src2;
+    vxc_short8 grad_y;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Filter(grad_y, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelY, 1));
+    VXC_WriteImage(output_y, coord_out, grad_y, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    for(coord_out.y = 1; coord_out.y < height;)
+    {
+        VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_Filter(grad_y, src1, src2, src0, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelY, 1));
+        VXC_WriteImage(output_y, coord_out, grad_y, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_Filter(grad_y, src2, src0, src1, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelY, 1));
+        VXC_WriteImage(output_y, coord_out, grad_y, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        coord.y+=3;
+        VXC_Filter(grad_y, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelY, 1));
+        VXC_WriteImage(output_y, coord_out, grad_y, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+    }
+}
+#else
+
+__kernel void sobel_3x3_xy(
+        __read_only  image2d_t input,
+        __write_only image2d_t output_x,
+         __write_only image2d_t output_y)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1));
+
+    vxc_uchar16 src0, src1, src2, src3, src4, src5;
+    vxc_short8 grad_x0, grad_x1;
+    vxc_short8 dst_x0, dst_x1, dst_x2, dst_x3, dst_x4, dst_x5, dst_x6, dst_x7;
+    vxc_short8 grad_y0, grad_y1, grad_y2, grad_y3, grad_y4, grad_y5, grad_y6, grad_y7;
+
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord.xy, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input, coord.xy, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src4, input, coord.xy, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src5, input, coord.xy, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    int4 coord_out = coord + (int4)(0, 2, 8, 3);
+    coord.zw = coord.xy + (int2)(8, 1);
+
+    VXC_DP4x8(grad_x0, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertA_4x8);
+    VXC_DP4x8(grad_x1, src0, src1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertB_4x8);
+    VXC_DP4x8(dst_x0, src2, grad_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertC_4x8);
+    VXC_DP4x8(dst_x1, src2, grad_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertD_4x8);
+    VXC_DP8x4(grad_y0, src0, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorA_8x4);
+    VXC_DP8x4(grad_y0, src0, src2, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorB_8x4);
+    VXC_DP8x4(grad_y1, src0, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorC_8x4);
+    VXC_DP8x4(grad_y1, src0, src2, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorD_8x4);
+
+    VXC_DP4x8(grad_x0, src1, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertA_4x8);
+    VXC_DP4x8(grad_x1, src1, src2, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertB_4x8);
+    VXC_DP4x8(dst_x2, src3, grad_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertC_4x8);
+    VXC_DP4x8(dst_x3, src3, grad_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertD_4x8);
+    VXC_DP8x4(grad_y2, src1, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorA_8x4);
+    VXC_DP8x4(grad_y2, src1, src3, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorB_8x4);
+    VXC_DP8x4(grad_y3, src1, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorC_8x4);
+    VXC_DP8x4(grad_y3, src1, src3, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorD_8x4);
+
+    VXC_DP4x8(grad_x0, src2, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertA_4x8);
+    VXC_DP4x8(grad_x1, src2, src3, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertB_4x8);
+    VXC_DP4x8(dst_x4, src4, grad_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertC_4x8);
+    VXC_DP4x8(dst_x5, src4, grad_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertD_4x8);
+    VXC_DP8x4(grad_y4, src2, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorA_8x4);
+    VXC_DP8x4(grad_y4, src2, src4, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorB_8x4);
+    VXC_DP8x4(grad_y5, src2, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorC_8x4);
+    VXC_DP8x4(grad_y5, src2, src4, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorD_8x4);
+
+    VXC_DP4x8(grad_x0, src3, src4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertA_4x8);
+    VXC_DP4x8(grad_x1, src3, src4, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertB_4x8);
+    VXC_DP4x8(dst_x6, src5, grad_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertC_4x8);
+    VXC_DP4x8(dst_x7, src5, grad_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertD_4x8);
+    VXC_DP8x4(grad_y6, src3, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorA_8x4);
+    VXC_DP8x4(grad_y6, src3, src5, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorB_8x4);
+    VXC_DP8x4(grad_y7, src3, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorC_8x4);
+    VXC_DP8x4(grad_y7, src3, src5, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorD_8x4);
+
+    VXC_WriteImage(output_x, coord.xy, dst_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_x, coord.zy, dst_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord.xy, grad_y0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord.zy, grad_y1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    VXC_WriteImage(output_x, coord.xw, dst_x2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_x, coord.zw, dst_x3, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord.xw, grad_y2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord.zw, grad_y3, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    VXC_WriteImage(output_x, coord_out.xy, dst_x4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_x, coord_out.zy, dst_x5, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord_out.xy, grad_y4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord_out.zy, grad_y5, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    VXC_WriteImage(output_x, coord_out.xw, dst_x6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_x, coord_out.zw, dst_x7, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord_out.xw, grad_y6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord_out.zw, grad_y7, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void sobel_3x3_x(
+        __read_only  image2d_t input,
+        __write_only image2d_t output_x,
+         __write_only image2d_t output_y)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1));
+
+    vxc_uchar16 src0, src1, src2, src3, src4, src5;
+    vxc_short8 grad_x0, grad_x1;
+    vxc_short8 dst_x0, dst_x1, dst_x2, dst_x3, dst_x4, dst_x5, dst_x6, dst_x7;
+
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord.xy, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input, coord.xy, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src4, input, coord.xy, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src5, input, coord.xy, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    int4 coord_out = coord + (int4)(0, 2, 8, 3);
+    coord.zw = coord.xy + (int2)(8, 1);
+
+    VXC_DP4x8(grad_x0, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertA_4x8);
+    VXC_DP4x8(grad_x1, src0, src1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertB_4x8);
+    VXC_DP4x8(dst_x0, src2, grad_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertC_4x8);
+    VXC_DP4x8(dst_x1, src2, grad_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertD_4x8);
+
+    VXC_DP4x8(grad_x0, src1, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertA_4x8);
+    VXC_DP4x8(grad_x1, src1, src2, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertB_4x8);
+    VXC_DP4x8(dst_x2, src3, grad_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertC_4x8);
+    VXC_DP4x8(dst_x3, src3, grad_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertD_4x8);
+
+    VXC_DP4x8(grad_x0, src2, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertA_4x8);
+    VXC_DP4x8(grad_x1, src2, src3, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertB_4x8);
+    VXC_DP4x8(dst_x4, src4, grad_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertC_4x8);
+    VXC_DP4x8(dst_x5, src4, grad_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertD_4x8);
+
+    VXC_DP4x8(grad_x0, src3, src4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertA_4x8);
+    VXC_DP4x8(grad_x1, src3, src4, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertB_4x8);
+    VXC_DP4x8(dst_x6, src5, grad_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertC_4x8);
+    VXC_DP4x8(dst_x7, src5, grad_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertD_4x8);
+
+    VXC_WriteImage(output_x, coord.xy, dst_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_x, coord.zy, dst_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    VXC_WriteImage(output_x, coord.xw, dst_x2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_x, coord.zw, dst_x3, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    VXC_WriteImage(output_x, coord_out.xy, dst_x4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_x, coord_out.zy, dst_x5, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    VXC_WriteImage(output_x, coord_out.xw, dst_x6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_x, coord_out.zw, dst_x7, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void sobel_3x3_y(
+        __read_only  image2d_t input,
+        __write_only image2d_t output_x,
+         __write_only image2d_t output_y)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1));
+
+    vxc_uchar16 src0, src1, src2, src3, src4, src5;
+    vxc_short8 grad_y0, grad_y1, grad_y2, grad_y3, grad_y4, grad_y5, grad_y6, grad_y7;
+
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord.xy, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input, coord.xy, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src4, input, coord.xy, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src5, input, coord.xy, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    int4 coord_out = coord + (int4)(0, 2, 8, 3);
+    coord.zw = coord.xy + (int2)(8, 1);
+
+    VXC_DP8x4(grad_y0, src0, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorA_8x4);
+    VXC_DP8x4(grad_y0, src0, src2, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorB_8x4);
+    VXC_DP8x4(grad_y1, src0, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorC_8x4);
+    VXC_DP8x4(grad_y1, src0, src2, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorD_8x4);
+
+    VXC_DP8x4(grad_y2, src1, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorA_8x4);
+    VXC_DP8x4(grad_y2, src1, src3, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorB_8x4);
+    VXC_DP8x4(grad_y3, src1, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorC_8x4);
+    VXC_DP8x4(grad_y3, src1, src3, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorD_8x4);
+
+    VXC_DP8x4(grad_y4, src2, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorA_8x4);
+    VXC_DP8x4(grad_y4, src2, src4, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorB_8x4);
+    VXC_DP8x4(grad_y5, src2, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorC_8x4);
+    VXC_DP8x4(grad_y5, src2, src4, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorD_8x4);
+
+    VXC_DP8x4(grad_y6, src3, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorA_8x4);
+    VXC_DP8x4(grad_y6, src3, src5, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorB_8x4);
+    VXC_DP8x4(grad_y7, src3, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorC_8x4);
+    VXC_DP8x4(grad_y7, src3, src5, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorD_8x4);
+
+    VXC_WriteImage(output_y, coord.xy, grad_y0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord.zy, grad_y1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    VXC_WriteImage(output_y, coord.xw, grad_y2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord.zw, grad_y3, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    VXC_WriteImage(output_y, coord_out.xy, grad_y4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord_out.zy, grad_y5, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    VXC_WriteImage(output_y, coord_out.xw, grad_y6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord_out.zw, grad_y7, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+}
+#endif

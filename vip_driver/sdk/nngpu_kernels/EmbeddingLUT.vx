@@ -1,0 +1,148 @@
+__kernel void gpuEmbeddingLUT_F32toF32(__read_only image2d_t   lut,
+                                   __read_only image2d_t   value,
+                                   __write_only image2d_t  output,
+                                   int depth)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    int4 index = read_imagei(lut, coord.yw);
+
+    coord.z = index.s0;
+    if(coord.z >= 0 && coord.z < depth)
+    {
+        float4 tmpOut = read_imagef(value, coord.xz);
+        write_imagef(output, coord.xy, tmpOut);
+    }
+}
+
+__kernel void gpuEmbeddingLUT_F32toF32_3D(__read_only image2d_t   lut,
+                                   __read_only image2d_array_t   value,
+                                   __write_only image2d_array_t  output,
+                                   int depth)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 index = read_imagei(lut, coord.zw);
+    int4 coord_in = coord;
+
+    coord_in.z = index.s0;
+    if(coord_in.z >= 0 && coord_in.z < depth)
+    {
+        float4 tmpOut = read_imagef(value, coord_in);
+        write_imagef(output, coord, tmpOut);
+    }
+}
+
+__kernel void gpuEmbeddingLUT_U8toU8(__read_only image2d_t   lut,
+                                     __read_only image2d_t   value,
+                                     float scale,
+                                     float zpScalePlus_inout,
+                                     __write_only image2d_t  output,
+                                     int depth)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    int4 index = read_imagei(lut, coord.yw);
+
+    coord.z = index.s0;
+    if(coord.z >= 0 && coord.z < depth)
+    {
+        uint4 tmp = read_imageui(value, coord.xz);
+        //tmpOut.x = floor((tmp.x - zeroPointIn)*scale + zeroPointOut + 0.5);
+        tmp.x = floor(tmp.x * scale + zpScalePlus_inout);
+        write_imageui(output, coord.xy, tmp);
+    }
+}
+
+__kernel void gpuEmbeddingLUT_U8toU8_3D(__read_only image2d_t   lut,
+                                     __read_only image2d_array_t   value,
+                                     float scale,
+                                     float zpScalePlus_inout,
+                                     __write_only image2d_array_t  output,
+                                     int depth)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 index = read_imagei(lut, coord.zw);
+    int4 coord_in = coord;
+
+    coord_in.z = index.s0;
+    if(coord_in.z >= 0 && coord_in.z < depth)
+    {
+        uint4 tmp = read_imageui(value, coord_in);
+        tmp.x = floor(tmp.x * scale + zpScalePlus_inout);
+        write_imageui(output, coord, tmp);
+    }
+}
+
+__kernel void gpuEmbeddingLUT_I32toI32(__read_only image2d_t   lut,
+                                     __read_only image2d_t   value,
+                                     float scaleInOut,
+                                     __write_only image2d_t  output,
+                                     int depth)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    int4 index = read_imagei(lut, coord.yw);
+
+    coord.z = index.s0;
+    if(coord.z >= 0 && coord.z < depth)
+    {
+        int4 tmp = read_imagei(value, coord.xz);
+        tmp.x = floor(tmp.x * scaleInOut + 0.5);
+        write_imagei(output, coord.xy, tmp);
+    }
+}
+
+__kernel void gpuEmbeddingLUT_I32toI32_3D(__read_only image2d_t   lut,
+                                     __read_only image2d_array_t   value,
+                                     float scaleInOut,
+                                     __write_only image2d_array_t  output,
+                                     int depth)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 index = read_imagei(lut, coord.zw);
+    int4 coord_in = coord;
+
+    coord_in.z = index.s0;
+    if(coord_in.z >= 0 && coord_in.z < depth)
+    {
+        int4 tmp = read_imagei(value, coord_in);
+        tmp.x = floor(tmp.x * scaleInOut + 0.5);
+        write_imagei(output, coord, tmp);
+    }
+}
+
+__kernel void gpuEmbeddingLUT_U8toF32(__read_only image2d_t   lut,
+                                     __read_only image2d_t   value,
+                                     float scale_in,
+                                     float minusZpScale_in,
+                                     __write_only image2d_t  output,
+                                     int depth)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    int4 index = read_imagei(lut, coord.yw);
+
+    coord.z = index.s0;
+    if(coord.z >= 0 && coord.z < depth)
+    {
+        float4 dst = convert_float4(read_imageui(value, coord.xz));
+        dst.x = dst.x * scale_in + minusZpScale_in;
+        write_imagef(output, coord.xy, dst);
+    }
+}
+
+__kernel void gpuEmbeddingLUT_U8toF32_3D(__read_only image2d_t   lut,
+                                     __read_only image2d_array_t   value,
+                                     float scale_in,
+                                     float minusZpScale_in,
+                                     __write_only image2d_array_t  output,
+                                     int depth)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 index = read_imagei(lut, coord.zw);
+    int4 coord_in = coord;
+
+    coord_in.z = index.s0;
+    if(coord_in.z >= 0 && coord_in.z < depth)
+    {
+        float4 dst = convert_float4(read_imageui(value, coord_in));
+        dst.x = dst.x * scale_in + minusZpScale_in;
+        write_imagef(output, coord, dst);
+    }
+}

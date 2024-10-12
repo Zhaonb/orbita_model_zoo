@@ -1,0 +1,987 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniSobel3x3Vert1stRowA_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3Vert1stRowB_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3Vert1stRowC_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3Vert1stRowD_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3Hor1stRow_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3Hor1stRowB_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3Hor1stRowC_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3Hor1stRowD_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3VertA_4x8;
+_viv_uniform VXC_512Bits uniSobel3x3VertB_4x8;
+_viv_uniform VXC_512Bits uniSobel3x3VertC_4x8;
+_viv_uniform VXC_512Bits uniSobel3x3VertD_4x8;
+_viv_uniform VXC_512Bits uniSobel3x3HorA_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3HorB_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3HorC_8x4;
+_viv_uniform VXC_512Bits uniSobel3x3HorD_8x4;
+_viv_uniform int height;
+_viv_uniform int startRow;
+_viv_uniform int resFlg;
+_viv_uniform int lastPosX;
+_viv_uniform int lastPosY;
+_viv_uniform int lastIdx;
+
+
+_viv_uniform VXC_512Bits uniSobel5x5VertRow1A_4x8;
+_viv_uniform VXC_512Bits uniSobel5x5VertRow1B_4x8;
+_viv_uniform VXC_512Bits uniSobel5x5VertRow2A_4x8;
+_viv_uniform VXC_512Bits uniSobel5x5VertRow2B_4x8;
+_viv_uniform VXC_512Bits uniSobel5x5VertRow3A_4x8;
+_viv_uniform VXC_512Bits uniSobel5x5VertRow3B_4x8;
+_viv_uniform VXC_512Bits uniSobel5x5HorRow1A_8x4;
+_viv_uniform VXC_512Bits uniSobel5x5HorRow1B_8x4;
+_viv_uniform VXC_512Bits uniSobel5x5HorRow1C_8x4;
+_viv_uniform VXC_512Bits uniSobel5x5HorRow2A_8x4;
+_viv_uniform VXC_512Bits uniSobel5x5HorRow2B_8x4;
+_viv_uniform VXC_512Bits uniSobel5x5HorRow2C_8x4;
+_viv_uniform VXC_512Bits uniSobel5x5HorRow4A_8x4;
+_viv_uniform VXC_512Bits uniSobel5x5HorRow4B_8x4;
+_viv_uniform VXC_512Bits uniSobel5x5HorRow4C_8x4;
+_viv_uniform VXC_512Bits uniSobel5x5HorRow5A_8x4;
+_viv_uniform VXC_512Bits uniSobel5x5HorRow5B_8x4;
+_viv_uniform VXC_512Bits uniSobel5x5HorRow5C_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7VertRow1A_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7VertRow1B_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7VertRow2A_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7VertRow2B_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7VertRow3A_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7VertRow3B_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7VertRow4A_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7VertRow4B_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7HorzRow1A_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7HorzRow1B_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7HorzRow2A_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7HorzRow2B_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7HorzRow3A_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7HorzRow3B_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7HorzRow5A_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7HorzRow5B_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7HorzRow6A_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7HorzRow6B_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7HorzRow7A_8x4;
+_viv_uniform VXC_512Bits uniSobel7x7HorzRow7B_8x4;
+
+_viv_uniform VXC_512Bits uniAddI16toI32A_4x4;
+_viv_uniform VXC_512Bits uniAddI16toI32B_4x4;
+_viv_uniform VXC_512Bits uniAddI32I16toI32A_4x4;
+_viv_uniform VXC_512Bits uniAddI32I16toI32B_4x4;
+_viv_uniform VXC_512Bits uniConvI32toI16_2x8;
+
+
+#if 0
+__kernel void sobelMxN_3x3(
+        __read_only  image2d_t input,
+        __global int* win,
+        __write_only image2d_t output_x,
+         __write_only image2d_t output_y)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, src2;
+    vxc_short8 grad_x, grad_y;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Filter(grad_x, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelX, 1));
+    VXC_Filter(grad_y, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelY, 1));
+    VXC_WriteImage(output_x, coord_out, grad_x, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord_out, grad_y, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    for(coord_out.y = 1; coord_out.y < lastPosY;)
+    {
+        VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_Filter(grad_x, src1, src2, src0, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelX, 1));
+        VXC_Filter(grad_y, src1, src2, src0, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelY, 1));
+        VXC_WriteImage(output_x, coord_out, grad_x, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out, grad_y, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_Filter(grad_x, src2, src0, src1, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelX, 1));
+        VXC_Filter(grad_y, src2, src0, src1, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelY, 1));
+        VXC_WriteImage(output_x, coord_out, grad_x, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out, grad_y, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        coord.y+=3;
+        VXC_Filter(grad_x, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelX, 1));
+        VXC_Filter(grad_y, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_SobelY, 1));
+        VXC_WriteImage(output_x, coord_out, grad_x, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out, grad_y, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+    }
+}
+
+#else
+__kernel void sobelMxN_3x3(
+        __read_only  image2d_t input,
+        __global int* win,
+        __write_only image2d_t output_x,
+         __write_only image2d_t output_y)
+{
+    int gidx = get_global_id(0);
+    int2 coord = (int2)(gidx * 14 + 1, get_global_id(1));
+    int4 coord_out = (int4)(coord.x, get_global_id(1), coord.x + 8, get_global_id(1));
+    vxc_uchar16 src0, src1, src2;
+    vxc_short8 grad_x0, grad_x1, grad_y0, grad_y1;
+    vxc_short8 dst_x0, dst_x1;
+    vxc_short8 tmpX0, tmpX1;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP4x8(grad_x0, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertA_4x8);
+    VXC_DP4x8(grad_x1, src0, src1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertB_4x8);
+    VXC_DP4x8(dst_x0, src2, grad_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertC_4x8);
+    VXC_DP4x8(dst_x1, src2, grad_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertD_4x8);
+    VXC_DP8x4(grad_y0, src0, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorA_8x4);
+    VXC_DP8x4(grad_y0, src0, src2, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorB_8x4);
+    VXC_DP8x4(grad_y1, src0, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorC_8x4);
+    VXC_DP8x4(grad_y1, src0, src2, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorD_8x4);
+
+    VXC_WriteImage(output_x, coord_out.xy, dst_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_x, coord_out.zy, dst_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord_out.xy, grad_y0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord_out.zy, grad_y1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+    for(coord_out.y = startRow; coord_out.y < lastPosY;)
+    {
+        VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x8(grad_x0, src1, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertA_4x8);
+        VXC_DP4x8(grad_x1, src1, src2, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertB_4x8);
+        VXC_DP4x8(dst_x0, src0, grad_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertC_4x8);
+        VXC_DP4x8(dst_x1, src0, grad_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertD_4x8);
+        VXC_DP8x4(grad_y0, src1, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorA_8x4);
+        VXC_DP8x4(grad_y0, src1, src0, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorB_8x4);
+        VXC_DP8x4(grad_y1, src1, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorC_8x4);
+        VXC_DP8x4(grad_y1, src1, src0, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorD_8x4);
+        VXC_WriteImage(output_x, coord_out.xy, dst_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_x, coord_out.zy, dst_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, grad_y0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.zy, grad_y1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_DP4x8(grad_x0, src2, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertA_4x8);
+        VXC_DP4x8(grad_x1, src2, src0, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertB_4x8);
+        VXC_DP4x8(dst_x0, src1, grad_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertC_4x8);
+        VXC_DP4x8(dst_x1, src1, grad_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertD_4x8);
+        VXC_DP8x4(grad_y0, src2, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorA_8x4);
+        VXC_DP8x4(grad_y0, src2, src1, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorB_8x4);
+        VXC_DP8x4(grad_y1, src2, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorC_8x4);
+        VXC_DP8x4(grad_y1, src2, src1, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorD_8x4);
+        VXC_WriteImage(output_x, coord_out.xy, dst_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_x, coord_out.zy, dst_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, grad_y0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.zy, grad_y1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        coord.y+=3;
+        VXC_DP4x8(grad_x0, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertA_4x8);
+        VXC_DP4x8(grad_x1, src0, src1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniSobel3x3VertB_4x8);
+        VXC_DP4x8(dst_x0, src2, grad_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertC_4x8);
+        VXC_DP4x8(dst_x1, src2, grad_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3VertD_4x8);
+        VXC_DP8x4(grad_y0, src0, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorA_8x4);
+        VXC_DP8x4(grad_y0, src0, src2, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorB_8x4);
+        VXC_DP8x4(grad_y1, src0, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorC_8x4);
+        VXC_DP8x4(grad_y1, src0, src2, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 1), uniSobel3x3HorD_8x4);
+        VXC_WriteImage(output_x, coord_out.xy, dst_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_x, coord_out.zy, dst_x1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, grad_y0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.zy, grad_y1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+    }
+
+    dst_x0 ^= dst_x0;
+    if(coord_out.y - 1 >= lastPosY)
+    {
+        coord_out.y = lastPosY;
+        VXC_WriteImage(output_x, coord_out.xy, dst_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_x, coord_out.zy, dst_x0, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, dst_x0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.zy, dst_x0, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    }
+
+    if(resFlg && gidx == lastIdx)
+    {
+        int2 coord_res = (int2)(lastPosX, 0);
+
+        for(; coord_res.y < height; coord_res.y ++)
+        {
+            VXC_WriteImage(output_x, coord_res, dst_x0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_WriteImage(output_y, coord_res, dst_x0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        }
+    }
+}
+#endif
+#if 1
+__kernel void sobelMxN_5x5(
+        __read_only  image2d_t input,
+        __global int* win,
+        __write_only image2d_t output_x,
+        __write_only image2d_t output_y)
+{
+    int gidx = get_global_id(0);
+    int2 coord = (int2)(gidx * 12 + 2, get_global_id(1));
+    int4 coord_out = (int4)(coord.x, get_global_id(1), coord.x + 8, get_global_id(1));
+    vxc_uchar16 src0, src1, src2, src3, src4;
+    vxc_short8 grad_x0, grad_x1, grad_x2, grad_x3, grad_x4, grad_x5, grad_x6, grad_x7, grad_x8, grad_x9;
+    vxc_short8 grad_y0, grad_y1, grad_y2, grad_y3, grad_y4, grad_y5, grad_y6, grad_y7;
+    vxc_short8 sumx0, sumx1, sumy0, sumy1;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-2, -2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-2, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-2, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input, coord, VXC_5BITOFFSET_XY(-2, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src4, input, coord, VXC_5BITOFFSET_XY(-2, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP4x8(grad_x0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1A_4x8);
+    VXC_DP4x8(grad_x1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1B_4x8);
+    VXC_DP4x8(grad_x2, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2A_4x8);
+    VXC_DP4x8(grad_x3, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2B_4x8);
+    VXC_DP4x8(grad_x4, src2, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow3A_4x8);
+    VXC_DP4x8(grad_x5, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow3B_4x8);
+    VXC_DP4x8(grad_x6, src3, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2A_4x8);
+    VXC_DP4x8(grad_x7, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2B_4x8);
+    VXC_DP4x8(grad_x8, src4, src4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1A_4x8);
+    VXC_DP4x8(grad_x9, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1B_4x8);
+
+    VXC_DP8x4(grad_y0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1A_8x4);
+    VXC_DP8x4(grad_y0, src0, src0, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1B_8x4);
+    VXC_DP8x4(grad_y1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1C_8x4);
+    VXC_DP8x4(grad_y2, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2A_8x4);
+    VXC_DP8x4(grad_y2, src1, src1, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2B_8x4);
+    VXC_DP8x4(grad_y3, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2C_8x4);
+    VXC_DP8x4(grad_y4, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4A_8x4);
+    VXC_DP8x4(grad_y4, src3, src3, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4B_8x4);
+    VXC_DP8x4(grad_y5, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4C_8x4);
+    VXC_DP8x4(grad_y6, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5A_8x4);
+    VXC_DP8x4(grad_y6, src4, src4, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5B_8x4);
+    VXC_DP8x4(grad_y7, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5C_8x4);
+
+    sumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8;
+    sumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9;
+    sumy0 = grad_y0 + grad_y2 + grad_y4 + grad_y6;
+    sumy1 = grad_y1 + grad_y3 + grad_y5 + grad_y7;
+
+    VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_x, coord_out.zy, sumx1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord_out.zy, sumy1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    for(coord_out.y = startRow; coord_out.y < lastPosY;)
+    {
+        VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-2, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x8(grad_x0, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1A_4x8);
+        VXC_DP4x8(grad_x1, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1B_4x8);
+        VXC_DP4x8(grad_x2, src2, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2A_4x8);
+        VXC_DP4x8(grad_x3, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2B_4x8);
+        VXC_DP4x8(grad_x4, src3, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow3A_4x8);
+        VXC_DP4x8(grad_x5, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow3B_4x8);
+        VXC_DP4x8(grad_x6, src4, src4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2A_4x8);
+        VXC_DP4x8(grad_x7, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2B_4x8);
+        VXC_DP4x8(grad_x8, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1A_4x8);
+        VXC_DP4x8(grad_x9, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1B_4x8);
+
+        VXC_DP8x4(grad_y0, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1A_8x4);
+        VXC_DP8x4(grad_y0, src1, src1, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1B_8x4);
+        VXC_DP8x4(grad_y1, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1C_8x4);
+        VXC_DP8x4(grad_y2, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2A_8x4);
+        VXC_DP8x4(grad_y2, src2, src2, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2B_8x4);
+        VXC_DP8x4(grad_y3, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2C_8x4);
+        VXC_DP8x4(grad_y4, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4A_8x4);
+        VXC_DP8x4(grad_y4, src4, src4, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4B_8x4);
+        VXC_DP8x4(grad_y5, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4C_8x4);
+        VXC_DP8x4(grad_y6, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5A_8x4);
+        VXC_DP8x4(grad_y6, src0, src0, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5B_8x4);
+        VXC_DP8x4(grad_y7, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5C_8x4);
+
+        sumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8;
+        sumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9;
+        sumy0 = grad_y0 + grad_y2 + grad_y4 + grad_y6;
+        sumy1 = grad_y1 + grad_y3 + grad_y5 + grad_y7;
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_x, coord_out.zy, sumx1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.zy, sumy1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-2, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_DP4x8(grad_x0, src2, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1A_4x8);
+        VXC_DP4x8(grad_x1, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1B_4x8);
+        VXC_DP4x8(grad_x2, src3, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2A_4x8);
+        VXC_DP4x8(grad_x3, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2B_4x8);
+        VXC_DP4x8(grad_x4, src4, src4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow3A_4x8);
+        VXC_DP4x8(grad_x5, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow3B_4x8);
+        VXC_DP4x8(grad_x6, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2A_4x8);
+        VXC_DP4x8(grad_x7, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2B_4x8);
+        VXC_DP4x8(grad_x8, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1A_4x8);
+        VXC_DP4x8(grad_x9, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1B_4x8);
+
+        VXC_DP8x4(grad_y0, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1A_8x4);
+        VXC_DP8x4(grad_y0, src2, src2, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1B_8x4);
+        VXC_DP8x4(grad_y1, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1C_8x4);
+        VXC_DP8x4(grad_y2, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2A_8x4);
+        VXC_DP8x4(grad_y2, src3, src3, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2B_8x4);
+        VXC_DP8x4(grad_y3, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2C_8x4);
+        VXC_DP8x4(grad_y4, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4A_8x4);
+        VXC_DP8x4(grad_y4, src0, src0, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4B_8x4);
+        VXC_DP8x4(grad_y5, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4C_8x4);
+        VXC_DP8x4(grad_y6, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5A_8x4);
+        VXC_DP8x4(grad_y6, src1, src1, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5B_8x4);
+        VXC_DP8x4(grad_y7, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5C_8x4);
+
+        sumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8;
+        sumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9;
+        sumy0 = grad_y0 + grad_y2 + grad_y4 + grad_y6;
+        sumy1 = grad_y1 + grad_y3 + grad_y5 + grad_y7;
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_x, coord_out.zy, sumx1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.zy, sumy1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-2, 5), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_DP4x8(grad_x0, src3, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1A_4x8);
+        VXC_DP4x8(grad_x1, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1B_4x8);
+        VXC_DP4x8(grad_x2, src4, src4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2A_4x8);
+        VXC_DP4x8(grad_x3, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2B_4x8);
+        VXC_DP4x8(grad_x4, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow3A_4x8);
+        VXC_DP4x8(grad_x5, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow3B_4x8);
+        VXC_DP4x8(grad_x6, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2A_4x8);
+        VXC_DP4x8(grad_x7, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2B_4x8);
+        VXC_DP4x8(grad_x8, src2, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1A_4x8);
+        VXC_DP4x8(grad_x9, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1B_4x8);
+
+        VXC_DP8x4(grad_y0, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1A_8x4);
+        VXC_DP8x4(grad_y0, src3, src3, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1B_8x4);
+        VXC_DP8x4(grad_y1, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1C_8x4);
+        VXC_DP8x4(grad_y2, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2A_8x4);
+        VXC_DP8x4(grad_y2, src4, src4, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2B_8x4);
+        VXC_DP8x4(grad_y3, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2C_8x4);
+        VXC_DP8x4(grad_y4, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4A_8x4);
+        VXC_DP8x4(grad_y4, src1, src1, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4B_8x4);
+        VXC_DP8x4(grad_y5, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4C_8x4);
+        VXC_DP8x4(grad_y6, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5A_8x4);
+        VXC_DP8x4(grad_y6, src2, src2, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5B_8x4);
+        VXC_DP8x4(grad_y7, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5C_8x4);
+
+        sumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8;
+        sumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9;
+        sumy0 = grad_y0 + grad_y2 + grad_y4 + grad_y6;
+        sumy1 = grad_y1 + grad_y3 + grad_y5 + grad_y7;
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_x, coord_out.zy, sumx1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.zy, sumy1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src3, input, coord, VXC_5BITOFFSET_XY(-2, 6), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_DP4x8(grad_x0, src4, src4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1A_4x8);
+        VXC_DP4x8(grad_x1, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1B_4x8);
+        VXC_DP4x8(grad_x2, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2A_4x8);
+        VXC_DP4x8(grad_x3, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2B_4x8);
+        VXC_DP4x8(grad_x4, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow3A_4x8);
+        VXC_DP4x8(grad_x5, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow3B_4x8);
+        VXC_DP4x8(grad_x6, src2, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2A_4x8);
+        VXC_DP4x8(grad_x7, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2B_4x8);
+        VXC_DP4x8(grad_x8, src3, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1A_4x8);
+        VXC_DP4x8(grad_x9, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1B_4x8);
+
+        VXC_DP8x4(grad_y0, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1A_8x4);
+        VXC_DP8x4(grad_y0, src4, src4, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1B_8x4);
+        VXC_DP8x4(grad_y1, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1C_8x4);
+        VXC_DP8x4(grad_y2, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2A_8x4);
+        VXC_DP8x4(grad_y2, src0, src0, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2B_8x4);
+        VXC_DP8x4(grad_y3, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2C_8x4);
+        VXC_DP8x4(grad_y4, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4A_8x4);
+        VXC_DP8x4(grad_y4, src2, src2, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4B_8x4);
+        VXC_DP8x4(grad_y5, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4C_8x4);
+        VXC_DP8x4(grad_y6, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5A_8x4);
+        VXC_DP8x4(grad_y6, src3, src3, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5B_8x4);
+        VXC_DP8x4(grad_y7, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5C_8x4);
+
+        sumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8;
+        sumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9;
+        sumy0 = grad_y0 + grad_y2 + grad_y4 + grad_y6;
+        sumy1 = grad_y1 + grad_y3 + grad_y5 + grad_y7;
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_x, coord_out.zy, sumx1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.zy, sumy1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src4, input, coord, VXC_5BITOFFSET_XY(-2, 7), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord.y+=5;
+        coord_out.y++;
+        VXC_DP4x8(grad_x0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1A_4x8);
+        VXC_DP4x8(grad_x1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1B_4x8);
+        VXC_DP4x8(grad_x2, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2A_4x8);
+        VXC_DP4x8(grad_x3, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2B_4x8);
+        VXC_DP4x8(grad_x4, src2, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow3A_4x8);
+        VXC_DP4x8(grad_x5, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow3B_4x8);
+        VXC_DP4x8(grad_x6, src3, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2A_4x8);
+        VXC_DP4x8(grad_x7, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow2B_4x8);
+        VXC_DP4x8(grad_x8, src4, src4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1A_4x8);
+        VXC_DP4x8(grad_x9, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5VertRow1B_4x8);
+
+        VXC_DP8x4(grad_y0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1A_8x4);
+        VXC_DP8x4(grad_y0, src0, src0, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1B_8x4);
+        VXC_DP8x4(grad_y1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow1C_8x4);
+        VXC_DP8x4(grad_y2, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2A_8x4);
+        VXC_DP8x4(grad_y2, src1, src1, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2B_8x4);
+        VXC_DP8x4(grad_y3, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow2C_8x4);
+        VXC_DP8x4(grad_y4, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4A_8x4);
+        VXC_DP8x4(grad_y4, src3, src3, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4B_8x4);
+        VXC_DP8x4(grad_y5, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow4C_8x4);
+        VXC_DP8x4(grad_y6, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5A_8x4);
+        VXC_DP8x4(grad_y6, src4, src4, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5B_8x4);
+        VXC_DP8x4(grad_y7, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel5x5HorRow5C_8x4);
+
+        sumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8;
+        sumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9;
+        sumy0 = grad_y0 + grad_y2 + grad_y4 + grad_y6;
+        sumy1 = grad_y1 + grad_y3 + grad_y5 + grad_y7;
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_x, coord_out.zy, sumx1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.zy, sumy1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+    }
+
+    sumx0 ^= sumx0;
+    if(coord_out.y - 1 >= lastPosY)
+    {
+        coord_out.y = lastPosY;
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_x, coord_out.zy, sumx0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.zy, sumx0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_x, coord_out.zy, sumx0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.zy, sumx0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    }
+
+    if(resFlg && gidx == lastIdx)
+    {
+        int2 coord_res = (int2)(lastPosX, 0);
+
+        for(; coord_res.y < height; coord_res.y ++)
+        {
+            VXC_WriteImage(output_x, coord_res, sumx0, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+            VXC_WriteImage(output_y, coord_res, sumx0, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+        }
+    }
+}
+#endif
+#if 0
+__kernel void sobelMxN_7x7(
+        __read_only  image2d_t input,
+        __global int* win,
+        __write_only image2d_t output_x,
+        __write_only image2d_t output_y)
+{
+    int gidx = get_global_id(0);
+    int2 coord = (int2)(gidx * 8 + 3, get_global_id(1));
+    int2 coord_out = coord;
+    vxc_uchar16 src0, src1, src2, src3, src4, src5, src6;
+    int4 grad_x0, grad_x1, grad_x2, grad_x3, grad_x4, grad_x5, grad_x6;
+    int4 grad_x7, grad_x8, grad_x9, grad_x10, grad_x11, grad_x12, grad_x13;
+    vxc_short8 sumx0, sumy0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-3, -3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-3, -2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-3, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input, coord, VXC_5BITOFFSET_XY(-3, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src4, input, coord, VXC_5BITOFFSET_XY(-3, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src5, input, coord, VXC_5BITOFFSET_XY(-3, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src6, input, coord, VXC_5BITOFFSET_XY(-3, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    int4 tmpGrady0, tmpGrady1, tmpGrady2, tmpGrady3, tmpGrady4, tmpGrady5;
+    int4 tmpGrady6, tmpGrady7, tmpGrady8, tmpGrady9, tmpGrady10, tmpGrady11;
+
+    VXC_DP8x4(grad_x0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+    VXC_DP8x4(grad_x1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+    VXC_DP8x4(grad_x2, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+    VXC_DP8x4(grad_x3, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+    VXC_DP8x4(grad_x4, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+    VXC_DP8x4(grad_x5, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+    VXC_DP8x4(grad_x6, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4A_8x4);
+    VXC_DP8x4(grad_x7, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4B_8x4);
+    VXC_DP8x4(grad_x8, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+    VXC_DP8x4(grad_x9, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+    VXC_DP8x4(grad_x10, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+    VXC_DP8x4(grad_x11, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+    VXC_DP8x4(grad_x12, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+    VXC_DP8x4(grad_x13, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+
+    VXC_DP8x4(tmpGrady0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1A_8x4);
+    VXC_DP8x4(tmpGrady1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1B_8x4);
+    VXC_DP8x4(tmpGrady2, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2A_8x4);
+    VXC_DP8x4(tmpGrady3, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2B_8x4);
+    VXC_DP8x4(tmpGrady4, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3A_8x4);
+    VXC_DP8x4(tmpGrady5, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3B_8x4);
+    VXC_DP8x4(tmpGrady6, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5A_8x4);
+    VXC_DP8x4(tmpGrady7, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5B_8x4);
+    VXC_DP8x4(tmpGrady8, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6A_8x4);
+    VXC_DP8x4(tmpGrady9, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6B_8x4);
+    VXC_DP8x4(tmpGrady10, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7A_8x4);
+    VXC_DP8x4(tmpGrady11, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7B_8x4);
+
+    int4 tmpSumx0, tmpSumx1, tmpSumy0, tmpSumy1;
+    tmpSumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8 + grad_x10 + grad_x12;
+    tmpSumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9 + grad_x11 + grad_x13;
+    tmpSumy0 = tmpGrady0 + tmpGrady2 + tmpGrady4 + tmpGrady6 +tmpGrady8 + tmpGrady10;
+    tmpSumy1 = tmpGrady1 + tmpGrady3 + tmpGrady5 + tmpGrady7 +tmpGrady9 + tmpGrady11;
+    VXC_DP2x8(sumx0, tmpSumx0, tmpSumx1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+    VXC_DP2x8(sumy0, tmpSumy0, tmpSumy1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+
+    VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    for(coord_out.y = startRow; coord_out.y < lastPosY;)
+    {
+        VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-3, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP8x4(grad_x0, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x1, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+        VXC_DP8x4(grad_x2, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x3, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x4, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x5, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x6, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4A_8x4);
+        VXC_DP8x4(grad_x7, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4B_8x4);
+        VXC_DP8x4(grad_x8, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x9, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x10, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x11, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x12, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x13, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+
+        VXC_DP8x4(tmpGrady0, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1A_8x4);
+        VXC_DP8x4(tmpGrady1, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1B_8x4);
+        VXC_DP8x4(tmpGrady2, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2A_8x4);
+        VXC_DP8x4(tmpGrady3, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2B_8x4);
+        VXC_DP8x4(tmpGrady4, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3A_8x4);
+        VXC_DP8x4(tmpGrady5, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3B_8x4);
+        VXC_DP8x4(tmpGrady6, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5A_8x4);
+        VXC_DP8x4(tmpGrady7, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5B_8x4);
+        VXC_DP8x4(tmpGrady8, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6A_8x4);
+        VXC_DP8x4(tmpGrady9, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6B_8x4);
+        VXC_DP8x4(tmpGrady10, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7A_8x4);
+        VXC_DP8x4(tmpGrady11, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7B_8x4);
+
+        tmpSumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8 + grad_x10 + grad_x12;
+        tmpSumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9 + grad_x11 + grad_x13;
+        tmpSumy0 = tmpGrady0 + tmpGrady2 + tmpGrady4 + tmpGrady6 +tmpGrady8 + tmpGrady10;
+        tmpSumy1 = tmpGrady1 + tmpGrady3 + tmpGrady5 + tmpGrady7 +tmpGrady9 + tmpGrady11;
+        VXC_DP2x8(sumx0, tmpSumx0, tmpSumx1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+        VXC_DP2x8(sumy0, tmpSumy0, tmpSumy1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-3, 5), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_DP8x4(grad_x0, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x1, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+        VXC_DP8x4(grad_x2, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x3, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x4, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x5, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x6, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4A_8x4);
+        VXC_DP8x4(grad_x7, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4B_8x4);
+        VXC_DP8x4(grad_x8, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x9, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x10, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x11, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x12, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x13, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+
+        VXC_DP8x4(tmpGrady0, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1A_8x4);
+        VXC_DP8x4(tmpGrady1, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1B_8x4);
+        VXC_DP8x4(tmpGrady2, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2A_8x4);
+        VXC_DP8x4(tmpGrady3, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2B_8x4);
+        VXC_DP8x4(tmpGrady4, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3A_8x4);
+        VXC_DP8x4(tmpGrady5, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3B_8x4);
+        VXC_DP8x4(tmpGrady6, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5A_8x4);
+        VXC_DP8x4(tmpGrady7, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5B_8x4);
+        VXC_DP8x4(tmpGrady8, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6A_8x4);
+        VXC_DP8x4(tmpGrady9, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6B_8x4);
+        VXC_DP8x4(tmpGrady10, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7A_8x4);
+        VXC_DP8x4(tmpGrady11, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7B_8x4);
+
+        tmpSumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8 + grad_x10 + grad_x12;
+        tmpSumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9 + grad_x11 + grad_x13;
+        tmpSumy0 = tmpGrady0 + tmpGrady2 + tmpGrady4 + tmpGrady6 +tmpGrady8 + tmpGrady10;
+        tmpSumy1 = tmpGrady1 + tmpGrady3 + tmpGrady5 + tmpGrady7 +tmpGrady9 + tmpGrady11;
+        VXC_DP2x8(sumx0, tmpSumx0, tmpSumx1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+        VXC_DP2x8(sumy0, tmpSumy0, tmpSumy1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-3, 6), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_DP8x4(grad_x0, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x1, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+        VXC_DP8x4(grad_x2, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x3, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x4, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x5, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x6, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4A_8x4);
+        VXC_DP8x4(grad_x7, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4B_8x4);
+        VXC_DP8x4(grad_x8, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x9, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x10, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x11, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x12, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x13, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+
+        VXC_DP8x4(tmpGrady0, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1A_8x4);
+        VXC_DP8x4(tmpGrady1, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1B_8x4);
+        VXC_DP8x4(tmpGrady2, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2A_8x4);
+        VXC_DP8x4(tmpGrady3, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2B_8x4);
+        VXC_DP8x4(tmpGrady4, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3A_8x4);
+        VXC_DP8x4(tmpGrady5, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3B_8x4);
+        VXC_DP8x4(tmpGrady6, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5A_8x4);
+        VXC_DP8x4(tmpGrady7, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5B_8x4);
+        VXC_DP8x4(tmpGrady8, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6A_8x4);
+        VXC_DP8x4(tmpGrady9, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6B_8x4);
+        VXC_DP8x4(tmpGrady10, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7A_8x4);
+        VXC_DP8x4(tmpGrady11, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7B_8x4);
+
+        tmpSumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8 + grad_x10 + grad_x12;
+        tmpSumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9 + grad_x11 + grad_x13;
+        tmpSumy0 = tmpGrady0 + tmpGrady2 + tmpGrady4 + tmpGrady6 +tmpGrady8 + tmpGrady10;
+        tmpSumy1 = tmpGrady1 + tmpGrady3 + tmpGrady5 + tmpGrady7 +tmpGrady9 + tmpGrady11;
+        VXC_DP2x8(sumx0, tmpSumx0, tmpSumx1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+        VXC_DP2x8(sumy0, tmpSumy0, tmpSumy1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src3, input, coord, VXC_5BITOFFSET_XY(-3, 7), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_DP8x4(grad_x0, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x1, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+        VXC_DP8x4(grad_x2, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x3, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x4, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x5, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x6, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4A_8x4);
+        VXC_DP8x4(grad_x7, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4B_8x4);
+        VXC_DP8x4(grad_x8, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x9, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x10, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x11, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x12, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x13, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+
+        VXC_DP8x4(tmpGrady0, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1A_8x4);
+        VXC_DP8x4(tmpGrady1, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1B_8x4);
+        VXC_DP8x4(tmpGrady2, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2A_8x4);
+        VXC_DP8x4(tmpGrady3, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2B_8x4);
+        VXC_DP8x4(tmpGrady4, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3A_8x4);
+        VXC_DP8x4(tmpGrady5, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3B_8x4);
+        VXC_DP8x4(tmpGrady6, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5A_8x4);
+        VXC_DP8x4(tmpGrady7, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5B_8x4);
+        VXC_DP8x4(tmpGrady8, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6A_8x4);
+        VXC_DP8x4(tmpGrady9, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6B_8x4);
+        VXC_DP8x4(tmpGrady10, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7A_8x4);
+        VXC_DP8x4(tmpGrady11, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7B_8x4);
+
+        tmpSumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8 + grad_x10 + grad_x12;
+        tmpSumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9 + grad_x11 + grad_x13;
+        tmpSumy0 = tmpGrady0 + tmpGrady2 + tmpGrady4 + tmpGrady6 +tmpGrady8 + tmpGrady10;
+        tmpSumy1 = tmpGrady1 + tmpGrady3 + tmpGrady5 + tmpGrady7 +tmpGrady9 + tmpGrady11;
+        VXC_DP2x8(sumx0, tmpSumx0, tmpSumx1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+        VXC_DP2x8(sumy0, tmpSumy0, tmpSumy1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src4, input, coord, VXC_5BITOFFSET_XY(-3, 8), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_DP8x4(grad_x0, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x1, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+        VXC_DP8x4(grad_x2, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x3, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x4, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x5, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x6, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4A_8x4);
+        VXC_DP8x4(grad_x7, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4B_8x4);
+        VXC_DP8x4(grad_x8, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x9, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x10, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x11, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x12, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x13, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+
+        VXC_DP8x4(tmpGrady0, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1A_8x4);
+        VXC_DP8x4(tmpGrady1, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1B_8x4);
+        VXC_DP8x4(tmpGrady2, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2A_8x4);
+        VXC_DP8x4(tmpGrady3, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2B_8x4);
+        VXC_DP8x4(tmpGrady4, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3A_8x4);
+        VXC_DP8x4(tmpGrady5, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3B_8x4);
+        VXC_DP8x4(tmpGrady6, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5A_8x4);
+        VXC_DP8x4(tmpGrady7, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5B_8x4);
+        VXC_DP8x4(tmpGrady8, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6A_8x4);
+        VXC_DP8x4(tmpGrady9, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6B_8x4);
+        VXC_DP8x4(tmpGrady10, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7A_8x4);
+        VXC_DP8x4(tmpGrady11, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7B_8x4);
+
+        tmpSumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8 + grad_x10 + grad_x12;
+        tmpSumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9 + grad_x11 + grad_x13;
+        tmpSumy0 = tmpGrady0 + tmpGrady2 + tmpGrady4 + tmpGrady6 +tmpGrady8 + tmpGrady10;
+        tmpSumy1 = tmpGrady1 + tmpGrady3 + tmpGrady5 + tmpGrady7 +tmpGrady9 + tmpGrady11;
+        VXC_DP2x8(sumx0, tmpSumx0, tmpSumx1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+        VXC_DP2x8(sumy0, tmpSumy0, tmpSumy1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src5, input, coord, VXC_5BITOFFSET_XY(-3, 9), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_DP8x4(grad_x0, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x1, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+        VXC_DP8x4(grad_x2, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x3, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x4, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x5, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x6, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4A_8x4);
+        VXC_DP8x4(grad_x7, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4B_8x4);
+        VXC_DP8x4(grad_x8, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x9, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x10, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x11, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x12, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x13, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+
+        VXC_DP8x4(tmpGrady0, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1A_8x4);
+        VXC_DP8x4(tmpGrady1, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1B_8x4);
+        VXC_DP8x4(tmpGrady2, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2A_8x4);
+        VXC_DP8x4(tmpGrady3, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2B_8x4);
+        VXC_DP8x4(tmpGrady4, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3A_8x4);
+        VXC_DP8x4(tmpGrady5, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3B_8x4);
+        VXC_DP8x4(tmpGrady6, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5A_8x4);
+        VXC_DP8x4(tmpGrady7, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5B_8x4);
+        VXC_DP8x4(tmpGrady8, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6A_8x4);
+        VXC_DP8x4(tmpGrady9, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6B_8x4);
+        VXC_DP8x4(tmpGrady10, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7A_8x4);
+        VXC_DP8x4(tmpGrady11, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7B_8x4);
+
+        tmpSumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8 + grad_x10 + grad_x12;
+        tmpSumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9 + grad_x11 + grad_x13;
+        tmpSumy0 = tmpGrady0 + tmpGrady2 + tmpGrady4 + tmpGrady6 +tmpGrady8 + tmpGrady10;
+        tmpSumy1 = tmpGrady1 + tmpGrady3 + tmpGrady5 + tmpGrady7 +tmpGrady9 + tmpGrady11;
+        VXC_DP2x8(sumx0, tmpSumx0, tmpSumx1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+        VXC_DP2x8(sumy0, tmpSumy0, tmpSumy1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage(src6, input, coord, VXC_5BITOFFSET_XY(-3, 10), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        coord.y+=7;
+        VXC_DP8x4(grad_x0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+        VXC_DP8x4(grad_x2, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x3, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x4, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x5, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x6, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4A_8x4);
+        VXC_DP8x4(grad_x7, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4B_8x4);
+        VXC_DP8x4(grad_x8, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x9, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x10, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x11, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x12, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x13, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+
+        VXC_DP8x4(tmpGrady0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1A_8x4);
+        VXC_DP8x4(tmpGrady1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1B_8x4);
+        VXC_DP8x4(tmpGrady2, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2A_8x4);
+        VXC_DP8x4(tmpGrady3, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2B_8x4);
+        VXC_DP8x4(tmpGrady4, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3A_8x4);
+        VXC_DP8x4(tmpGrady5, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3B_8x4);
+        VXC_DP8x4(tmpGrady6, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5A_8x4);
+        VXC_DP8x4(tmpGrady7, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5B_8x4);
+        VXC_DP8x4(tmpGrady8, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6A_8x4);
+        VXC_DP8x4(tmpGrady9, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6B_8x4);
+        VXC_DP8x4(tmpGrady10, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7A_8x4);
+        VXC_DP8x4(tmpGrady11, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7B_8x4);
+
+        tmpSumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8 + grad_x10 + grad_x12;
+        tmpSumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9 + grad_x11 + grad_x13;
+        tmpSumy0 = tmpGrady0 + tmpGrady2 + tmpGrady4 + tmpGrady6 +tmpGrady8 + tmpGrady10;
+        tmpSumy1 = tmpGrady1 + tmpGrady3 + tmpGrady5 + tmpGrady7 +tmpGrady9 + tmpGrady11;
+        VXC_DP2x8(sumx0, tmpSumx0, tmpSumx1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+        VXC_DP2x8(sumy0, tmpSumy0, tmpSumy1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+    }
+
+    sumx0 ^= sumx0;
+    if(coord_out.y - 1 >= lastPosY)
+    {
+        coord_out.y = lastPosY;
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_WriteImage(output_x, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord_out.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    }
+
+    if(resFlg && gidx == lastIdx)
+    {
+        int2 coord_res = (int2)(lastPosX, 0);
+
+        for(; coord_res.y < height; coord_res.y ++)
+        {
+            VXC_WriteImage(output_x, coord_res, sumx0, VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+            VXC_WriteImage(output_y, coord_res, sumx0, VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+        }
+    }
+}
+#else
+__kernel void sobelMxN_7x7(
+        __read_only  image2d_t input,
+        __global int* win,
+        __write_only image2d_t output_x,
+        __write_only image2d_t output_y)
+{
+    int gidx = get_global_id(0);
+    int2 coord = (int2)(gidx * 8 + 3, get_global_id(1));
+    vxc_uchar16 src0, src1, src2, src3, src4, src5, src6;
+    int4 grad_x0, grad_x1, grad_x2, grad_x3, grad_x4, grad_x5, grad_x6;
+    int4 grad_x7, grad_x8, grad_x9, grad_x10, grad_x11, grad_x12, grad_x13;
+    vxc_short8 sumx0, sumy0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(-3, -3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(-3, -2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(-3, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input, coord, VXC_5BITOFFSET_XY(-3, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src4, input, coord, VXC_5BITOFFSET_XY(-3, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src5, input, coord, VXC_5BITOFFSET_XY(-3, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src6, input, coord, VXC_5BITOFFSET_XY(-3, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    //int4 tmpGrady0, tmpGrady1, tmpGrady2, tmpGrady3, tmpGrady4, tmpGrady5;
+    //int4 tmpGrady6, tmpGrady7, tmpGrady8, tmpGrady9, tmpGrady10, tmpGrady11;
+
+    VXC_DP8x4(grad_x0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+    VXC_DP8x4(grad_x1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+    VXC_DP8x4(grad_x2, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+    VXC_DP8x4(grad_x3, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+    VXC_DP8x4(grad_x4, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+    VXC_DP8x4(grad_x5, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+    VXC_DP8x4(grad_x6, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4A_8x4);
+    VXC_DP8x4(grad_x7, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4B_8x4);
+    VXC_DP8x4(grad_x8, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+    VXC_DP8x4(grad_x9, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+    VXC_DP8x4(grad_x10, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+    VXC_DP8x4(grad_x11, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+    VXC_DP8x4(grad_x12, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+    VXC_DP8x4(grad_x13, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+
+    int4 tmpSumx0, tmpSumx1, tmpSumy0, tmpSumy1;
+    tmpSumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8 + grad_x10 + grad_x12;
+    tmpSumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9 + grad_x11 + grad_x13;
+
+    VXC_DP8x4(grad_x0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1A_8x4);
+    VXC_DP8x4(grad_x1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1B_8x4);
+    VXC_DP8x4(grad_x2, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2A_8x4);
+    VXC_DP8x4(grad_x3, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2B_8x4);
+    VXC_DP8x4(grad_x4, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3A_8x4);
+    VXC_DP8x4(grad_x5, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3B_8x4);
+    VXC_DP8x4(grad_x6, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5A_8x4);
+    VXC_DP8x4(grad_x7, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5B_8x4);
+    VXC_DP8x4(grad_x8, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6A_8x4);
+    VXC_DP8x4(grad_x9, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6B_8x4);
+    VXC_DP8x4(grad_x10, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7A_8x4);
+    VXC_DP8x4(grad_x11, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7B_8x4);
+
+    tmpSumy0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 +grad_x8 + grad_x10;
+    tmpSumy1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 +grad_x9 + grad_x11;
+    VXC_DP2x8(sumx0, tmpSumx0, tmpSumx1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+    VXC_DP2x8(sumy0, tmpSumy0, tmpSumy1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+
+    VXC_WriteImage(output_x, coord.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output_y, coord.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+
+    for(; coord.y < lastPosY; coord.y++)
+    {
+        src0 = src1;
+        src1 = src2;
+        src2 = src3;
+        src3 = src4;
+        src4 = src5;
+        src5 = src6;
+        VXC_ReadImage(src6, input, coord, VXC_5BITOFFSET_XY(-3, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+        VXC_DP8x4(grad_x0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+        VXC_DP8x4(grad_x2, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x3, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x4, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x5, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x6, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4A_8x4);
+        VXC_DP8x4(grad_x7, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow4B_8x4);
+        VXC_DP8x4(grad_x8, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3A_8x4);
+        VXC_DP8x4(grad_x9, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow3B_8x4);
+        VXC_DP8x4(grad_x10, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2A_8x4);
+        VXC_DP8x4(grad_x11, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow2B_8x4);
+        VXC_DP8x4(grad_x12, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1A_8x4);
+        VXC_DP8x4(grad_x13, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7VertRow1B_8x4);
+
+        tmpSumx0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 + grad_x8 + grad_x10 + grad_x12;
+        tmpSumx1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 + grad_x9 + grad_x11 + grad_x13;
+
+        VXC_DP8x4(grad_x0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1A_8x4);
+        VXC_DP8x4(grad_x1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow1B_8x4);
+        VXC_DP8x4(grad_x2, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2A_8x4);
+        VXC_DP8x4(grad_x3, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow2B_8x4);
+        VXC_DP8x4(grad_x4, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3A_8x4);
+        VXC_DP8x4(grad_x5, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow3B_8x4);
+        VXC_DP8x4(grad_x6, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5A_8x4);
+        VXC_DP8x4(grad_x7, src4, src4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow5B_8x4);
+        VXC_DP8x4(grad_x8, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6A_8x4);
+        VXC_DP8x4(grad_x9, src5, src5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow6B_8x4);
+        VXC_DP8x4(grad_x10, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7A_8x4);
+        VXC_DP8x4(grad_x11, src6, src6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSobel7x7HorzRow7B_8x4);
+
+        tmpSumy0 = grad_x0 + grad_x2 + grad_x4 + grad_x6 +grad_x8 + grad_x10;
+        tmpSumy1 = grad_x1 + grad_x3 + grad_x5 + grad_x7 +grad_x9 + grad_x11;
+
+        VXC_DP2x8(sumx0, tmpSumx0, tmpSumx1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+        VXC_DP2x8(sumy0, tmpSumy0, tmpSumy1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvI32toI16_2x8);
+
+        VXC_WriteImage(output_x, coord.xy, sumx0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output_y, coord.xy, sumy0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    }
+
+    sumx0 ^= sumx0;
+
+    if(resFlg)
+    {
+        int2 coord_res = (int2)(lastPosX, gidx);
+        int size0 = get_global_size(0);
+
+        for(; coord_res.y < height; coord_res.y+=size0)
+        {
+            VXC_WriteImage(output_x, coord_res, sumx0, VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+            VXC_WriteImage(output_y, coord_res, sumx0, VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+        }
+    }
+}
+#endif

@@ -1,0 +1,367 @@
+__kernel void gpuSvdf_FP32(
+    image2d_t input,
+    image2d_t bias,
+    image2d_t weight,
+    image2d_t recurrent,
+    int       rankVal,
+    image2d_t state_in,
+    image2d_t state_out,
+    image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(0, y);
+    int2 coord_bias = (int2)(x, 0);
+    int2 coord_out = (int2)(x, y);
+    int2 coord_weight = (int2)(0, 0);
+    float4 tmp, dst = {0.0};
+    int input_size = get_image_width(input);
+    int memory_size = get_image_width(recurrent);
+    int stride = get_image_width(state_in);
+    float sum;
+
+    tmp = read_imagef(bias, coord_bias);
+    sum = tmp.x;
+
+    for(int r = 0; r < rankVal; r++)
+    {
+        float activation = 0.0f;
+        float inPixel, wPixel, rPixel, stateinPixel;
+        int idx = x * rankVal + r;
+        float4 result = {0.0};
+        int i, index = 0;
+        int offset = idx * memory_size;
+
+        coord_weight.x = 0;
+        coord_weight.y = idx;
+        coord.x = 0;
+
+        for(int i = 0; i < input_size; i++)
+        {
+            tmp = read_imagef(input, coord);
+            inPixel = tmp.x;
+            tmp = read_imagef(weight, coord_weight);
+            wPixel = tmp.x;
+            activation += inPixel * wPixel;
+            coord.x++;
+            coord_weight.x++;
+        }
+
+        coord_weight.x = memory_size - 1;
+        tmp = read_imagef(recurrent, coord_weight);
+        sum += activation * tmp.x;
+
+        coord_weight.x = 0;
+        for(i = 0; i < (memory_size-1); ++i)
+        {
+            index = offset + i;
+            coord_bias.y = index / stride;
+            coord_bias.x = index - coord_bias.y;
+            tmp = read_imagef(recurrent, coord_weight);
+            rPixel = tmp.x;
+            tmp = read_imagef(state_in, coord_bias);
+            stateinPixel = tmp.x;
+            coord_weight.x++;
+            sum += rPixel * stateinPixel;
+        }
+
+        coord_bias.y = y;
+        for(i = 0; i < memory_size - 2; i++)
+        {
+            index = offset + i;
+            coord_bias.x = (index + 1);
+            coord_out.x = (index);
+            tmp = read_imagef(state_in, coord_bias);
+            write_imagef(state_out, coord_out, tmp);
+        }
+
+        index = offset + memory_size - 2;
+        coord_out.x = (index);
+        result.x = activation;
+        write_imagef(state_out, coord_out, result);
+        coord_out.x = (index + 1);
+        result.x = 0;
+        write_imagef(state_out, coord_out, result);
+    }
+    coord_out = (int2)(x, y);
+
+    dst.x = sum;
+    write_imagef(output, coord_out, dst);
+}
+
+__kernel void gpuSvdf_FP32Relu(
+    image2d_t input,
+    image2d_t bias,
+    image2d_t weight,
+    image2d_t recurrent,
+    int       rankVal,
+    image2d_t state_in,
+    image2d_t state_out,
+    image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(0, y);
+    int2 coord_bias = (int2)(x, 0);
+    int2 coord_out = (int2)(x, y);
+    int2 coord_weight = (int2)(0, 0);
+    float4 tmp, dst = {0.0};
+    int input_size = get_image_width(input);
+    int memory_size = get_image_width(recurrent);
+    int stride = get_image_width(state_in);
+    float sum;
+
+    tmp = read_imagef(bias, coord_bias);
+    sum = tmp.x;
+
+    for(int r = 0; r < rankVal; r++)
+    {
+        float activation = 0.0f;
+        float inPixel, wPixel, rPixel, stateinPixel;
+        int idx = x * rankVal + r;
+        float4 result = {0.0};
+        int i, index = 0;
+        int offset = idx * memory_size;
+
+        coord_weight.x = 0;
+        coord_weight.y = idx;
+        coord.x = 0;
+
+        for(int i = 0; i < input_size; i++)
+        {
+            tmp = read_imagef(input, coord);
+            inPixel = tmp.x;
+            tmp = read_imagef(weight, coord_weight);
+            wPixel = tmp.x;
+            activation += inPixel * wPixel;
+            coord.x++;
+            coord_weight.x++;
+        }
+
+        coord_weight.x = memory_size - 1;
+        tmp = read_imagef(recurrent, coord_weight);
+        sum += activation * tmp.x;
+
+        coord_weight.x = 0;
+        for(i = 0; i < (memory_size-1); ++i)
+        {
+            index = offset + i;
+            coord_bias.y = index / stride;
+            coord_bias.x = index - coord_bias.y;
+            tmp = read_imagef(recurrent, coord_weight);
+            rPixel = tmp.x;
+            tmp = read_imagef(state_in, coord_bias);
+            stateinPixel = tmp.x;
+            coord_weight.x++;
+            sum += rPixel * stateinPixel;
+        }
+
+        coord_bias.y = y;
+        for(i = 0; i < memory_size - 2; i++)
+        {
+            index = offset + i;
+            coord_bias.x = (index + 1);
+            coord_out.x = (index);
+            tmp = read_imagef(state_in, coord_bias);
+            write_imagef(state_out, coord_out, tmp);
+        }
+
+        index = offset + memory_size - 2;
+        coord_out.x = (index);
+        result.x = activation;
+        write_imagef(state_out, coord_out, result);
+        coord_out.x = (index + 1);
+        result.x = 0;
+        write_imagef(state_out, coord_out, result);
+    }
+    coord_out = (int2)(x, y);
+
+    dst.x = max(sum, 0);
+    write_imagef(output, coord_out, dst);
+}
+
+__kernel void gpuSvdf_FP32Relu1(
+    image2d_t input,
+    image2d_t bias,
+    image2d_t weight,
+    image2d_t recurrent,
+    int       rankVal,
+    image2d_t state_in,
+    image2d_t state_out,
+    image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(0, y);
+    int2 coord_bias = (int2)(x, 0);
+    int2 coord_out = (int2)(x, y);
+    int2 coord_weight = (int2)(0, 0);
+    float4 tmp, dst = {0.0};
+    int input_size = get_image_width(input);
+    int memory_size = get_image_width(recurrent);
+    int stride = get_image_width(state_in);
+    float sum;
+
+    tmp = read_imagef(bias, coord_bias);
+    sum = tmp.x;
+
+    for(int r = 0; r < rankVal; r++)
+    {
+        float activation = 0.0f;
+        float inPixel, wPixel, rPixel, stateinPixel;
+        int idx = x * rankVal + r;
+        float4 result = {0.0};
+        int i, index = 0;
+        int offset = idx * memory_size;
+
+        coord_weight.x = 0;
+        coord_weight.y = idx;
+        coord.x = 0;
+
+        for(int i = 0; i < input_size; i++)
+        {
+            tmp = read_imagef(input, coord);
+            inPixel = tmp.x;
+            tmp = read_imagef(weight, coord_weight);
+            wPixel = tmp.x;
+            activation += inPixel * wPixel;
+            coord.x++;
+            coord_weight.x++;
+        }
+
+        coord_weight.x = memory_size - 1;
+        tmp = read_imagef(recurrent, coord_weight);
+        sum += activation * tmp.x;
+
+        coord_weight.x = 0;
+        for(i = 0; i < (memory_size-1); ++i)
+        {
+            index = offset + i;
+            coord_bias.y = index / stride;
+            coord_bias.x = index - coord_bias.y;
+            tmp = read_imagef(recurrent, coord_weight);
+            rPixel = tmp.x;
+            tmp = read_imagef(state_in, coord_bias);
+            stateinPixel = tmp.x;
+            coord_weight.x++;
+            sum += rPixel * stateinPixel;
+        }
+
+        coord_bias.y = y;
+        for(i = 0; i < memory_size - 2; i++)
+        {
+            index = offset + i;
+            coord_bias.x = (index + 1);
+            coord_out.x = (index);
+            tmp = read_imagef(state_in, coord_bias);
+            write_imagef(state_out, coord_out, tmp);
+        }
+
+        index = offset + memory_size - 2;
+        coord_out.x = (index);
+        result.x = activation;
+        write_imagef(state_out, coord_out, result);
+        coord_out.x = (index + 1);
+        result.x = 0;
+        write_imagef(state_out, coord_out, result);
+    }
+    coord_out = (int2)(x, y);
+
+    dst.x = clamp(sum, -1.0, 1.0);
+    write_imagef(output, coord_out, dst);
+}
+
+__kernel void gpuSvdf_FP32Relu6(
+    image2d_t input,
+    image2d_t bias,
+    image2d_t weight,
+    image2d_t recurrent,
+    int       rankVal,
+    image2d_t state_in,
+    image2d_t state_out,
+    image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(0, y);
+    int2 coord_bias = (int2)(x, 0);
+    int2 coord_out = (int2)(x, y);
+    int2 coord_weight = (int2)(0, 0);
+    float4 tmp, dst = {0.0};
+    int input_size = get_image_width(input);
+    int memory_size = get_image_width(recurrent);
+    int stride = get_image_width(state_in);
+    float sum;
+
+    tmp = read_imagef(bias, coord_bias);
+    sum = tmp.x;
+
+    for(int r = 0; r < rankVal; r++)
+    {
+        float activation = 0.0f;
+        float inPixel, wPixel, rPixel, stateinPixel;
+        int idx = x * rankVal + r;
+        float4 result = {0.0};
+        int i, index = 0;
+        int offset = idx * memory_size;
+
+        coord_weight.x = 0;
+        coord_weight.y = idx;
+        coord.x = 0;
+
+        for(int i = 0; i < input_size; i++)
+        {
+            tmp = read_imagef(input, coord);
+            inPixel = tmp.x;
+            tmp = read_imagef(weight, coord_weight);
+            wPixel = tmp.x;
+            activation += inPixel * wPixel;
+            coord.x++;
+            coord_weight.x++;
+        }
+
+        coord_weight.x = memory_size - 1;
+        tmp = read_imagef(recurrent, coord_weight);
+        sum += activation * tmp.x;
+
+        coord_weight.x = 0;
+        for(i = 0; i < (memory_size-1); ++i)
+        {
+            index = offset + i;
+            coord_bias.y = index / stride;
+            coord_bias.x = index - coord_bias.y;
+            tmp = read_imagef(recurrent, coord_weight);
+            rPixel = tmp.x;
+            tmp = read_imagef(state_in, coord_bias);
+            stateinPixel = tmp.x;
+            coord_weight.x++;
+            sum += rPixel * stateinPixel;
+        }
+
+        coord_bias.y = y;
+        for(i = 0; i < memory_size - 2; i++)
+        {
+            index = offset + i;
+            coord_bias.x = (index + 1);
+            coord_out.x = (index);
+            tmp = read_imagef(state_in, coord_bias);
+            write_imagef(state_out, coord_out, tmp);
+        }
+
+        index = offset + memory_size - 2;
+        coord_out.x = (index);
+        result.x = activation;
+        write_imagef(state_out, coord_out, result);
+        coord_out.x = (index + 1);
+        result.x = 0;
+        write_imagef(state_out, coord_out, result);
+    }
+    coord_out = (int2)(x, y);
+
+    dst.x = clamp(sum, 0.0, 6.0);
+    write_imagef(output, coord_out, dst);
+}

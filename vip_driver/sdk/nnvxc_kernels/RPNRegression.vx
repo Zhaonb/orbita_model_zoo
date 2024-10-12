@@ -1,0 +1,2433 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+_viv_uniform VXC_512Bits UniformDP4x4_cvtFP16ToFP32;
+_viv_uniform VXC_512Bits UniformDp2x8_packF16;
+
+__kernel void vxcRPN_Regression_F16_F16_F32toF16
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+
+    int4 score_coord = {x, y, z+num, 0};
+
+    // get box and score
+    vxc_short8  score;
+    vxc_float4 box0_f, box1_f, box2_f, box3_f, score_f;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    box0_f = read_imagef(archor_data, archor_coord0);
+
+    vxc_half8  score_h;
+    _viv_asm(COPY, score_h, score, 16);
+    VXC_DP4x4(score_f, score_h, score_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    // load dx, dy, d_log_w, d_log_h
+    vxc_short8 dx, dy, d_log_w, d_log_h;
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_half8 dx_h, dy_h, d_log_w_h, d_log_h_h;
+    _viv_asm(COPY, dx_h , dx  , 16);
+    _viv_asm(COPY, dy_h , dy  , 16);
+    _viv_asm(COPY, d_log_w_h , d_log_w  , 16);
+    _viv_asm(COPY, d_log_h_h , d_log_h  , 16);
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+    VXC_DP4x4(dx_f , dx_h , dx_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(dy_f , dy_h , dy_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(d_log_w_f , d_log_w_h , d_log_w_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(d_log_h_f , d_log_h_h , d_log_h_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    //
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    // convert f32 to f16
+    half4 box0_h4, box1_h4, box2_h4, box3_h4, box4_h4, score_h4;
+    _viv_asm(CONV, box0_h4 , box0_f);
+    _viv_asm(CONV, box1_h4 , box1_f);
+    _viv_asm(CONV, box2_h4 , box2_f);
+    _viv_asm(CONV, box3_h4 , box3_f);
+    _viv_asm(CONV, score_h4 , score_f);
+
+    vxc_half8 box0_hf8, box1_hf8, box2_hf8, box3_hf8, score_hf8;
+    VXC_DP2x8(box0_hf8, box0_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.y;
+    VXC_DP2x8(box1_hf8, box1_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.z;
+    VXC_DP2x8(box2_hf8, box2_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.w;
+    VXC_DP2x8(box3_hf8, box3_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+
+    vxc_short8 box0_st8, box1_st8, box2_st8, box3_st8;
+    _viv_asm(COPY, box0_st8, box0_hf8, 16);
+    _viv_asm(COPY, box1_st8, box1_hf8, 16);
+    _viv_asm(COPY, box2_st8, box2_hf8, 16);
+    _viv_asm(COPY, box3_st8, box3_hf8, 16);
+
+    int4 output_coord = {x*5, y, z, 0};
+    VXC_WriteImage2DArray(output_data, output_coord, box0_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box1_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box2_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box3_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Regression_F16_F16_F32toF32
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x, y, z+num, 0};
+
+    // get box and score
+    vxc_short8  score;
+    vxc_float4 box0_f, box1_f, box2_f, box3_f, score_f;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    box0_f = read_imagef(archor_data, archor_coord0);
+    vxc_half8  score_h;
+    _viv_asm(COPY, score_h, score, 16);
+    VXC_DP4x4(score_f, score_h, score_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    // load dx, dy, d_log_w, d_log_h
+    vxc_short8 dx, dy, d_log_w, d_log_h;
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_half8 dx_h, dy_h, d_log_w_h, d_log_h_h;
+    _viv_asm(COPY, dx_h , dx  , 16);
+    _viv_asm(COPY, dy_h , dy  , 16);
+    _viv_asm(COPY, d_log_w_h , d_log_w  , 16);
+    _viv_asm(COPY, d_log_h_h , d_log_h  , 16);
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+    VXC_DP4x4(dx_f , dx_h , dx_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(dy_f , dy_h , dy_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(d_log_w_f , d_log_w_h , d_log_w_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(d_log_h_f , d_log_h_h , d_log_h_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    //
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    int4 output_coord = {x*10, y, z, 0};
+
+    vxc_short8 output_box,output_score;
+    _viv_asm(COPY, output_score, score_f, 16);
+    _viv_asm(COPY, output_box, box0_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box1_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box2_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box3_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(6, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform float bboxScale;
+_viv_uniform float bboxZP;
+_viv_uniform VXC_512Bits Uni4x4_Cvt2Float32_low;
+
+__kernel void vxcRPN_Regression_F16_I8_F32toF16
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x, y, z+num, 0};
+
+    vxc_short8 score;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_half8 score_h;
+    vxc_float4 score_f;
+    _viv_asm(COPY, score_h, score, 16);
+    VXC_DP4x4(score_f, score_h, score_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    vxc_float4 box0_f, box1_f, box2_f, box3_f;
+    box0_f = read_imagef(archor_data, archor_coord0);
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    vxc_char16 dx, dy, d_log_w, d_log_h;
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+
+    VXC_DP4x4(dx_f , dx , dx , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(dy_f , dy , dy , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_w_f , d_log_w , d_log_w , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_h_f , d_log_h , d_log_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    dx_f = (dx_f - bboxZP) * bboxScale;
+    dy_f = (dy_f - bboxZP) * bboxScale;
+    d_log_w_f = (d_log_w_f - bboxZP) * bboxScale;
+    d_log_h_f = (d_log_h_f - bboxZP) * bboxScale;
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    // convert f32 to f16
+    half4 box0_h4, box1_h4, box2_h4, box3_h4, box4_h4, score_h4;
+    _viv_asm(CONV, box0_h4 , box0_f);
+    _viv_asm(CONV, box1_h4 , box1_f);
+    _viv_asm(CONV, box2_h4 , box2_f);
+    _viv_asm(CONV, box3_h4 , box3_f);
+    _viv_asm(CONV, score_h4 , score_f);
+
+    vxc_half8 box0_hf8, box1_hf8, box2_hf8, box3_hf8, score_hf8;
+    VXC_DP2x8(box0_hf8, box0_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.y;
+    VXC_DP2x8(box1_hf8, box1_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.z;
+    VXC_DP2x8(box2_hf8, box2_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.w;
+    VXC_DP2x8(box3_hf8, box3_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+
+    vxc_short8 box0_st8, box1_st8, box2_st8, box3_st8;
+    _viv_asm(COPY, box0_st8, box0_hf8, 16);
+    _viv_asm(COPY, box1_st8, box1_hf8, 16);
+    _viv_asm(COPY, box2_st8, box2_hf8, 16);
+    _viv_asm(COPY, box3_st8, box3_hf8, 16);
+
+    int4 output_coord = {x*5, y, z, 0};
+    VXC_WriteImage2DArray(output_data, output_coord, box0_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box1_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box2_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box3_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Regression_F16_I8_F32toF32
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x, y, z+num, 0};
+
+    vxc_short8 score;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_half8 score_h;
+    vxc_float4 score_f;
+    _viv_asm(COPY, score_h, score, 16);
+    VXC_DP4x4(score_f, score_h, score_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    vxc_float4 box0_f, box1_f, box2_f, box3_f;
+    box0_f = read_imagef(archor_data, archor_coord0);
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    vxc_char16 dx, dy, d_log_w, d_log_h;
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+
+    VXC_DP4x4(dx_f , dx , dx , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(dy_f , dy , dy , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_w_f , d_log_w , d_log_w , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_h_f , d_log_h , d_log_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    dx_f = (dx_f - bboxZP) * bboxScale;
+    dy_f = (dy_f - bboxZP) * bboxScale;
+    d_log_w_f = (d_log_w_f - bboxZP) * bboxScale;
+    d_log_h_f = (d_log_h_f - bboxZP) * bboxScale;
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    int4 output_coord = {x*10, y, z, 0};
+
+    vxc_short8 output_box,output_score;
+    _viv_asm(COPY, output_score, score_f, 16);
+    _viv_asm(COPY, output_box, box0_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box1_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box2_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box3_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(6, 7, 0, VXC_RM_TowardZero, 0));
+
+}
+_viv_uniform VXC_512Bits Uni4x4_Sub_ZP_low;
+__kernel void vxcRPN_Regression_F16_U8_F32toF16
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x, y, z+num, 0};
+
+    vxc_short8 score;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_half8 score_h;
+    vxc_float4 score_f;
+    _viv_asm(COPY, score_h, score, 16);
+    VXC_DP4x4(score_f, score_h, score_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    vxc_float4 box0_f, box1_f, box2_f, box3_f;
+    box0_f = read_imagef(archor_data, archor_coord0);
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    vxc_uchar16 dx, dy, d_log_w, d_log_h;
+
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+    half scale_h;
+    _viv_asm(CONV, scale_h, bboxScale);
+
+    VXC_DP4x4(dx_f , dx , dx , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(dy_f , dy , dy , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_w_f , d_log_w , d_log_w , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_h_f , d_log_h , d_log_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    dx_f = (dx_f - bboxZP) * bboxScale;
+    dy_f = (dy_f - bboxZP) * bboxScale;
+    d_log_w_f = (d_log_w_f - bboxZP) * bboxScale;
+    d_log_h_f = (d_log_h_f - bboxZP) * bboxScale;
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    // convert f32 to f16
+    half4 box0_h4, box1_h4, box2_h4, box3_h4, box4_h4, score_h4;
+    _viv_asm(CONV, box0_h4 , box0_f);
+    _viv_asm(CONV, box1_h4 , box1_f);
+    _viv_asm(CONV, box2_h4 , box2_f);
+    _viv_asm(CONV, box3_h4 , box3_f);
+    _viv_asm(CONV, score_h4 , score_f);
+
+    vxc_half8 box0_hf8, box1_hf8, box2_hf8, box3_hf8, score_hf8;
+    VXC_DP2x8(box0_hf8, box0_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.y;
+    VXC_DP2x8(box1_hf8, box1_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.z;
+    VXC_DP2x8(box2_hf8, box2_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.w;
+    VXC_DP2x8(box3_hf8, box3_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+
+    vxc_short8 box0_st8, box1_st8, box2_st8, box3_st8;
+    _viv_asm(COPY, box0_st8, box0_hf8, 16);
+    _viv_asm(COPY, box1_st8, box1_hf8, 16);
+    _viv_asm(COPY, box2_st8, box2_hf8, 16);
+    _viv_asm(COPY, box3_st8, box3_hf8, 16);
+
+    int4 output_coord = {x*5, y, z, 0};
+    VXC_WriteImage2DArray(output_data, output_coord, box0_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box1_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box2_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box3_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Regression_F16_U8_F32toF32
+    (
+    image2d_array_t score_data,
+    image2d_array_t box_data,
+    image2d_array_t archor_data,
+    image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x, y, z+num, 0};
+
+    vxc_short8 score;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_half8 score_h;
+    vxc_float4 score_f;
+    _viv_asm(COPY, score_h, score, 16);
+    VXC_DP4x4(score_f, score_h, score_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    vxc_float4 box0_f, box1_f, box2_f, box3_f;
+    box0_f = read_imagef(archor_data, archor_coord0);
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    vxc_uchar16 dx, dy, d_log_w, d_log_h;
+
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+    half scale_h;
+    _viv_asm(CONV, scale_h, bboxScale);
+
+    VXC_DP4x4(dx_f , dx , dx , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(dy_f , dy , dy , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_w_f , d_log_w , d_log_w , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_h_f , d_log_h , d_log_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    dx_f = (dx_f - bboxZP) * bboxScale;
+    dy_f = (dy_f - bboxZP) * bboxScale;
+    d_log_w_f = (d_log_w_f - bboxZP) * bboxScale;
+    d_log_h_f = (d_log_h_f - bboxZP) * bboxScale;
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    int4 output_coord = {x*10, y, z, 0};
+
+    vxc_short8 output_box,output_score;
+    _viv_asm(COPY, output_score, score_f, 16);
+    _viv_asm(COPY, output_box, box0_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box1_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box2_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box3_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(6, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Regression_F16_I16_F32toF16
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x, y, z+num, 0};
+
+    vxc_short8 score;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_half8 score_h;
+    vxc_float4 score_f;
+    _viv_asm(COPY, score_h, score, 16);
+    VXC_DP4x4(score_f, score_h, score_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    vxc_float4 box0_f, box1_f, box2_f, box3_f;
+    box0_f = read_imagef(archor_data, archor_coord0);
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    vxc_short8 dx, dy, d_log_w, d_log_h;
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+    half scale_h;
+    _viv_asm(CONV, scale_h, bboxScale);
+
+    VXC_DP4x4(dx_f , dx , dx , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(dy_f , dy , dy , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_w_f , d_log_w , d_log_w , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_h_f , d_log_h , d_log_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    dx_f = dx_f * bboxScale;
+    dy_f = dy_f * bboxScale;
+    d_log_w_f = d_log_w_f * bboxScale;
+    d_log_h_f = d_log_h_f * bboxScale;
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    // convert f32 to f16
+    half4 box0_h4, box1_h4, box2_h4, box3_h4, box4_h4, score_h4;
+    _viv_asm(CONV, box0_h4 , box0_f);
+    _viv_asm(CONV, box1_h4 , box1_f);
+    _viv_asm(CONV, box2_h4 , box2_f);
+    _viv_asm(CONV, box3_h4 , box3_f);
+    _viv_asm(CONV, score_h4 , score_f);
+
+    vxc_half8 box0_hf8, box1_hf8, box2_hf8, box3_hf8, score_hf8;
+    VXC_DP2x8(box0_hf8, box0_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.y;
+    VXC_DP2x8(box1_hf8, box1_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.z;
+    VXC_DP2x8(box2_hf8, box2_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.w;
+    VXC_DP2x8(box3_hf8, box3_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+
+    vxc_short8 box0_st8, box1_st8, box2_st8, box3_st8;
+    _viv_asm(COPY, box0_st8, box0_hf8, 16);
+    _viv_asm(COPY, box1_st8, box1_hf8, 16);
+    _viv_asm(COPY, box2_st8, box2_hf8, 16);
+    _viv_asm(COPY, box3_st8, box3_hf8, 16);
+
+    int4 output_coord = {x*5, y, z, 0};
+    VXC_WriteImage2DArray(output_data, output_coord, box0_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box1_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box2_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box3_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Regression_F16_I16_F32toF32
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x, y, z+num, 0};
+
+    vxc_short8 score;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_half8 score_h;
+    vxc_float4 score_f;
+    _viv_asm(COPY, score_h, score, 16);
+    VXC_DP4x4(score_f, score_h, score_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    vxc_float4 box0_f, box1_f, box2_f, box3_f;
+    box0_f = read_imagef(archor_data, archor_coord0);
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    vxc_short8 dx, dy, d_log_w, d_log_h;
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+    half scale_h;
+    _viv_asm(CONV, scale_h, bboxScale);
+
+    VXC_DP4x4(dx_f , dx , dx , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(dy_f , dy , dy , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_w_f , d_log_w , d_log_w , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_h_f , d_log_h , d_log_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    dx_f = dx_f * bboxScale;
+    dy_f = dy_f * bboxScale;
+    d_log_w_f = d_log_w_f * bboxScale;
+    d_log_h_f = d_log_h_f * bboxScale;
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    int4 output_coord = {x*10, y, z, 0};
+
+    vxc_short8 output_box,output_score;
+    _viv_asm(COPY, output_score, score_f, 16);
+    _viv_asm(COPY, output_box, box0_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box1_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box2_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box3_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(6, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Regression_F32_F16_F32toF16
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+
+    int4 score_coord = {x << 1, y, z + num, 0};
+
+    // get box and score
+    vxc_short8  score;
+    vxc_float4 box0_f, box1_f, box2_f, box3_f, score_f;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, score_f, score, 16);
+    box0_f = read_imagef(archor_data, archor_coord0);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    // load dx, dy, d_log_w, d_log_h
+    vxc_short8 dx, dy, d_log_w, d_log_h;
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_half8 dx_h, dy_h, d_log_w_h, d_log_h_h;
+    _viv_asm(COPY, dx_h , dx  , 16);
+    _viv_asm(COPY, dy_h , dy  , 16);
+    _viv_asm(COPY, d_log_w_h , d_log_w  , 16);
+    _viv_asm(COPY, d_log_h_h , d_log_h  , 16);
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+    VXC_DP4x4(dx_f , dx_h , dx_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(dy_f , dy_h , dy_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(d_log_w_f , d_log_w_h , d_log_w_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(d_log_h_f , d_log_h_h , d_log_h_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    //
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    // convert f32 to f16
+    half4 box0_h4, box1_h4, box2_h4, box3_h4, box4_h4, score_h4;
+    _viv_asm(CONV, box0_h4 , box0_f);
+    _viv_asm(CONV, box1_h4 , box1_f);
+    _viv_asm(CONV, box2_h4 , box2_f);
+    _viv_asm(CONV, box3_h4 , box3_f);
+    _viv_asm(CONV, score_h4 , score_f);
+
+    vxc_half8 box0_hf8, box1_hf8, box2_hf8, box3_hf8, score_hf8;
+    VXC_DP2x8(box0_hf8, box0_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.y;
+    VXC_DP2x8(box1_hf8, box1_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.z;
+    VXC_DP2x8(box2_hf8, box2_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.w;
+    VXC_DP2x8(box3_hf8, box3_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+
+    vxc_short8 box0_st8, box1_st8, box2_st8, box3_st8;
+    _viv_asm(COPY, box0_st8, box0_hf8, 16);
+    _viv_asm(COPY, box1_st8, box1_hf8, 16);
+    _viv_asm(COPY, box2_st8, box2_hf8, 16);
+    _viv_asm(COPY, box3_st8, box3_hf8, 16);
+
+    int4 output_coord = {x*5, y, z, 0};
+    VXC_WriteImage2DArray(output_data, output_coord, box0_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box1_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box2_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box3_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Regression_F32_F16_F32toF32
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x << 1, y, z + num, 0};
+
+    // get box and score
+    vxc_short8  score;
+    vxc_float4 box0_f, box1_f, box2_f, box3_f, score_f;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, score_f, score, 16);
+    box0_f = read_imagef(archor_data, archor_coord0);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    // load dx, dy, d_log_w, d_log_h
+    vxc_short8 dx, dy, d_log_w, d_log_h;
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_half8 dx_h, dy_h, d_log_w_h, d_log_h_h;
+    _viv_asm(COPY, dx_h , dx  , 16);
+    _viv_asm(COPY, dy_h , dy  , 16);
+    _viv_asm(COPY, d_log_w_h , d_log_w  , 16);
+    _viv_asm(COPY, d_log_h_h , d_log_h  , 16);
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+    VXC_DP4x4(dx_f , dx_h , dx_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(dy_f , dy_h , dy_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(d_log_w_f , d_log_w_h , d_log_w_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(d_log_h_f , d_log_h_h , d_log_h_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    //
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    int4 output_coord = {x*10, y, z, 0};
+
+    vxc_short8 output_box,output_score;
+    _viv_asm(COPY, output_score, score_f, 16);
+    _viv_asm(COPY, output_box, box0_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box1_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box2_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box3_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(6, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Regression_F32_I8_F32toF16
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x << 1, y, z + num, 0};
+
+    vxc_short8 score;
+    float4 score_f;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, score_f, score, 16);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    vxc_float4 box0_f, box1_f, box2_f, box3_f;
+    box0_f = read_imagef(archor_data, archor_coord0);
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    vxc_char16 dx, dy, d_log_w, d_log_h;
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+
+    VXC_DP4x4(dx_f , dx , dx , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(dy_f , dy , dy , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_w_f , d_log_w , d_log_w , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_h_f , d_log_h , d_log_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    dx_f = (dx_f - bboxZP) * bboxScale;
+    dy_f = (dy_f - bboxZP) * bboxScale;
+    d_log_w_f = (d_log_w_f - bboxZP) * bboxScale;
+    d_log_h_f = (d_log_h_f - bboxZP) * bboxScale;
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    // convert f32 to f16
+    half4 box0_h4, box1_h4, box2_h4, box3_h4, box4_h4, score_h4;
+    _viv_asm(CONV, box0_h4 , box0_f);
+    _viv_asm(CONV, box1_h4 , box1_f);
+    _viv_asm(CONV, box2_h4 , box2_f);
+    _viv_asm(CONV, box3_h4 , box3_f);
+    _viv_asm(CONV, score_h4 , score_f);
+
+    vxc_half8 box0_hf8, box1_hf8, box2_hf8, box3_hf8, score_hf8;
+    VXC_DP2x8(box0_hf8, box0_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.y;
+    VXC_DP2x8(box1_hf8, box1_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.z;
+    VXC_DP2x8(box2_hf8, box2_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.w;
+    VXC_DP2x8(box3_hf8, box3_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+
+    vxc_short8 box0_st8, box1_st8, box2_st8, box3_st8;
+    _viv_asm(COPY, box0_st8, box0_hf8, 16);
+    _viv_asm(COPY, box1_st8, box1_hf8, 16);
+    _viv_asm(COPY, box2_st8, box2_hf8, 16);
+    _viv_asm(COPY, box3_st8, box3_hf8, 16);
+
+    int4 output_coord = {x*5, y, z, 0};
+    VXC_WriteImage2DArray(output_data, output_coord, box0_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box1_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box2_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box3_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Regression_F32_I8_F32toF32
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x << 1, y, z + num, 0};
+
+    vxc_short8 score;
+    vxc_float4 score_f;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, score_f, score, 16);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    vxc_float4 box0_f, box1_f, box2_f, box3_f;
+    box0_f = read_imagef(archor_data, archor_coord0);
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    vxc_char16 dx, dy, d_log_w, d_log_h;
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+
+    VXC_DP4x4(dx_f , dx , dx , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(dy_f , dy , dy , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_w_f , d_log_w , d_log_w , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_h_f , d_log_h , d_log_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    dx_f = (dx_f - bboxZP) * bboxScale;
+    dy_f = (dy_f - bboxZP) * bboxScale;
+    d_log_w_f = (d_log_w_f - bboxZP) * bboxScale;
+    d_log_h_f = (d_log_h_f - bboxZP) * bboxScale;
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    int4 output_coord = {x*10, y, z, 0};
+
+    vxc_short8 output_box,output_score;
+    _viv_asm(COPY, output_score, score_f, 16);
+    _viv_asm(COPY, output_box, box0_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box1_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box2_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box3_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(6, 7, 0, VXC_RM_TowardZero, 0));
+
+}
+
+__kernel void vxcRPN_Regression_F32_U8_F32toF16
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x << 1, y, z + num, 0};
+
+    vxc_short8 score;
+    vxc_float4 score_f;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, score_f, score, 16);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    vxc_float4 box0_f, box1_f, box2_f, box3_f;
+    box0_f = read_imagef(archor_data, archor_coord0);
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    vxc_uchar16 dx, dy, d_log_w, d_log_h;
+
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+    half scale_h;
+    _viv_asm(CONV, scale_h, bboxScale);
+
+    VXC_DP4x4(dx_f , dx , dx , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(dy_f , dy , dy , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_w_f , d_log_w , d_log_w , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_h_f , d_log_h , d_log_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    dx_f = (dx_f - bboxZP) * bboxScale;
+    dy_f = (dy_f - bboxZP) * bboxScale;
+    d_log_w_f = (d_log_w_f - bboxZP) * bboxScale;
+    d_log_h_f = (d_log_h_f - bboxZP) * bboxScale;
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    // convert f32 to f16
+    half4 box0_h4, box1_h4, box2_h4, box3_h4, box4_h4, score_h4;
+    _viv_asm(CONV, box0_h4 , box0_f);
+    _viv_asm(CONV, box1_h4 , box1_f);
+    _viv_asm(CONV, box2_h4 , box2_f);
+    _viv_asm(CONV, box3_h4 , box3_f);
+    _viv_asm(CONV, score_h4 , score_f);
+
+    vxc_half8 box0_hf8, box1_hf8, box2_hf8, box3_hf8, score_hf8;
+    VXC_DP2x8(box0_hf8, box0_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.y;
+    VXC_DP2x8(box1_hf8, box1_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.z;
+    VXC_DP2x8(box2_hf8, box2_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.w;
+    VXC_DP2x8(box3_hf8, box3_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+
+    vxc_short8 box0_st8, box1_st8, box2_st8, box3_st8;
+    _viv_asm(COPY, box0_st8, box0_hf8, 16);
+    _viv_asm(COPY, box1_st8, box1_hf8, 16);
+    _viv_asm(COPY, box2_st8, box2_hf8, 16);
+    _viv_asm(COPY, box3_st8, box3_hf8, 16);
+
+    int4 output_coord = {x*5, y, z, 0};
+    VXC_WriteImage2DArray(output_data, output_coord, box0_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box1_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box2_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box3_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Regression_F32_U8_F32toF32
+    (
+    image2d_array_t score_data,
+    image2d_array_t box_data,
+    image2d_array_t archor_data,
+    image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x << 1, y, z + num, 0};
+
+    vxc_short8 score;
+    vxc_float4 score_f;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, score_f, score, 16);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    vxc_float4 box0_f, box1_f, box2_f, box3_f;
+    box0_f = read_imagef(archor_data, archor_coord0);
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    vxc_uchar16 dx, dy, d_log_w, d_log_h;
+
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+    half scale_h;
+    _viv_asm(CONV, scale_h, bboxScale);
+
+    VXC_DP4x4(dx_f , dx , dx , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(dy_f , dy , dy , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_w_f , d_log_w , d_log_w , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_h_f , d_log_h , d_log_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    dx_f = (dx_f - bboxZP) * bboxScale;
+    dy_f = (dy_f - bboxZP) * bboxScale;
+    d_log_w_f = (d_log_w_f - bboxZP) * bboxScale;
+    d_log_h_f = (d_log_h_f - bboxZP) * bboxScale;
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    int4 output_coord = {x*10, y, z, 0};
+
+    vxc_short8 output_box,output_score;
+    _viv_asm(COPY, output_score, score_f, 16);
+    _viv_asm(COPY, output_box, box0_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box1_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box2_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box3_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(6, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Regression_F32_I16_F32toF16
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x << 1, y, z + num, 0};
+
+    vxc_short8 score;
+    vxc_float4 score_f;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, score_f, score, 16);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    vxc_float4 box0_f, box1_f, box2_f, box3_f;
+    box0_f = read_imagef(archor_data, archor_coord0);
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    vxc_short8 dx, dy, d_log_w, d_log_h;
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+    half scale_h;
+    _viv_asm(CONV, scale_h, bboxScale);
+
+    VXC_DP4x4(dx_f , dx , dx , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(dy_f , dy , dy , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_w_f , d_log_w , d_log_w , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_h_f , d_log_h , d_log_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    dx_f = dx_f * bboxScale;
+    dy_f = dy_f * bboxScale;
+    d_log_w_f = d_log_w_f * bboxScale;
+    d_log_h_f = d_log_h_f * bboxScale;
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    // convert f32 to f16
+    half4 box0_h4, box1_h4, box2_h4, box3_h4, box4_h4, score_h4;
+    _viv_asm(CONV, box0_h4 , box0_f);
+    _viv_asm(CONV, box1_h4 , box1_f);
+    _viv_asm(CONV, box2_h4 , box2_f);
+    _viv_asm(CONV, box3_h4 , box3_f);
+    _viv_asm(CONV, score_h4 , score_f);
+
+    vxc_half8 box0_hf8, box1_hf8, box2_hf8, box3_hf8, score_hf8;
+    VXC_DP2x8(box0_hf8, box0_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.y;
+    VXC_DP2x8(box1_hf8, box1_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.z;
+    VXC_DP2x8(box2_hf8, box2_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+    score_h4.x = score_h4.w;
+    VXC_DP2x8(box3_hf8, box3_h4, score_h4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDp2x8_packF16);
+
+    vxc_short8 box0_st8, box1_st8, box2_st8, box3_st8;
+    _viv_asm(COPY, box0_st8, box0_hf8, 16);
+    _viv_asm(COPY, box1_st8, box1_hf8, 16);
+    _viv_asm(COPY, box2_st8, box2_hf8, 16);
+    _viv_asm(COPY, box3_st8, box3_hf8, 16);
+
+    int4 output_coord = {x*5, y, z, 0};
+    VXC_WriteImage2DArray(output_data, output_coord, box0_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box1_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box2_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    output_coord.x += 5;
+    VXC_WriteImage2DArray(output_data, output_coord, box3_st8, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Regression_F32_I16_F32toF32
+    (
+    __read_only  image2d_array_t score_data,
+    __read_only  image2d_array_t box_data,
+    __read_only  image2d_array_t archor_data,
+    __write_only image2d_array_t output_data,
+    int feat_stride,
+    float img_W,
+    float img_H,
+    float min_box_W,
+    float min_box_H
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int num = get_global_size(2);
+    int z4 = z<<2;
+
+    int4 archor_coord0 = {z4, 0, 0, 0};
+    int4 score_coord = {x << 1, y, z + num, 0};
+
+    vxc_short8 score;
+    vxc_float4 score_f;
+    VXC_ReadImage2DArray(score, score_data, score_coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, score_f, score, 16);
+
+    // offset x, y stride
+    vxc_float x_stride = x * feat_stride;
+    vxc_float y_stride = y * feat_stride;
+    vxc_float4 offset = {feat_stride, 0, feat_stride, 0};
+    vxc_float4 d0 = {x_stride, y_stride, x_stride, y_stride};
+    vxc_float4 d1 = d0 + offset;
+    vxc_float4 d2 = d1 + offset;
+    vxc_float4 d3 = d2 + offset;
+
+    vxc_float4 box0_f, box1_f, box2_f, box3_f;
+    box0_f = read_imagef(archor_data, archor_coord0);
+    box1_f = box0_f;
+    box2_f = box0_f;
+    box3_f = box0_f;
+
+    box0_f = box0_f + d0;
+    box1_f = box1_f + d1;
+    box2_f = box2_f + d2;
+    box3_f = box3_f + d3;
+
+    float4 box0x_f = {box0_f.x, box1_f.x, box2_f.x, box3_f.x};
+    float4 box0y_f = {box0_f.y, box1_f.y, box2_f.y, box3_f.y};
+    float4 box0z_f = {box0_f.z, box1_f.z, box2_f.z, box3_f.z};
+    float4 box0w_f = {box0_f.w, box1_f.w, box2_f.w, box3_f.w};
+
+    vxc_short8 dx, dy, d_log_w, d_log_h;
+    int4 dx_coord = {x, y, z4, 0};
+    int4 dy_coord = {x, y, z4+1, 0};
+    int4 d_log_w_coord = {x, y, z4+2, 0};
+    int4 d_log_h_coord = {x, y, z4+3, 0};
+
+    VXC_ReadImage2DArray(dx , box_data,      dx_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(dy , box_data,      dy_coord,      0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_w , box_data, d_log_w_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(d_log_h , box_data, d_log_h_coord, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    vxc_float4 dx_f, dy_f, d_log_w_f, d_log_h_f;
+    half scale_h;
+    _viv_asm(CONV, scale_h, bboxScale);
+
+    VXC_DP4x4(dx_f , dx , dx , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(dy_f , dy , dy , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_w_f , d_log_w , d_log_w , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    VXC_DP4x4(d_log_h_f , d_log_h , d_log_h , VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), Uni4x4_Cvt2Float32_low);
+    dx_f = dx_f * bboxScale;
+    dy_f = dy_f * bboxScale;
+    d_log_w_f = d_log_w_f * bboxScale;
+    d_log_h_f = d_log_h_f * bboxScale;
+
+    d_log_w_f = exp(d_log_w_f);
+    d_log_h_f = exp(d_log_h_f);
+    img_W = img_W -1.0;
+    img_H = img_H -1.0;
+
+    float4 ww, hh, ctr_x, ctr_y, pred_ctr_x, pred_ctr_y, pred_w, pred_h, box_w, box_h;
+    float4 zeros = {0.0, 0.0, 0.0, 0.0};
+    float4 ones = {1.0, 1.0, 1.0, 1.0};
+    float4 pointFive = {0.5, 0.5, 0.5, 0.5};
+    float4 img_Ws = {img_W, img_W, img_W, img_W};
+    float4 img_Hs = {img_H, img_H, img_H, img_H};
+    float4 min_box_Ws = {min_box_W, min_box_W, min_box_W, min_box_W};
+    float4 min_box_Hs = {min_box_H, min_box_H, min_box_H, min_box_H};
+
+    ww = box0z_f - box0x_f + ones;
+    hh = box0w_f - box0y_f + ones;
+    ctr_x = box0x_f + pointFive * ww;
+    ctr_y = box0y_f + pointFive * hh;
+    pred_ctr_x = dx_f * ww + ctr_x;
+    pred_ctr_y = dy_f * hh + ctr_y;
+    pred_w = d_log_w_f * ww;
+    pred_h = d_log_h_f * hh;
+
+    box0x_f = pred_ctr_x - pointFive * pred_w;
+    box0y_f = pred_ctr_y - pointFive * pred_h;
+    box0z_f = pred_ctr_x + pointFive * pred_w;
+    box0w_f = pred_ctr_y + pointFive * pred_h;
+
+    box0x_f = box0x_f < zeros   ? zeros  : box0x_f;
+    box0x_f = box0x_f > img_Ws  ? img_Ws : box0x_f;
+    box0y_f = box0y_f < zeros   ? zeros  : box0y_f;
+    box0y_f = box0y_f > img_Hs  ? img_Hs : box0y_f;
+    box0z_f = box0z_f < zeros   ? zeros  : box0z_f;
+    box0z_f = box0z_f > img_Ws  ? img_Ws : box0z_f;
+    box0w_f = box0w_f < zeros   ? zeros  : box0w_f;
+    box0w_f = box0w_f > img_Hs  ? img_Hs : box0w_f;
+
+    box_w = box0z_f - box0x_f + ones;
+    box_h = box0w_f - box0y_f + ones;
+
+    score_f = (box_w < min_box_Ws) ? zeros : ( box_h < min_box_Hs ? zeros : score_f);
+
+    box0_f = (float4)(box0x_f.x, box0y_f.x, box0z_f.x, box0w_f.x);
+    box1_f = (float4)(box0x_f.y, box0y_f.y, box0z_f.y, box0w_f.y);
+    box2_f = (float4)(box0x_f.z, box0y_f.z, box0z_f.z, box0w_f.z);
+    box3_f = (float4)(box0x_f.w, box0y_f.w, box0z_f.w, box0w_f.w);
+
+    int4 output_coord = {x*10, y, z, 0};
+
+    vxc_short8 output_box,output_score;
+    _viv_asm(COPY, output_score, score_f, 16);
+    _viv_asm(COPY, output_box, box0_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box1_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box2_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(4, 5, 0, VXC_RM_TowardZero, 0));output_coord.x += 2;
+
+    _viv_asm(COPY, output_box, box3_f, 16);
+    VXC_WriteImage2DArray(output_data, output_coord, output_box, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));output_coord.x += 8;
+    VXC_WriteImage2DArray(output_data, output_coord, output_score, VXC_MODIFIER(6, 7, 0, VXC_RM_TowardZero, 0));
+}
+

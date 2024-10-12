@@ -1,0 +1,337 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform float gcScale;
+
+__constant float4 op7x7_x[12] = {(float4)(1, 4, 5, 0),
+                                    (float4)(-5, -4, -1, 6),
+                                    (float4)(24, 30, 0, -30),
+                                    (float4)(-24, -6, 15, 60),
+                                    (float4)(75, 0, -75, -60),
+                                    (float4)(-15, 20, 80, 100),
+                                    (float4)(-100, -80, -20, 15),
+                                    (float4)(60, 75, 0, -75),
+                                    (float4)(-60, -15, 6, 24),
+                                    (float4)(30, 0, -30, -24),
+                                    (float4)(-6, 1, 4, 5),
+                                    (float4)(0, -5, -4, -1)};
+__constant float4 op7x7_y[12] = {(float4)(-1, -6, -15, -20),
+                                    (float4)(-15, -6, -1, -4),
+                                    (float4)(-24, -60, -80, -60),
+                                    (float4)(-24, -4, -5, -30),
+                                    (float4)(-75, -100, -75, -30),
+                                    (float4)(-5, 0, 0, 0),
+                                    (float4)(0, 0, 0, 5),
+                                    (float4)(30, 75, 100, 75),
+                                    (float4)(30, 5, 4, 24),
+                                    (float4)(60, 80, 60, 24),
+                                    (float4)(4, 1, 6, 15),
+                                    (float4)(20, 15, 6, 1)};
+
+__kernel void sobelMxN_f16_3x3
+(
+    __read_only image2d_t input,
+    int win,
+    float scale,
+    __write_only image2d_t output0,
+    __write_only image2d_t output1
+)
+{
+    int4  coord = (int4)(get_global_id(0), get_global_id(1) - 1, get_global_id(0) - 1, get_global_id(0) + 1);
+    uint4 src0 = (uint4)0;
+    uint4 src1 = src0;
+
+    src0.x = read_imageui(input, coord.zy).x;
+    src0.y = read_imageui(input, coord.xy).x;
+    src0.z = read_imageui(input, coord.wy).x;
+    coord.y++;
+
+    src0.w = read_imageui(input, coord.zy).x;
+    src1.x = read_imageui(input, coord.wy).x;
+    int2 coord_out = (int2)coord.xy;
+    coord.y++;
+
+    src1.y = read_imageui(input, coord.zy).x;
+    src1.z = read_imageui(input, coord.xy).x;
+    src1.w = read_imageui(input, coord.wy).x;
+
+    float4 data0 = convert_float4(src0);
+    float4 data1 = convert_float4(src1);
+    float4 op3x3_x0 = (float4)(1, 0, -1, 2);
+    float4 op3x3_x1 = (float4)(-2, 1, 0, -1);
+    float4 op3x3_y0 = (float4)(-1, -2, -1, 0);
+    float4 op3x3_y1 = (float4)(0, 1, 2, 1);
+
+    float sum0 = dot(data0, op3x3_x0);
+    sum0 += dot(data1, op3x3_x1);
+
+    float sum1 = dot(data0, op3x3_y0);
+    sum1 += dot(data1, op3x3_y1);
+
+    sum0 *= gcScale;
+    sum1 *= gcScale;
+
+    half4 dst0, dst1;
+    _viv_asm(CONV_RTZ, dst0, sum0);
+    _viv_asm(CONV_RTZ, dst1, sum1);
+    uint4 out0, out1;
+    _viv_asm(COPY, out0, dst0, 16);
+    _viv_asm(COPY, out1, dst1, 16);
+
+    write_imageui(output0, coord_out, out0);
+    write_imageui(output1, coord_out, out1);
+}
+
+__kernel void sobelMxN_f16_5x5
+(
+    __read_only image2d_t input,
+    int win,
+    float scale,
+    __write_only image2d_t output0,
+    __write_only image2d_t output1
+)
+{
+    int4  coord0 = (int4)(get_global_id(0), get_global_id(1) - 2, get_global_id(0) - 2, get_global_id(0) - 1);
+    int4  coord1 = (int4)(get_global_id(0), get_global_id(1) - 2, get_global_id(0) + 1, get_global_id(0) + 2);
+    uint4 src0 = (uint4)0;
+    uint4 src1 = src0;
+    uint4 src2 = src0;
+    uint4 src3 = src0;
+    uint4 src4 = src0;
+    uint4 src5 = src0;
+
+    src0.x = read_imageui(input, coord0.zy).x;
+    src0.y = read_imageui(input, coord0.wy).x;
+    src0.z = read_imageui(input, coord0.xy).x;
+    src0.w = read_imageui(input, coord1.zy).x;
+    src1.x = read_imageui(input, coord1.wy).x;
+    coord0.y++;
+    coord1.y++;
+
+    src1.y = read_imageui(input, coord0.zy).x;
+    src1.z = read_imageui(input, coord0.wy).x;
+    src1.w = read_imageui(input, coord0.xy).x;
+    src2.x = read_imageui(input, coord1.zy).x;
+    src2.y = read_imageui(input, coord1.wy).x;
+    coord0.y++;
+    coord1.y++;
+
+    src2.z = read_imageui(input, coord0.zy).x;
+    src2.w = read_imageui(input, coord0.wy).x;
+    src3.x = read_imageui(input, coord1.zy).x;
+    src3.y = read_imageui(input, coord1.wy).x;
+    int2 coord_out = (int2)coord0.xy;
+    coord0.y++;
+    coord1.y++;
+
+    src3.z = read_imageui(input, coord0.zy).x;
+    src3.w = read_imageui(input, coord0.wy).x;
+    src4.x = read_imageui(input, coord0.xy).x;
+    src4.y = read_imageui(input, coord1.zy).x;
+    src4.z = read_imageui(input, coord1.wy).x;
+    coord0.y++;
+    coord1.y++;
+
+    src4.w = read_imageui(input, coord0.zy).x;
+    src5.x = read_imageui(input, coord0.wy).x;
+    src5.y = read_imageui(input, coord0.xy).x;
+    src5.z = read_imageui(input, coord1.zy).x;
+    src5.w = read_imageui(input, coord1.wy).x;
+
+    float4 data0 = convert_float4(src0);
+    float4 data1 = convert_float4(src1);
+    float4 data2 = convert_float4(src2);
+    float4 data3 = convert_float4(src3);
+    float4 data4 = convert_float4(src4);
+    float4 data5 = convert_float4(src5);
+    float4 op5x5_x0 = (float4)(1, 2, 0, -2);
+    float4 op5x5_x1 = (float4)(-1, 4, 8, 0);
+    float4 op5x5_x2 = (float4)(-8, -4, 6, 12);
+    float4 op5x5_x3 = (float4)(-12, -6, 4, 8);
+    float4 op5x5_x4 = (float4)(0, -8, -4, 1);
+    float4 op5x5_x5 = (float4)(2, 0, -2, -1);
+    float4 op5x5_y0 = (float4)(-1, -4, -6, -4);
+    float4 op5x5_y1 = (float4)(-1, -2, -8, -12);
+    float4 op5x5_y2 = (float4)(-8, -2, 0, 0);
+    float4 op5x5_y3 = (float4)(0, 0, 2, 8);
+    float4 op5x5_y4 = (float4)(12, 8, 2, 1);
+    float4 op5x5_y5 = (float4)(4, 6, 4, 1);
+
+    float sum0 = dot(data0, op5x5_x0);
+    sum0 += dot(data1, op5x5_x1);
+    sum0 += dot(data2, op5x5_x2);
+    sum0 += dot(data3, op5x5_x3);
+    sum0 += dot(data4, op5x5_x4);
+    sum0 += dot(data5, op5x5_x5);
+
+    float sum1 = dot(data0, op5x5_y0);
+    sum1 += dot(data1, op5x5_y1);
+    sum1 += dot(data2, op5x5_y2);
+    sum1 += dot(data3, op5x5_y3);
+    sum1 += dot(data4, op5x5_y4);
+    sum1 += dot(data5, op5x5_y5);
+
+    sum0 *= gcScale;
+    sum1 *= gcScale;
+
+    half4 dst0, dst1;
+    _viv_asm(CONV_RTZ, dst0, sum0);
+    _viv_asm(CONV_RTZ, dst1, sum1);
+    uint4 out0, out1;
+    _viv_asm(COPY, out0, dst0, 16);
+    _viv_asm(COPY, out1, dst1, 16);
+
+    write_imageui(output0, coord_out, out0);
+    write_imageui(output1, coord_out, out1);
+}
+
+__kernel void sobelMxN_f16_7x7
+(
+    __read_only image2d_t input,
+    int win,
+    float scale,
+    __write_only image2d_t output0,
+    __write_only image2d_t output1
+)
+{
+    int4  coord0 = (int4)(get_global_id(0) - 1, get_global_id(1) - 3, get_global_id(0) - 3, get_global_id(0) - 2);
+    int4  coord1 = (int4)(get_global_id(0) + 2, get_global_id(1) - 3, get_global_id(0), get_global_id(0) + 1);
+    int2  coord2 = (int2)(get_global_id(0) + 3, get_global_id(1) - 3);
+    uint4 src0 = (uint4)0;
+    uint4 src1 = src0;
+    uint4 src2 = src0;
+    uint4 src3 = src0;
+    uint4 src4 = src0;
+    uint4 src5 = src0;
+    uint4 src6 = src0;
+    uint4 src7 = src0;
+    uint4 src8 = src0;
+    uint4 src9 = src0;
+    uint4 src10 = src0;
+    uint4 src11 = src0;
+
+    src0.x = read_imageui(input, coord0.zy).x;
+    src0.y = read_imageui(input, coord0.wy).x;
+    src0.z = read_imageui(input, coord0.xy).x;
+    src0.w = read_imageui(input, coord1.zy).x;
+    src1.x = read_imageui(input, coord1.wy).x;
+    src1.y = read_imageui(input, coord1.xy).x;
+    src1.z = read_imageui(input, coord2).x;
+    coord0.y++;
+    coord1.y++;
+    coord2.y++;
+
+    src1.w = read_imageui(input, coord0.zy).x;
+    src2.x = read_imageui(input, coord0.wy).x;
+    src2.y = read_imageui(input, coord0.xy).x;
+    src2.z = read_imageui(input, coord1.zy).x;
+    src2.w = read_imageui(input, coord1.wy).x;
+    src3.x = read_imageui(input, coord1.xy).x;
+    src3.y = read_imageui(input, coord2).x;
+    coord0.y++;
+    coord1.y++;
+    coord2.y++;
+
+    src3.z = read_imageui(input, coord0.zy).x;
+    src3.w = read_imageui(input, coord0.wy).x;
+    src4.x = read_imageui(input, coord0.xy).x;
+    src4.y = read_imageui(input, coord1.zy).x;
+    src4.z = read_imageui(input, coord1.wy).x;
+    src4.w = read_imageui(input, coord1.xy).x;
+    src5.x = read_imageui(input, coord2).x;
+    coord0.y++;
+    coord1.y++;
+    coord2.y++;
+
+    src5.y = read_imageui(input, coord0.zy).x;
+    src5.z = read_imageui(input, coord0.wy).x;
+    src5.w = read_imageui(input, coord0.xy).x;
+    src6.x = read_imageui(input, coord1.wy).x;
+    src6.y = read_imageui(input, coord1.xy).x;
+    src6.z = read_imageui(input, coord2).x;
+    int2 coord_out = (int2)coord1.zy;
+    coord0.y++;
+    coord1.y++;
+    coord2.y++;
+
+    src6.w = read_imageui(input, coord0.zy).x;
+    src7.x = read_imageui(input, coord0.wy).x;
+    src7.y = read_imageui(input, coord0.xy).x;
+    src7.z = read_imageui(input, coord1.zy).x;
+    src7.w = read_imageui(input, coord1.wy).x;
+    src8.x = read_imageui(input, coord1.xy).x;
+    src8.y = read_imageui(input, coord2).x;
+    coord0.y++;
+    coord1.y++;
+    coord2.y++;
+
+    src8.z = read_imageui(input, coord0.zy).x;
+    src8.w = read_imageui(input, coord0.wy).x;
+    src9.x = read_imageui(input, coord0.xy).x;
+    src9.y = read_imageui(input, coord1.zy).x;
+    src9.z = read_imageui(input, coord1.wy).x;
+    src9.w = read_imageui(input, coord1.xy).x;
+    src10.x = read_imageui(input, coord2).x;
+    coord0.y++;
+    coord1.y++;
+    coord2.y++;
+
+    src10.y = read_imageui(input, coord0.zy).x;
+    src10.z = read_imageui(input, coord0.wy).x;
+    src10.w = read_imageui(input, coord0.xy).x;
+    src11.x = read_imageui(input, coord1.zy).x;
+    src11.y = read_imageui(input, coord1.wy).x;
+    src11.z = read_imageui(input, coord1.xy).x;
+    src11.w = read_imageui(input, coord2).x;
+
+    float4 data0 = convert_float4(src0);
+    float4 data1 = convert_float4(src1);
+    float4 data2 = convert_float4(src2);
+    float4 data3 = convert_float4(src3);
+    float4 data4 = convert_float4(src4);
+    float4 data5 = convert_float4(src5);
+    float4 data6 = convert_float4(src6);
+    float4 data7 = convert_float4(src7);
+    float4 data8 = convert_float4(src8);
+    float4 data9 = convert_float4(src9);
+    float4 data10 = convert_float4(src10);
+    float4 data11 = convert_float4(src11);
+
+    float sum0 = dot(data0, op7x7_x[0]);
+    sum0 += dot(data1, op7x7_x[1]);
+    sum0 += dot(data2, op7x7_x[2]);
+    sum0 += dot(data3, op7x7_x[3]);
+    sum0 += dot(data4, op7x7_x[4]);
+    sum0 += dot(data5, op7x7_x[5]);
+    sum0 += dot(data6, op7x7_x[6]);
+    sum0 += dot(data7, op7x7_x[7]);
+    sum0 += dot(data8, op7x7_x[8]);
+    sum0 += dot(data9, op7x7_x[9]);
+    sum0 += dot(data10, op7x7_x[10]);
+    sum0 += dot(data11, op7x7_x[11]);
+
+    float sum1 = dot(data0, op7x7_y[0]);
+    sum1 += dot(data1, op7x7_y[1]);
+    sum1 += dot(data2, op7x7_y[2]);
+    sum1 += dot(data3, op7x7_y[3]);
+    sum1 += dot(data4, op7x7_y[4]);
+    sum1 += dot(data5, op7x7_y[5]);
+    sum1 += dot(data6, op7x7_y[6]);
+    sum1 += dot(data7, op7x7_y[7]);
+    sum1 += dot(data8, op7x7_y[8]);
+    sum1 += dot(data9, op7x7_y[9]);
+    sum1 += dot(data10, op7x7_y[10]);
+    sum1 += dot(data11, op7x7_y[11]);
+
+    sum0 *= gcScale;
+    sum1 *= gcScale;
+
+    half4 dst0, dst1;
+    _viv_asm(CONV_RTZ, dst0, sum0);
+    _viv_asm(CONV_RTZ, dst1, sum1);
+    uint4 out0, out1;
+    _viv_asm(COPY, out0, dst0, 16);
+    _viv_asm(COPY, out1, dst1, 16);
+
+    write_imageui(output0, coord_out, out0);
+    write_imageui(output1, coord_out, out1);
+}

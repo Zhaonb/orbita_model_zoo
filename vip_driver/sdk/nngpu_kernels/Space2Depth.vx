@@ -1,0 +1,219 @@
+#pragma OPENCL EXTENSION CL_VIV_asm : enable
+
+__kernel void gpuSpace2Depth_F32toF32_block_x2y2
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int block_size_x, int block_size_y
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inDepth = get_image_array_size(input);
+    int4 coord = (int4)(x, y, z, 0);
+    int4 coord_out = (int4)(x >> 1, y >> 1, 0, 0);
+    float4 tmp = {0.0};
+
+    tmp = read_imagef(input, coord);
+    coord_out.z = ((x & 1) + (y & 1) * 2 ) * inDepth + z;
+    write_imagef(output, coord_out, tmp);
+}
+
+__kernel void gpuSpace2Depth_F32toF32_block_x2y1
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int block_size_x, int block_size_y
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inDepth = get_image_array_size(input);
+
+    int4 coord = (int4)(x, y, z, 0);
+    float4 data = {0.0};
+    data = read_imagef(input, coord);
+
+    int4 coord_out = (int4)(x >> 1, y, 0, 0);
+    coord_out.z = (x & 1) * inDepth + z;
+    write_imagef(output, coord_out, data);
+}
+
+__kernel void gpuSpace2Depth_F32toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int block_size_x, int block_size_y
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inDepth = get_image_array_size(input);
+    int4 coord = (int4)(x, y, z, 0);
+    float4 tmp = {0.0};
+
+    tmp = read_imagef(input, coord);
+    ushort blockSize_x, blockSize_y, _x, _y;
+    _viv_asm(COPY, blockSize_x, block_size_x, 2);
+    _viv_asm(COPY, blockSize_y, block_size_y, 2);
+    _viv_asm(COPY, _x, x, 2);
+    _viv_asm(COPY, _y, y, 2);
+
+    int4 coord_out = (int4)(_x / blockSize_x, _y / blockSize_y, 0, 0);
+    coord_out.z = ((x - coord_out.x * block_size_x) + (y - coord_out.y * blockSize_y) * block_size_x) * inDepth + z;
+    write_imagef(output, coord_out, tmp);
+}
+
+__kernel void gpuSpace2Depth_U8toU8_block_x2y2
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int block_size_x, int block_size_y,
+    float  scaleInOut, float zpInOut
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inDepth = get_image_array_size(input);
+    int4 coord = (int4)(x, y, z, 0);
+    int4 coord_out = (int4)(x >> 1, y >> 1, 0, 0);
+    uint4 data = {0};
+
+    data = read_imageui(input, coord);
+    coord_out.z = ((x & 1) + (y & 1) * 2 ) * inDepth + z;
+    data.x = convert_uint(data.x * scaleInOut + zpInOut);
+    write_imageui(output, coord_out, data);
+}
+
+__kernel void gpuSpace2Depth_U8toU8_block_x2y1
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int block_size_x, int block_size_y,
+    float  scaleInOut, float zpInOut
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inDepth = get_image_array_size(input);
+
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 data = {0};
+    data = read_imageui(input, coord);
+
+    int4 coord_out = (int4)(x >> 1, y, 0, 0);
+    coord_out.z = (x & 1) * inDepth + z;
+
+    data.x = convert_uint(data.x * scaleInOut + zpInOut);
+    write_imageui(output, coord_out, data);
+}
+
+__kernel void gpuSpace2Depth_U8toU8
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int block_size_x, int block_size_y,
+    float  scaleInOut, float zpInOut
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inDepth = get_image_array_size(input);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 data = {0};
+
+    data = read_imageui(input, coord);
+    ushort blockSize_x, blockSize_y, _x, _y;
+    _viv_asm(COPY, blockSize_x, block_size_x, 2);
+    _viv_asm(COPY, blockSize_y, block_size_y, 2);
+    _viv_asm(COPY, _x, x, 2);
+    _viv_asm(COPY, _y, y, 2);
+
+    int4 coord_out = (int4)(_x / blockSize_x, _y / blockSize_y, 0, 0);
+    coord_out.z = ((x - coord_out.x * block_size_x) + (y - coord_out.y * blockSize_y) * block_size_x) * inDepth + z;
+    data.x = convert_uint(data.x * scaleInOut + zpInOut);
+
+    write_imageui(output, coord_out, data);
+}
+
+__kernel void gpuSpace2Depth_I32toI32_block_x2y2
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int block_size_x, int block_size_y,
+    float  scaleInOut, float zpInOut
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inDepth = get_image_array_size(input);
+    int4 coord = (int4)(x, y, z, 0);
+    int4 coord_out = (int4)(x >> 1, y >> 1, 0, 0);
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord);
+    tmp.x = floor(tmp.x * scaleInOut + zpInOut);
+    coord_out.z = ((x & 1) + (y & 1) * 2 ) * inDepth + z;
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuSpace2Depth_I32toI32_block_x2y1
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int block_size_x, int block_size_y,
+    float  scaleInOut, float zpInOut
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inDepth = get_image_array_size(input);
+
+    int4 coord = (int4)(x, y, z, 0);
+    int4 data = {0};
+    data = read_imagei(input, coord);
+
+    int4 coord_out = (int4)(x >> 1, y, 0, 0);
+    coord_out.z = (x & 1) * inDepth + z;
+
+    data.x = floor(data.x * scaleInOut + zpInOut);
+    write_imagei(output, coord_out, data);
+}
+
+__kernel void gpuSpace2Depth_I32toI32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int block_size_x, int block_size_y,
+    float  scaleInOut, float zpInOut
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int inDepth = get_image_array_size(input);
+    int4 coord = (int4)(x, y, z, 0);
+    int4 tmp = {0};
+
+    tmp = read_imagei(input, coord);
+
+    ushort blockSize_x, blockSize_y, _x, _y;
+    _viv_asm(COPY, blockSize_x, block_size_x, 2);
+    _viv_asm(COPY, blockSize_y, block_size_y, 2);
+    _viv_asm(COPY, _x, x, 2);
+    _viv_asm(COPY, _y, y, 2);
+
+    int4 coord_out = (int4)(_x / blockSize_x, _y / blockSize_y, 0, 0);
+    coord_out.z = ((x - coord_out.x * block_size_x) + (y - coord_out.y * blockSize_y) * block_size_x) * inDepth + z;
+    tmp.x = floor(tmp.x * scaleInOut + zpInOut);
+
+    write_imagei(output, coord_out, tmp);
+}

@@ -1,0 +1,70 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+__kernel void absdiff_U8_U8toU8
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1;
+    vxc_uchar16 dst;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input1, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_AbsDiff(dst, src0, src1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 1));
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void absdiff_U16_U16toU16
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_ushort8 src0, src1;
+    vxc_ushort8 dst;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input1, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_AbsDiff(dst, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1));
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void absdiff_I16_I16toI16
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_short8 src0, src1, dst;
+    vxc_ushort8 tmpDst;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input1, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_AbsDiff(dst, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1));
+    _viv_asm(COPY, tmpDst, dst, 16);
+    VXC_Clamp(dst, tmpDst, 0, 32767, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1));
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void absdiff_I16_I16toU16
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_short8 src0, src1, tmpDst;
+    vxc_ushort8 dst;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input1, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_AbsDiff(tmpDst, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1));
+    _viv_asm(COPY, dst, tmpDst, 16);
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}

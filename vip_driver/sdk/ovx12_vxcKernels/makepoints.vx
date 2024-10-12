@@ -1,0 +1,66 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+__kernel void makepoints_U8(
+    __read_only image2d_t in_image,
+    global int* pointsList,
+    global int* count
+)
+{
+    const int px = get_global_id(0);
+    const int py = get_global_id(1);
+    int index = 0;
+    unsigned char gx = 0;
+    int width = get_image_width(in_image);
+    int height = get_image_height(in_image);
+    VXC_ReadImage(gx, in_image, (int2)(px, py), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    if(gx){
+        index = atomic_add(count, 1);
+        pointsList[index] = (py<<16) | px;
+    }
+}
+
+__kernel void makepoints_U1(
+    __read_only image2d_t in_image,
+    global int* pointsList,
+    global int* count
+)
+{
+    const int px = get_global_id(0);
+    const int py = get_global_id(1);
+    int index = 0;
+    unsigned char gx = 0;
+
+    VXC_ReadImage(gx, in_image, (int2)(px >> 3, py), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int offset = px & 7;
+    gx = gx & (1 << offset);
+
+    if(gx){
+        index = atomic_add(count, 1);
+        pointsList[index] = (py<<16) | px;
+    }
+}
+
+__kernel void makepoints_U1_w8(
+    __read_only image2d_t in_image,
+    global int* pointsList,
+    global int* count
+)
+{
+    const int px = get_global_id(0);
+    const int py = get_global_id(1);
+    int index = 0;
+    unsigned char gx = 0;
+    VXC_ReadImage(gx, in_image, (int2)(px, py), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int tmpx = px << 3;
+
+    for(int i = 0; i < 8; i++)
+    {
+        unsigned char tgx = gx & (1 << i);
+        if(tgx){
+            index = atomic_add(count, 1);
+            pointsList[index] = (py<<16) | (tmpx + i);
+        }
+    }
+}

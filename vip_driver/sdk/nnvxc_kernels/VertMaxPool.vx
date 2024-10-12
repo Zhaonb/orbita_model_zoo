@@ -1,0 +1,944 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+#define VERT_IMAGE_NUM        (4)
+#define VERT_REMAIN        (3)
+_viv_uniform int4 packedMinData;
+__kernel void vertMaxPool_20x16_6x6_int8(
+    __read_only image2d_array_t    input,
+    int        width,
+    int        width_stride,
+    int        height,
+    int        depth,
+    __write_only image2d_array_t    output)
+{
+    vxc_char8 lineA;
+    vxc_char8 lineB;
+    vxc_char8 lineC;
+    vxc_char8 lineD;
+    vxc_char8 maxLine;
+    int2 coord_in = (int2)(get_global_id(0), get_global_id(1));
+    vxc_int4 coord_out;
+    coord_out.x = coord_in.x << 0;
+    coord_out.y = coord_in.y << 2;
+    coord_out.z = coord_in.y << 2;
+    coord_out.w = coord_in.y << 2;
+    coord_in.y *= height;
+
+    coord_out += (int4)(0, 0, 1, 0);
+
+    VXC_ReadImage(lineA, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineB, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineC, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    int loopCnt = 0;
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineA, lineA, maxLine, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+
+    do
+    {
+        VXC_ReadImage(lineD, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+        //0
+        VXC_WriteImage(output, coord_out.xy, lineA, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+        //1
+        VXC_VertMax3_Integer(maxLine, lineA, lineB, lineA, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+        coord_out.yz += 2;
+        //2
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineC, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+        //3
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineD, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+
+        lineA = lineB;
+        lineB = lineC;
+        lineC = lineD;
+
+        _viv_asm(COPY, maxLine, packedMinData, 16);
+        VXC_VertMax3_Integer(lineA, lineA, maxLine, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+
+        coord_out.yz -= 2;
+        coord_out.x += width;
+        coord_in.y ++;
+        loopCnt ++;
+    } while (loopCnt < height - VERT_REMAIN);
+
+    //height = -2
+    //1
+    VXC_WriteImage(output, coord_out.xy, lineA, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    //2
+    VXC_VertMax3_Integer(maxLine, lineA, lineB, lineA, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    coord_out.yz += 2;
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineC, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    //3
+    VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    coord_out.yz -= 2;
+    coord_out.x += width;
+    //height = -1
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineB, lineB, maxLine, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+
+    VXC_WriteImage(output, coord_out.xy, lineB, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    //2
+    VXC_VertMax3_Integer(maxLine, lineB, lineC, lineB, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    coord_out.yz += 2;
+    VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    coord_out.yz -= 2;
+    coord_out.x += width;
+    //height = 0
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineC, lineC, maxLine, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xy, lineC, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xz, lineC, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    coord_out.yz += 2;
+    VXC_WriteImage(output, coord_out.xy, lineC, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xz, lineC, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+}
+__kernel void vertMaxPool_20x16_6x6_fp16(
+    __read_only image2d_array_t    input,
+    int        width,
+    int        width_stride,
+    int        height,
+    int        depth,
+    __write_only image2d_array_t    output)
+{
+    vxc_short8 lineA;
+    vxc_short8 lineB;
+    vxc_short8 lineC;
+    vxc_short8 lineD;
+    vxc_short8 maxLine;
+    int2 coord_in = (int2)(get_global_id(0), get_global_id(1));
+    vxc_int4 coord_out;
+    coord_out.x = coord_in.x << 0;
+    coord_out.y = coord_in.y << 2;
+    coord_out.z = coord_in.y << 2;
+    coord_out.w = coord_in.y << 2;
+    coord_in.y *= height;
+
+    coord_out += (int4)(0, 0, 1, 0);
+
+    VXC_ReadImage(lineA, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineB, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineC, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    int loopCnt = 0;
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineA, lineA, maxLine, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+
+    do
+    {
+        VXC_ReadImage(lineD, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+        //0
+        VXC_WriteImage(output, coord_out.xy, lineA, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+        //1
+        VXC_VertMax3_Integer(maxLine, lineA, lineB, lineA, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+        coord_out.yz += 2;
+        //2
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineC, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+        //3
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineD, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+
+        lineA = lineB;
+        lineB = lineC;
+        lineC = lineD;
+
+        _viv_asm(COPY, maxLine, packedMinData, 16);
+        VXC_VertMax3_Integer(lineA, lineA, maxLine, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+
+        coord_out.yz -= 2;
+        coord_out.x += width;
+        coord_in.y ++;
+        loopCnt ++;
+    } while (loopCnt < height - VERT_REMAIN);
+
+    //height = -2
+    //1
+    VXC_WriteImage(output, coord_out.xy, lineA, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    //2
+    VXC_VertMax3_Integer(maxLine, lineA, lineB, lineA, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    coord_out.yz += 2;
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineC, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    //3
+    VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    coord_out.yz -= 2;
+    coord_out.x += width;
+    //height = -1
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineB, lineB, maxLine, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+
+    VXC_WriteImage(output, coord_out.xy, lineB, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    //2
+    VXC_VertMax3_Integer(maxLine, lineB, lineC, lineB, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    coord_out.yz += 2;
+    VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    coord_out.yz -= 2;
+    coord_out.x += width;
+    //height = 0
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineC, lineC, maxLine, maxLine, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xy, lineC, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xz, lineC, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    coord_out.yz += 2;
+    VXC_WriteImage(output, coord_out.xy, lineC, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out.xz, lineC, VXC_MODIFIER(0, 4, 0,VXC_RM_TowardZero, 0));
+}
+#define VERT51x39_IMAGE_NUM    (7)
+#define VERT51x39_REMAIN    (6)
+__kernel void vertMaxPool_51x39_6x6_fp16 (
+    __read_only image2d_array_t    input,
+    int        width,
+    int        width_stride,
+    int        height,
+    int        depth,
+    __write_only image2d_array_t    output)
+{
+    vxc_short8 lineA;
+    vxc_short8 lineB;
+    vxc_short8 lineC;
+    vxc_short8 lineD;
+    vxc_short8 lineE;
+    vxc_short8 lineF;
+    vxc_short8 lineG;
+    vxc_short8 maxLine;
+    int2 coord_in = (int2)(get_global_id(0), get_global_id(1));
+    vxc_int4 coord_out;
+    coord_out = coord_in.xyyy * (int4)(1, VERT51x39_IMAGE_NUM, VERT51x39_IMAGE_NUM, VERT51x39_IMAGE_NUM);
+    coord_in.y *= height;
+
+    coord_out += (int4)(0, 0, 1, 0);
+
+    VXC_ReadImage(lineA, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineB, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineC, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineD, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineE, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineF, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 5), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    int lid = get_local_id(0);
+    int loopCnt = 0;
+
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineA, lineA, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    do
+    {
+        VXC_ReadImage(lineG, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 6), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        //1
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xy, lineA, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xy, lineA, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+        //2
+        VXC_VertMax3_Integer(maxLine, lineA, lineB, lineA, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+        coord_out.yz += 2;
+        //3
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineC, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+        //4
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineD, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+        coord_out.yz += 2;
+        //5
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineE, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+        //6
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineF, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+        coord_out.yz += 2;
+        //7
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineG, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+
+        lineA = lineB;
+        lineB = lineC;
+        lineC = lineD;
+        lineD = lineE;
+        lineE = lineF;
+        lineF = lineG;
+
+        _viv_asm(COPY, maxLine, packedMinData, 16);
+        VXC_VertMax3_Integer(lineA, lineA, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+
+        coord_out.xyzw = coord_out.xwww + (int4)(width, 0, 1, 0);
+        coord_in.y ++;
+        loopCnt ++;
+    } while (loopCnt < height - VERT51x39_REMAIN);
+
+    //height = -5
+    //1
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, lineA, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, lineA, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //2
+    VXC_VertMax3_Integer(maxLine, lineA, lineB, lineA, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+    //3
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineC, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //4
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineD, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+    //5
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineE, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //6
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineF, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+
+    coord_out.xyzw = coord_out.xwww + (int4)(width, 0, 1, 0);
+
+    //height = -4
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineB, lineB, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, lineB, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, lineB, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //2
+    VXC_VertMax3_Integer(maxLine, lineB, lineC, lineB, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+    //3
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineD, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //4
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineE, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+    //5
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineF, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+
+    coord_out.xyzw = coord_out.xwww + (int4)(width, 0, 1, 0);
+
+    //height = -3
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineC, lineC, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, lineC, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, lineC, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //2
+    VXC_VertMax3_Integer(maxLine, lineC, lineD, lineC, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+    //3
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineE, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //4
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineF, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+
+    coord_out.xyzw = coord_out.xwww + (int4)(width, 0, 1, 0);
+
+    //height = -2
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineD, lineD, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, lineD, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, lineD, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //2
+    VXC_VertMax3_Integer(maxLine, lineD, lineE, lineD, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+    //3
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineF, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+
+    coord_out.xyzw = coord_out.xwww + (int4)(width, 0, 1, 0);
+
+    //height = -1
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineE, lineE, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, lineE, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, lineE, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //2
+    VXC_VertMax3_Integer(maxLine, lineE, lineF, lineE, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+
+    coord_out.xyzw = coord_out.xwww + (int4)(width, 0, 1, 0);
+
+    //height = 0
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineF, lineF, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, lineF, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, lineF, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+}
+#define VERT51x39_IMAGE_NUM    (7)
+#define VERT51x39_REMAIN    (6)
+__kernel void vertMaxPool_51x39_6x6_int8 (
+    __read_only image2d_array_t    input,
+    int        width,
+    int        width_stride,
+    int        height,
+    int        depth,
+    __write_only image2d_array_t    output)
+{
+    vxc_char8 lineA;
+    vxc_char8 lineB;
+    vxc_char8 lineC;
+    vxc_char8 lineD;
+    vxc_char8 lineE;
+    vxc_char8 lineF;
+    vxc_char8 lineG;
+    vxc_char8 maxLine;
+    int2 coord_in = (int2)(get_global_id(0), get_global_id(1));
+    vxc_int4 coord_out;
+    coord_out = coord_in.xyyy * (int4)(1, VERT51x39_IMAGE_NUM, VERT51x39_IMAGE_NUM, VERT51x39_IMAGE_NUM);
+    coord_in.y *= height;
+
+    coord_out += (int4)(0, 0, 1, 0);
+
+    VXC_ReadImage(lineA, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineB, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineC, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineD, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineE, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(lineF, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 5), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    int lid = get_local_id(0);
+    int loopCnt = 0;
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineA, lineA, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+
+    do
+    {
+        VXC_ReadImage(lineG, input,  coord_in.xy, VXC_5BITOFFSET_XY(0, 6), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        //1
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xy, lineA, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xy, lineA, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+        //2
+        VXC_VertMax3_Integer(maxLine, lineA, lineB, lineA, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+        coord_out.yz += 2;
+        //3
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineC, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+        //4
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineD, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+        coord_out.yz += 2;
+        //5
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineE, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+        //6
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineF, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+        coord_out.yz += 2;
+        //7
+        VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineG, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        if(lid == 6)
+        {
+            VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        }
+
+        lineA = lineB;
+        lineB = lineC;
+        lineC = lineD;
+        lineD = lineE;
+        lineE = lineF;
+        lineF = lineG;
+
+        _viv_asm(COPY, maxLine, packedMinData, 16);
+        VXC_VertMax3_Integer(lineA, lineA, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+
+        coord_out.xyzw = coord_out.xwww + (int4)(width, 0, 1, 0);
+        coord_in.y ++;
+        loopCnt ++;
+    } while (loopCnt < height - VERT51x39_REMAIN);
+
+    //height = -5
+    //1
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, lineA, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, lineA, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //2
+    VXC_VertMax3_Integer(maxLine, lineA, lineB, lineA, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+    //3
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineC, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //4
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineD, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+    //5
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineE, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //6
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineF, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+
+    coord_out.xyzw = coord_out.xwww + (int4)(width, 0, 1, 0);
+
+    //height = -4
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineB, lineB, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, lineB, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, lineB, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //2
+    VXC_VertMax3_Integer(maxLine, lineB, lineC, lineB, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+    //3
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineD, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //4
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineE, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+    //5
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineF, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+
+    coord_out.xyzw = coord_out.xwww + (int4)(width, 0, 1, 0);
+
+    //height = -3
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineC, lineC, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, lineC, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, lineC, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //2
+    VXC_VertMax3_Integer(maxLine, lineC, lineD, lineC, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+    //3
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineE, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //4
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineF, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+
+    coord_out.xyzw = coord_out.xwww + (int4)(width, 0, 1, 0);
+
+    //height = -2
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineD, lineD, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, lineD, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, lineD, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //2
+    VXC_VertMax3_Integer(maxLine, lineD, lineE, lineD, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+    //3
+    VXC_VertMax3_Integer(maxLine, maxLine, maxLine, lineF, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+
+    coord_out.xyzw = coord_out.xwww + (int4)(width, 0, 1, 0);
+
+    //height = -1
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineE, lineE, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, lineE, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, lineE, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    //2
+    VXC_VertMax3_Integer(maxLine, lineE, lineF, lineE, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xz, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    coord_out.yz += 2;
+
+    coord_out.xyzw = coord_out.xwww + (int4)(width, 0, 1, 0);
+
+    //height = 0
+    //1
+    _viv_asm(COPY, maxLine, packedMinData, 16);
+    VXC_VertMax3_Integer(lineF, lineF, maxLine, maxLine, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    if(lid == 6)
+    {
+        VXC_WriteImage(output, coord_out.xy, lineF, VXC_MODIFIER(0, 2, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        VXC_WriteImage(output, coord_out.xy, lineF, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+}

@@ -1,0 +1,142 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniConvert1stU8toInt32_4x4;
+_viv_uniform int height;
+
+#if (VX_VERSION==1)
+__kernel void minmaxlocfilter_u8(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, src2;
+    vxc_uchar16 minVal, maxVal;
+    vxc_uchar16 tmpMin, tmpMax;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, minVal, src0, 16);
+    _viv_asm(COPY, maxVal, src0, 16);
+    VXC_Filter(maxVal, src0, src1, src2, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Max, 1));
+    VXC_Filter(minVal, src0, src1, src2, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Min, 1));
+    for(coord.y = 3; coord.y < height;)
+    {
+        VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord.y += 2;
+        VXC_Filter(maxVal, src0, src1, maxVal, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Max, 1));
+        VXC_Filter(minVal, src0, src1, minVal, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Min, 1));
+    }
+    VXC_Filter(tmpMax, maxVal.s0369cddddddddddd, maxVal.s9cdddddddddddddd, maxVal,
+                             VXC_MODIFIER_FILTER(0, 0, 0, VXC_FM_Max, 1));
+    VXC_Filter(tmpMin, minVal.s0369cddddddddddd, minVal.s9cdddddddddddddd, minVal,
+                             VXC_MODIFIER_FILTER(0, 0, 0, VXC_FM_Min, 1));
+
+    int2 dst;
+    VXC_DP4x4(dst, tmpMin, tmpMax, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    atom_max(maxData, dst.y);
+    atom_min(minData, dst.x);
+}
+
+__kernel void minmaxlocfilter_i16(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_short8 src0, src1, src2;
+    vxc_short8 minVal, maxVal;
+    vxc_short8 tmpMin, tmpMax;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, minVal, src0, 16);
+    _viv_asm(COPY, maxVal, src0, 16);
+    VXC_Filter(maxVal, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_Max, 1));
+    VXC_Filter(minVal, src0, src1, src2, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_Min, 1));
+    for(coord.y = 3; coord.y < height;)
+    {
+        VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord.y += 2;
+        VXC_Filter(maxVal, src0, src1, maxVal, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_Max, 1));
+        VXC_Filter(minVal, src0, src1, minVal, VXC_MODIFIER_FILTER(0, 5, 0, VXC_FM_Min, 1));
+    }
+    VXC_Filter(tmpMax, maxVal.s03555555, maxVal, maxVal,
+                             VXC_MODIFIER_FILTER(0, 0, 0, VXC_FM_Max, 1));
+    VXC_Filter(tmpMin, minVal.s03555555, minVal, minVal,
+                             VXC_MODIFIER_FILTER(0, 0, 0, VXC_FM_Min, 1));
+    int2 dst;
+    VXC_DP4x4(dst, tmpMin, tmpMax, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    atom_max(maxData, dst.y);
+    atom_min(minData, dst.x);
+}
+#else
+__kernel void minmaxlocfilter_u8(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, src2;
+    vxc_uchar16 minVal, maxVal;
+    vxc_uchar16 tmpMin, tmpMax;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_VertMax3(maxVal, src0, src1, src2, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_VertMin3(minVal, src0, src1, src2, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    for(coord.y = 3; coord.y < height;)
+    {
+        VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord.y += 2;
+        VXC_VertMax3(maxVal, src0, src1, maxVal, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_VertMin3(minVal, src0, src1, minVal, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    }
+    VXC_HorzMax3(tmpMax, maxVal, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMin3(tmpMin, minVal, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+
+    VXC_HorzMax3(maxVal, tmpMax.s0369cddddddddddd, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMin3(minVal, tmpMin.s0369cddddddddddd, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    VXC_HorzMax3(tmpMax, maxVal.s0333333333333333, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMin3(tmpMin, minVal.s0333333333333333, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    int2 dst;
+    VXC_DP4x4(dst, tmpMin, tmpMax, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    atom_max(maxData, dst.y);
+    atom_min(minData, dst.x);
+}
+
+__kernel void minmaxlocfilter_i16(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_short8 src0, src1, src2;
+    vxc_short8 minVal, maxVal;
+    vxc_short8 tmpMin, tmpMax;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_VertMax3(maxVal, src0, src1, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_VertMin3(minVal, src0, src1, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    for(coord.y = 3; coord.y < height;)
+    {
+        VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord.y += 2;
+        VXC_VertMax3(maxVal, src0, src1, maxVal, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_VertMin3(minVal, src0, src1, minVal, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    }
+    VXC_HorzMax3(tmpMax, maxVal, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMin3(tmpMin, minVal, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMax3(maxVal, tmpMax.s03555555, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMin3(minVal, tmpMin.s03555555, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int2 dst;
+    VXC_DP4x4(dst, minVal, maxVal, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    atom_max(maxData, dst.y);
+    atom_min(minData, dst.x);
+}
+#endif

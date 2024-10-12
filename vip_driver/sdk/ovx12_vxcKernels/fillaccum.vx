@@ -1,0 +1,30 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+__kernel void fillaccum(
+    global int* list,
+    global int* accum,
+    global int* pointsCount,
+    global int* rhonum,
+    global int* anglenum,
+    global float* theta,
+    global float* rho
+)
+{
+    const int angle_idx = get_global_id(0);
+    float irho = 1.0/(*rho);
+    int shift = ( (*rhonum) -1 )/2;
+    int* accPtr = accum + (angle_idx+1) * (*rhonum + 2);
+    for(int i=0; i<(*pointsCount); i++){
+        int val = list[i];
+        int x = (val & 0xFFFF);
+        int y = (val>>16) & 0xFFFF;
+        float cosVal;
+        float sinVal = sincos((*theta) * ((float)angle_idx), &cosVal);
+        sinVal *= irho;
+        cosVal *= irho;
+        int r = convert_int_rte((float)x * cosVal + (float)y * sinVal) + shift;
+        atomic_inc(accPtr + r + 1);
+    }
+}

@@ -1,0 +1,291 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform float2 scale_xy;
+__kernel void scale_image_bilinear_U8toU8
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 int       interp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    float2 xy_src = (convert_float2(coord) + 0.5f) * scale_xy - 0.5f;
+    float2 xy_src_f = floor(xy_src);
+    int2 coord_in = convert_int2(xy_src_f);
+
+    uint tl = read_imageui(input, coord_in).x;
+    uint tr = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y)).x;
+    uint bl = read_imageui(input, (int2)(coord_in.x, coord_in.y + 1)).x;
+    uint br = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y + 1)).x;
+
+    float2 xy_lerp = xy_src - xy_src_f;
+    float2 minusxy = 1.0f - xy_lerp;
+
+    uint4 dst;
+    dst.x = tl * minusxy.x * minusxy.y + tr * xy_lerp.x * minusxy.y +  bl * minusxy.x * xy_lerp.y + br * xy_lerp.x * xy_lerp.y;
+
+    write_imageui(output, coord.xy, dst.xxxx);
+}
+
+__kernel void scale_image_neighbor_U8toU8
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 int       interp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    float2 xy_src = (convert_float2(coord) + 0.5f) * scale_xy;
+    float2 xy_src_f = floor(xy_src);
+    int2 coord_in = convert_int2(xy_src_f);
+
+    uint4 dst = read_imageui(input, coord_in);
+
+    write_imageui(output, coord.xy, dst.xxxx);
+}
+
+__kernel void scale_image_bilinear_U1toU1
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 int       interp
+    )
+{
+    int2   coord            = (int2)(get_global_id(0), get_global_id(1));
+    int4   coord_x          = coord.xxxx + (int4)(0, 1, 2, 3);
+    float4 in_x             = (convert_float4(coord_x) + 0.5) * scale_xy.xxxx - 0.5;
+    float4 left_x_f         = floor(in_x);
+    float4 x_lerp           = in_x - left_x_f;
+    int4   left_x_idx       = convert_int4(left_x_f);
+    float  in_y             = (convert_float(coord.y) + 0.5) * scale_xy.y - 0.5;
+    float  top_y_f          = floor(in_y);
+    float  y_lerp           = in_y - top_y_f;
+    int    top_y_idx        = convert_int(top_y_f);
+    int4   left_x_idx_bit   = left_x_idx >> 3;
+    int4   left_x_idx_mod   = left_x_idx & 0x07;
+    uint4 src;
+    int2 coord_in = (int2)(left_x_idx.x, top_y_idx);
+
+    /*************************** bit 0 ***************************/
+    src.x = read_imageui(input, coord_in).x;
+    src.y = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y)).x;
+    src.z = read_imageui(input, (int2)(coord_in.x, coord_in.y + 1)).x;
+    src.w = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y + 1)).x;
+
+    float minusx = 1.0f - x_lerp.x;
+    float minusy = 1.0f - y_lerp;
+
+    uint4 bits, dst, offset;
+    uint4 bit = (uint4)(1, 1, 1, 1);
+
+    offset.xz = as_uint2(left_x_idx_mod.xx);
+    offset.yw = offset.xz == 7 ? 0 : offset.xz + 1;
+
+    if (offset.x == 7)
+        src = viv_bitfieldExtract(src, offset, bit);
+    else
+        src = viv_bitfieldExtract(src.xxzz, offset, bit);
+
+    bits.x = src.x * minusx * minusy + src.y * x_lerp.x * minusy +  src.z * minusx * y_lerp + src.w * x_lerp.x * y_lerp >= 1.0 ? 1 : 0;
+
+    /*************************** bit 1 ***************************/
+    coord_in.x = left_x_idx_bit.y;
+    src.x = read_imageui(input, coord_in).x;
+    src.y = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y)).x;
+    src.z = read_imageui(input, (int2)(coord_in.x, coord_in.y + 1)).x;
+    src.w = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y + 1)).x;
+
+    minusx = 1.0f - x_lerp.y;
+
+    offset.xz = as_uint2(left_x_idx_mod.yy);
+    offset.yw = offset.xz == 7 ? 0 : offset.xz + 1;
+
+    if (offset.x == 7)
+        src = viv_bitfieldExtract(src, offset, bit);
+    else
+        src = viv_bitfieldExtract(src.xxzz, offset, bit);
+
+    bits.y = src.x * minusx * minusy + src.y * x_lerp.y * minusy +  src.z * minusx * y_lerp + src.w * x_lerp.y * y_lerp >= 1.0 ? 1 : 0;
+
+    /*************************** bit 2 ***************************/
+    coord_in.x = left_x_idx_bit.z;
+    src.x = read_imageui(input, coord_in).x;
+    src.y = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y)).x;
+    src.z = read_imageui(input, (int2)(coord_in.x, coord_in.y + 1)).x;
+    src.w = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y + 1)).x;
+
+    minusx = 1.0f - x_lerp.z;
+
+    offset.xz = as_uint2(left_x_idx_mod.zz);
+    offset.yw = offset.xz == 7 ? 0 : offset.xz + 1;
+
+    if (offset.x == 7)
+        src = viv_bitfieldExtract(src, offset, bit);
+    else
+        src = viv_bitfieldExtract(src.xxzz, offset, bit);
+
+    bits.z = src.x * minusx * minusy + src.y * x_lerp.z * minusy +  src.z * minusx * y_lerp + src.w * x_lerp.z * y_lerp >= 1.0 ? 1 : 0;
+
+    /*************************** bit 3 ***************************/
+    coord_in.x = left_x_idx_bit.w;
+    src.x = read_imageui(input, coord_in).x;
+    src.y = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y)).x;
+    src.z = read_imageui(input, (int2)(coord_in.x, coord_in.y + 1)).x;
+    src.w = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y + 1)).x;
+
+    minusx = 1.0f - x_lerp.w;
+
+    offset.xz = as_uint2(left_x_idx_mod.ww);
+    offset.yw = offset.xz == 7 ? 0 : offset.xz + 1;
+
+    if (offset.x == 7)
+        src = viv_bitfieldExtract(src, offset, bit);
+    else
+        src = viv_bitfieldExtract(src.xxzz, offset, bit);
+
+    bits.w = src.x * minusx * minusy + src.y * x_lerp.w * minusy +  src.z * minusx * y_lerp + src.w * x_lerp.w * y_lerp >= 1.0 ? 1 : 0;
+
+    dst.x = bits.w * 8 + bits.z * 4 + bits.y * 2 + bits.x;
+
+    coord_x      = coord.xxxx + (int4)(4, 5, 6, 7);
+    in_x         = (convert_float4(coord_x) + 0.5) * scale_xy.xxxx - 0.5;
+    left_x_f     = floor(in_x);
+    x_lerp       = in_x - left_x_f;
+    left_x_idx   = convert_int4(left_x_f);
+    left_x_idx_bit   = left_x_idx >> 3;
+    left_x_idx_mod   = left_x_idx & 0x07;
+    coord_in.x   = left_x_idx_bit.x;
+
+    /*************************** bit 4 ***************************/
+    src.x = read_imageui(input, coord_in).x;
+    src.y = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y)).x;
+    src.z = read_imageui(input, (int2)(coord_in.x, coord_in.y + 1)).x;
+    src.w = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y + 1)).x;
+
+    minusx = 1.0f - x_lerp.x;
+
+    offset.xz = as_uint2(left_x_idx_mod.xx);
+    offset.yw = offset.xz == 7 ? 0 : offset.xz + 1;
+
+    if (offset.x == 7)
+        src = viv_bitfieldExtract(src, offset, bit);
+    else
+        src = viv_bitfieldExtract(src.xxzz, offset, bit);
+
+    bits.x = src.x * minusx * minusy + src.y * x_lerp.x * minusy +  src.z * minusx * y_lerp + src.w * x_lerp.x * y_lerp >= 1.0 ? 1 : 0;
+
+    /*************************** bit 1 ***************************/
+    coord_in.x = left_x_idx_bit.y;
+    src.x = read_imageui(input, coord_in).x;
+    src.y = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y)).x;
+    src.z = read_imageui(input, (int2)(coord_in.x, coord_in.y + 1)).x;
+    src.w = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y + 1)).x;
+
+    minusx = 1.0f - x_lerp.y;
+
+    offset.xz = as_uint2(left_x_idx_mod.yy);
+    offset.yw = offset.xz == 7 ? 0 : offset.xz + 1;
+
+    if (offset.x == 7)
+        src = viv_bitfieldExtract(src, offset, bit);
+    else
+        src = viv_bitfieldExtract(src.xxzz, offset, bit);
+
+    bits.y = src.x * minusx * minusy + src.y * x_lerp.y * minusy +  src.z * minusx * y_lerp + src.w * x_lerp.y * y_lerp >= 1.0 ? 1 : 0;
+
+    /*************************** bit 2 ***************************/
+    coord_in.x = left_x_idx_bit.z;
+    src.x = read_imageui(input, coord_in).x;
+    src.y = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y)).x;
+    src.z = read_imageui(input, (int2)(coord_in.x, coord_in.y + 1)).x;
+    src.w = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y + 1)).x;
+
+    minusx = 1.0f - x_lerp.z;
+
+    offset.xz = as_uint2(left_x_idx_mod.zz);
+    offset.yw = offset.xz == 7 ? 0 : offset.xz + 1;
+
+    if (offset.x == 7)
+        src = viv_bitfieldExtract(src, offset, bit);
+    else
+        src = viv_bitfieldExtract(src.xxzz, offset, bit);
+
+    bits.z = src.x * minusx * minusy + src.y * x_lerp.z * minusy +  src.z * minusx * y_lerp + src.w * x_lerp.z * y_lerp >= 1.0 ? 1 : 0;
+
+    /*************************** bit 3 ***************************/
+    coord_in.x = left_x_idx_bit.w;
+    src.x = read_imageui(input, coord_in).x;
+    src.y = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y)).x;
+    src.z = read_imageui(input, (int2)(coord_in.x, coord_in.y + 1)).x;
+    src.w = read_imageui(input, (int2)(coord_in.x + 1, coord_in.y + 1)).x;
+
+    minusx = 1.0f - x_lerp.w;
+
+    offset.xz = as_uint2(left_x_idx_mod.ww);
+    offset.yw = offset.xz == 7 ? 0 : offset.xz + 1;
+
+    if (offset.x == 7)
+        src = viv_bitfieldExtract(src, offset, bit);
+    else
+        src = viv_bitfieldExtract(src.xxzz, offset, bit);
+
+    bits.w = src.x * minusx * minusy + src.y * x_lerp.w * minusy +  src.z * minusx * y_lerp + src.w * x_lerp.w * y_lerp >= 1.0 ? 1 : 0;
+
+    dst.x = dst.x + bits.w * 128 + bits.z * 64 + bits.y * 32 + bits.x * 16;
+
+    coord.x >>= 3;
+    write_imageui(output, coord.xy, dst.xxxx);
+}
+
+__kernel void scale_image_neighbor_U1toU1
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 int       interp
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4   coord_x       = coord.xxxx + (int4)(0, 1, 2, 3);
+    float4 in_x          = (convert_float4(coord_x) + 0.5) * scale_xy.xxxx;
+    int4   in_x_idx      = convert_int4(in_x);
+    float  in_y          = (convert_float(coord.y) + 0.5) * scale_xy.y;
+    int    in_y_idx      = convert_int(in_y);
+    int4   in_x_idx_bit  = in_x_idx >> 3;
+    uint4  in_x_idx_mod  = as_uint4(in_x_idx) & 0x07;
+    int2   coord_in      = (int2)(in_x_idx_bit.x, in_y_idx);
+
+    uint4 src, bits, dst;
+    src.x = read_imageui(input, coord_in).x;
+    coord_in.x = in_x_idx_bit.y;
+    src.y = read_imageui(input, coord_in).x;
+    coord_in.x = in_x_idx_bit.z;
+    src.z = read_imageui(input, coord_in).x;
+    coord_in.x = in_x_idx_bit.w;
+    src.w = read_imageui(input, coord_in).x;
+
+    uint4 bit = (uint4)(1, 1, 1, 1);
+    bits = viv_bitfieldExtract(src, in_x_idx_mod, bit);
+
+    dst.x = bits.w * 8 + bits.z * 4 + bits.y * 2 + bits.x;
+
+    coord_x       = coord.xxxx + (int4)(4, 5, 6, 7);
+    in_x          = (convert_float4(coord_x) + 0.5) * scale_xy.xxxx;
+    in_x_idx      = convert_int4(in_x);
+    in_x_idx_bit  = in_x_idx >> 3;
+    in_x_idx_mod  = as_uint4(in_x_idx) & 0x07;
+    src.x = read_imageui(input, coord_in).x;
+    coord_in.x = in_x_idx_bit.y;
+    src.y = read_imageui(input, coord_in).x;
+    coord_in.x = in_x_idx_bit.z;
+    src.z = read_imageui(input, coord_in).x;
+    coord_in.x = in_x_idx_bit.w;
+    src.w = read_imageui(input, coord_in).x;
+
+    bits = viv_bitfieldExtract(src, in_x_idx_mod, bit);
+
+    dst.x = dst.x + bits.w * 128 + bits.z * 64 + bits.y * 32 + bits.x * 16;
+
+    coord.x >>= 3;
+    write_imageui(output, coord.xy, dst.xxxx);
+}

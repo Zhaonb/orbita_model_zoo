@@ -1,0 +1,10 @@
+
+__kernel void copy(
+    global unsigned char* in0,
+    global unsigned char* in1
+)
+{
+    const int pX = get_global_id(0);
+    in1[pX] = in0[pX];
+
+}

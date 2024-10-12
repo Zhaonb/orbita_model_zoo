@@ -1,0 +1,206 @@
+__kernel void lbp_Standard_3
+    (
+    __read_only  image2d_t input,
+    __read_only  int       format,
+    __read_only  char      ksize,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) - 1, get_global_id(0) + 1);
+
+    uint L0_0, L0_1, L0_2;
+    uint L1_2, L1_1, L1_0;
+    uint L2_1, L2_0, L2_2;
+
+    L1_1 = read_imageui(input, (int2)(coord.x, coord.y + 0)).x;
+    L0_0 = read_imageui(input, (int2)(coord.z, coord.y - 1)).x;
+    L0_1 = read_imageui(input, (int2)(coord.x, coord.y - 1)).x;
+    L0_2 = read_imageui(input, (int2)(coord.w, coord.y - 1)).x;
+    L1_0 = read_imageui(input, (int2)(coord.z, coord.y + 0)).x;
+    L1_2 = read_imageui(input, (int2)(coord.w, coord.y + 0)).x;
+    L2_0 = read_imageui(input, (int2)(coord.z, coord.y + 1)).x;
+    L2_1 = read_imageui(input, (int2)(coord.x, coord.y + 1)).x;
+    L2_2 = read_imageui(input, (int2)(coord.w, coord.y + 1)).x;
+
+    uint4 dst;
+
+    dst.x =          L1_1 <= L0_0 ? 0x01 : 0x0;
+    dst.x = dst.x | (L1_1 <= L0_1 ? 0x02 : 0x0);
+    dst.x = dst.x | (L1_1 <= L0_2 ? 0x04 : 0x0);
+    dst.x = dst.x | (L1_1 <= L1_2 ? 0x08 : 0x0);
+    dst.x = dst.x | (L1_1 <= L1_0 ? 0x80 : 0x0);
+    dst.x = dst.x | (L1_1 <= L2_2 ? 0x10 : 0x0);
+    dst.x = dst.x | (L1_1 <= L2_1 ? 0x20 : 0x0);
+    dst.x = dst.x | (L1_1 <= L2_0 ? 0x40 : 0x0);
+
+    write_imageui(output, coord.xy, dst.xxxx);
+}
+
+__kernel void lbp_Standard_5
+    (
+    __read_only  image2d_t input,
+    __read_only  int       format,
+    __read_only  char      ksize,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) - 1, get_global_id(0) + 1);
+
+    uint L0_0, L0_2, L0_4;
+    uint L2_0, L2_2, L2_4;
+    uint L4_0, L4_2, L4_4;
+
+    L2_2 = read_imageui(input, (int2)(coord.x, coord.y + 0)).x;
+    L0_0 = read_imageui(input, (int2)(coord.z, coord.y - 1)).x;
+    L0_2 = read_imageui(input, (int2)(coord.x, coord.y - 2)).x;
+    L0_4 = read_imageui(input, (int2)(coord.w, coord.y - 1)).x;
+    L2_0 = read_imageui(input, (int2)(coord.x + 2, coord.y + 0)).x;
+    L2_4 = read_imageui(input, (int2)(coord.w, coord.y + 1)).x;
+    L4_0 = read_imageui(input, (int2)(coord.x, coord.y + 2)).x;
+    L4_2 = read_imageui(input, (int2)(coord.z, coord.y + 1)).x;
+    L4_4 = read_imageui(input, (int2)(coord.x - 2, coord.y + 0)).x;
+
+    uint4 dst;
+
+    dst.x =          L2_2 <= L0_0 ? 0x01 : 0x0;
+    dst.x = dst.x | (L2_2 <= L0_2 ? 0x02 : 0x0);
+    dst.x = dst.x | (L2_2 <= L0_4 ? 0x04 : 0x0);
+    dst.x = dst.x | (L2_2 <= L2_0 ? 0x08 : 0x0);
+    dst.x = dst.x | (L2_2 <= L2_4 ? 0x10 : 0x0);
+    dst.x = dst.x | (L2_2 <= L4_0 ? 0x20 : 0x0);
+    dst.x = dst.x | (L2_2 <= L4_2 ? 0x40 : 0x0);
+    dst.x = dst.x | (L2_2 <= L4_4 ? 0x80 : 0x0);
+
+    write_imageui(output, coord.xy, dst.xxxx);
+}
+
+__kernel void lbp_Modified_5
+    (
+    __read_only  image2d_t input,
+    __read_only  int       format,
+    __read_only  char      ksize,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) - 2, get_global_id(0) + 2);
+
+    uint4 top, med, bot;
+
+    top.x = read_imageui(input, (int2)(coord.z, coord.y - 2)).x;
+    top.y = read_imageui(input, (int2)(coord.x, coord.y - 2)).x;
+    top.z = read_imageui(input, (int2)(coord.w, coord.y - 2)).x;
+    med.x = read_imageui(input, (int2)(coord.z, coord.y + 0)).x;
+    med.y = 0;
+    med.z = read_imageui(input, (int2)(coord.w, coord.y + 0)).x;
+    bot.x = read_imageui(input, (int2)(coord.z, coord.y + 2)).x;
+    bot.y = read_imageui(input, (int2)(coord.x, coord.y + 2)).x;
+    bot.z = read_imageui(input, (int2)(coord.w, coord.y + 2)).x;
+
+    uint4 sum = top + med + bot;
+
+    uint avg = (sum.x + sum.y + sum.z + 1) >> 3;
+
+    uint4 dst;
+
+    dst.x =          avg < top.x ? 0x01 : 0x0;
+    dst.x = dst.x | (avg < top.y ? 0x02 : 0x0);
+    dst.x = dst.x | (avg < top.z ? 0x04 : 0x0);
+    dst.x = dst.x | (avg < med.z ? 0x08 : 0x0);
+    dst.x = dst.x | (avg < bot.z ? 0x10 : 0x0);
+    dst.x = dst.x | (avg < bot.y ? 0x20 : 0x0);
+    dst.x = dst.x | (avg < bot.x ? 0x40 : 0x0);
+    dst.x = dst.x | (avg < med.x ? 0x80 : 0x0);
+
+    write_imageui(output, coord.xy, dst.xxxx);
+}
+
+__kernel void lbp_Uniform_3
+    (
+    __read_only  image2d_t input,
+    __read_only  int       format,
+    __read_only  char      ksize,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) - 1, get_global_id(0) + 1);
+
+    uchar L0_0, L0_1, L0_2;
+    uchar L1_2, L1_1, L1_0;
+    uchar L2_1, L2_0, L2_2;
+
+    L1_1 = convert_uchar(read_imageui(input, (int2)(coord.x, coord.y + 0)).x);
+    L0_0 = convert_uchar(read_imageui(input, (int2)(coord.z, coord.y - 1)).x);
+    L0_1 = convert_uchar(read_imageui(input, (int2)(coord.x, coord.y - 1)).x);
+    L0_2 = convert_uchar(read_imageui(input, (int2)(coord.w, coord.y - 1)).x);
+    L1_0 = convert_uchar(read_imageui(input, (int2)(coord.z, coord.y + 0)).x);
+    L1_2 = convert_uchar(read_imageui(input, (int2)(coord.w, coord.y + 0)).x);
+    L2_0 = convert_uchar(read_imageui(input, (int2)(coord.z, coord.y + 1)).x);
+    L2_1 = convert_uchar(read_imageui(input, (int2)(coord.x, coord.y + 1)).x);
+    L2_2 = convert_uchar(read_imageui(input, (int2)(coord.w, coord.y + 1)).x);
+
+    uchar4 bits;
+
+
+    bits.x =           L1_1 <= L0_0 ? (uchar)0x01 : (uchar)0x0;
+    bits.x = bits.x | (L1_1 <= L0_1 ? (uchar)0x02 : (uchar)0x0);
+    bits.x = bits.x | (L1_1 <= L0_2 ? (uchar)0x04 : (uchar)0x0);
+    bits.x = bits.x | (L1_1 <= L1_2 ? (uchar)0x08 : (uchar)0x0);
+    bits.x = bits.x | (L1_1 <= L1_0 ? (uchar)0x80 : (uchar)0x0);
+    bits.x = bits.x | (L1_1 <= L2_2 ? (uchar)0x10 : (uchar)0x0);
+    bits.x = bits.x | (L1_1 <= L2_1 ? (uchar)0x20 : (uchar)0x0);
+    bits.x = bits.x | (L1_1 <= L2_0 ? (uchar)0x40 : (uchar)0x0);
+
+    bits.y = rotate(bits.x, (uchar)1);
+    bits.y = bits.y ^ bits.x;
+    bits.y = popcount(bits.y);
+    bits.x = bits.y <= (uchar)2 ? bits.x : (uchar)9;
+
+    uint4 dst = convert_uint4(bits);
+
+    write_imageui(output, coord.xy, dst.xxxx);
+}
+
+__kernel void lbp_Uniform_5
+    (
+    __read_only  image2d_t input,
+    __read_only  int       format,
+    __read_only  char      ksize,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) - 1, get_global_id(0) + 1);
+
+    uchar L0_0, L0_2, L0_4;
+    uchar L2_0, L2_2, L2_4;
+    uchar L4_0, L4_2, L4_4;
+
+    L2_2 = convert_uchar(read_imageui(input, (int2)(coord.x, coord.y + 0)).x);
+    L0_0 = convert_uchar(read_imageui(input, (int2)(coord.z, coord.y - 1)).x);
+    L0_2 = convert_uchar(read_imageui(input, (int2)(coord.x, coord.y - 2)).x);
+    L0_4 = convert_uchar(read_imageui(input, (int2)(coord.w, coord.y - 1)).x);
+    L2_0 = convert_uchar(read_imageui(input, (int2)(coord.x + 2, coord.y + 0)).x);
+    L2_4 = convert_uchar(read_imageui(input, (int2)(coord.w, coord.y + 1)).x);
+    L4_0 = convert_uchar(read_imageui(input, (int2)(coord.x, coord.y + 2)).x);
+    L4_2 = convert_uchar(read_imageui(input, (int2)(coord.z, coord.y + 1)).x);
+    L4_4 = convert_uchar(read_imageui(input, (int2)(coord.x - 2, coord.y + 0)).x);
+
+    uchar4 bits;
+
+    bits.x =           L2_2 <= L0_0 ? (uchar)0x01 : (uchar)0x0;
+    bits.x = bits.x | (L2_2 <= L0_2 ? (uchar)0x02 : (uchar)0x0);
+    bits.x = bits.x | (L2_2 <= L0_4 ? (uchar)0x04 : (uchar)0x0);
+    bits.x = bits.x | (L2_2 <= L2_0 ? (uchar)0x08 : (uchar)0x0);
+    bits.x = bits.x | (L2_2 <= L2_4 ? (uchar)0x10 : (uchar)0x0);
+    bits.x = bits.x | (L2_2 <= L4_0 ? (uchar)0x20 : (uchar)0x0);
+    bits.x = bits.x | (L2_2 <= L4_2 ? (uchar)0x40 : (uchar)0x0);
+    bits.x = bits.x | (L2_2 <= L4_4 ? (uchar)0x80 : (uchar)0x0);
+
+    bits.y = rotate(bits.x, (uchar)1);
+    bits.y = bits.y ^ bits.x;
+    bits.y = popcount(bits.y);
+    bits.x = bits.y <= (uchar)2 ? bits.x : (uchar)9;
+
+    uint4 dst = convert_uint4(bits);
+
+    write_imageui(output, coord.xy, dst.xxxx);
+}

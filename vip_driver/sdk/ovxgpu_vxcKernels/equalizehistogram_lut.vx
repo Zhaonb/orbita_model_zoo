@@ -1,0 +1,15 @@
+__kernel void equalizehistogram_lut(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input_cdf,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 index = read_imageui(input, coord);
+    int4 data = read_imagei(input_cdf, (int2)(index.x, 0));
+    uint4 dst = (uint4)0;
+
+    dst.x = data.x > 255 ? 255 : data.x;
+    dst.x = data.x < 0 ? 0: data.x;
+
+    write_imageui(output, coord, dst);
+}

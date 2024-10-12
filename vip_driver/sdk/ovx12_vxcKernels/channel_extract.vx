@@ -1,0 +1,222 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniExtractRgbRA_2x8;
+_viv_uniform VXC_512Bits uniExtractRgbRB_2x8;
+_viv_uniform VXC_512Bits uniExtractRgbGA_2x8;
+_viv_uniform VXC_512Bits uniExtractRgbGB_2x8;
+_viv_uniform VXC_512Bits uniExtractRgbBA_2x8;
+_viv_uniform VXC_512Bits uniExtractRgbBB_2x8;
+
+_viv_uniform VXC_512Bits uniExtractRgbxR_2x8;
+_viv_uniform VXC_512Bits uniExtractRgbxG_2x8;
+_viv_uniform VXC_512Bits uniExtractRgbxB_2x8;
+_viv_uniform VXC_512Bits uniExtractRgbxA_2x8;
+
+_viv_uniform VXC_512Bits uniExtractUyvyY_2x8;
+_viv_uniform VXC_512Bits uniExtractUyvyU_2x8;
+_viv_uniform VXC_512Bits uniExtractUyvyV_2x8;
+
+_viv_uniform VXC_512Bits uniExtractYuyvY_2x8;
+_viv_uniform VXC_512Bits uniExtractYuyvU_2x8;
+_viv_uniform VXC_512Bits uniExtractYuyvV_2x8;
+
+_viv_uniform VXC_512Bits uniExtractNv12U_2x8;
+_viv_uniform VXC_512Bits uniExtractNv12V_2x8;
+
+//coordinate follows pixel
+#define CHANNELEXTRACT_RGB(src0_type_name, extract_dp0) \
+__kernel void channel_extract_rgb_##src0_type_name( \
+    __read_only  image2d_t input, \
+    int chn, \
+    __write_only image2d_t output) \
+{ \
+    int2 coord_in = (int2)(get_global_id(0) * 3, get_global_id(1)); \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    vxc_uchar16 src0; \
+    vxc_uchar16 dst0; \
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 14, 0, VXC_RM_TowardZero, 0)); \
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), extract_dp0); \
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0)); \
+}
+CHANNELEXTRACT_RGB(r, uniExtractRgbRA_2x8)
+CHANNELEXTRACT_RGB(g, uniExtractRgbGA_2x8)
+CHANNELEXTRACT_RGB(b, uniExtractRgbBA_2x8)
+
+#define CHANNELEXTRACT_RGBX(src0_type_name, extract_dp0) \
+__kernel void channel_extract_rgbx_##src0_type_name( \
+    __read_only  image2d_t input, \
+    int chn, \
+    __write_only image2d_t output) \
+{ \
+    int2 coord = (int2)(get_global_id(0) * 4, get_global_id(1)); \
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1)); \
+    vxc_uchar16 src0; \
+    vxc_uchar16 dst0; \
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), extract_dp0); \
+    VXC_WriteImage(output, coord_out, dst0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+}
+CHANNELEXTRACT_RGBX(r, uniExtractRgbxR_2x8)
+CHANNELEXTRACT_RGBX(g, uniExtractRgbxG_2x8)
+CHANNELEXTRACT_RGBX(b, uniExtractRgbxB_2x8)
+CHANNELEXTRACT_RGBX(a, uniExtractRgbxA_2x8)
+
+__kernel void channel_extract_uyvy_y(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 2, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractUyvyY_2x8);
+
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void channel_extract_uyvy_u(
+            __read_only  image2d_t input,
+            int chn,
+    __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 4, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniExtractUyvyU_2x8);
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void channel_extract_uyvy_v(
+    __read_only  image2d_t input,
+    int chn,
+    __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 4, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniExtractUyvyV_2x8);
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void channel_extract_yuyv_y(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 2, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractYuyvY_2x8);
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+#define CHANNELEXTRACT_YUYV(src0_type_name, extract_dp0) \
+__kernel void channel_extract_yuyv_##src0_type_name( \
+        __read_only  image2d_t input, \
+        int chn, \
+        __write_only image2d_t output) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    int2 coord_in = (int2)(get_global_id(0) * 4, get_global_id(1)); \
+    vxc_uchar16 src0; \
+    vxc_uchar16 dst0; \
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), extract_dp0); \
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0)); \
+}
+CHANNELEXTRACT_YUYV(u, uniExtractYuyvU_2x8)
+CHANNELEXTRACT_YUYV(v, uniExtractYuyvV_2x8)
+
+__kernel void channel_extract_yuv_y(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord, src0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+#define CHANNELEXTRACT_NV12(src0_type_name, extract_dp0) \
+__kernel void channel_extract_nv12_##src0_type_name( \
+        __read_only  image2d_t input, \
+        int chn, \
+        __write_only image2d_t output) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    int2 coord_in = (int2)(get_global_id(0) * 2, get_global_id(1)); \
+    vxc_uchar16 src0; \
+    vxc_uchar16 dst0; \
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), extract_dp0); \
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+}
+CHANNELEXTRACT_NV12(u, uniExtractNv12U_2x8)
+CHANNELEXTRACT_NV12(v, uniExtractNv12V_2x8)
+
+#define CHANNELEXTRACT_NV21(src0_type_name, extract_dp0) \
+__kernel void channel_extract_nv21_##src0_type_name( \
+        __read_only  image2d_t input, \
+        int chn, \
+        __write_only image2d_t output) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    int2 coord_in = (int2)(get_global_id(0) * 2, get_global_id(1)); \
+    vxc_uchar16 src0; \
+    vxc_uchar16 dst0; \
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), extract_dp0); \
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+}
+CHANNELEXTRACT_NV21(u, uniExtractNv12V_2x8)
+CHANNELEXTRACT_NV21(v, uniExtractNv12U_2x8)
+
+#define CHANNELEXTRACT_IYUV(src0_type_name) \
+__kernel void channel_extract_iyuv_##src0_type_name( \
+        __read_only  image2d_t input, \
+        int chn, \
+        __write_only image2d_t output) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    vxc_uchar16 src0; \
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+    VXC_WriteImage(output, coord, src0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+}
+CHANNELEXTRACT_IYUV(u)
+CHANNELEXTRACT_IYUV(v)
+
+#define CHANNELEXTRACT_YUV4(src0_type_name) \
+__kernel void channel_extract_yuv4_##src0_type_name( \
+        __read_only  image2d_t input, \
+        int chn, \
+        __write_only image2d_t output) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    vxc_uchar16 src0; \
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+    VXC_WriteImage(output, coord, src0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+}
+CHANNELEXTRACT_YUV4(u)
+CHANNELEXTRACT_YUV4(v)
+
+__kernel void channel_extract_yuv_uv(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord, src0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}

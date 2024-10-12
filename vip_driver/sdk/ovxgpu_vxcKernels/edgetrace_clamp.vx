@@ -1,0 +1,29 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+/* input width extend [1, 1], border set to 0 */
+__kernel void edgetrace_clamp
+(
+    __read_only image2d_t  normImage,
+    __global int*  threshold,
+    __read_only image2d_t  mcInput,
+    __read_only image2d_t  input,
+    __read_only image2d_t  tmpInput,
+    __write_only image2d_t output
+)
+{
+    int4 coord = (int4)(get_global_id(0) + 1, get_global_id(1), get_global_id(0), 0);
+    uint4 src0 = read_imageui(input, coord.xy);
+
+    if(src0.x == 127)
+    {
+        src0.x = 0;
+    }
+    else if(src0.x == 250)
+    {
+        src0.x = 255;
+    }
+
+    write_imageui(output, coord.zy, src0);
+}

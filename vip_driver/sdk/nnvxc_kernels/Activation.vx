@@ -1,0 +1,191 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int4 packedMinData;
+_viv_uniform int4 packedMaxData;
+_viv_uniform VXC_512Bits uniU8MulAndPostShift_Lo_2x8;
+_viv_uniform VXC_512Bits uniU8MulAndPostShift_Hi_2x8;
+_viv_uniform int2 multAndoutZP;//[0:15] multiplier, [31:63] output zp
+#define RELUN_SH_IMPL_8BITS(name0, name1, src_type, dst_type) \
+__kernel void relun_##name0##to##name1 \
+( \
+    __read_only image2d_array_t   input, \
+    __write_only image2d_array_t  output \
+) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+ \
+    src_type vec0; \
+    dst_type min, max; \
+    dst_type dst; \
+    VXC_ReadImage2DArray(vec0, input,  coord, 0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+ \
+    vxc_ushort8 multiplier; \
+    _viv_asm(COPY, multiplier, multAndoutZP, 16); \
+    VXC_DP2x8(dst, vec0, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_Lo_2x8); \
+    VXC_DP2x8(dst, vec0, multiplier, VXC_MODIFIER(8, 15, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_Hi_2x8); \
+    _viv_asm(COPY, min, packedMinData, 16); \
+    _viv_asm(COPY, max, packedMaxData, 16); \
+    VXC_Clamp(dst, dst, min, max, VXC_MODIFIER_CLAMP(0, 15, 0, 0)); \
+    VXC_WriteImage2DArray(output, coord, dst, VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0)); \
+}
+RELUN_SH_IMPL_8BITS(U8, U8, vxc_uchar16, vxc_uchar16)
+RELUN_SH_IMPL_8BITS(I8, I8, vxc_char16,  vxc_char16)
+
+#define RELUN_SH_IMPL_8BITS_2D(name0, name1, src_type, dst_type) \
+__kernel void relun_##name0##to##name1##_2D \
+( \
+    __read_only image2d_array_t   input, \
+    __write_only image2d_array_t  output \
+) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+ \
+    src_type vec0; \
+    dst_type min, max; \
+    dst_type dst; \
+    VXC_ReadImage(vec0, input,  coord, 0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+ \
+    vxc_ushort8 multiplier; \
+    _viv_asm(COPY, multiplier, multAndoutZP, 16); \
+    VXC_DP2x8(dst, vec0, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_Lo_2x8); \
+    VXC_DP2x8(dst, vec0, multiplier, VXC_MODIFIER(8, 15, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_Hi_2x8); \
+    _viv_asm(COPY, min, packedMinData, 16); \
+    _viv_asm(COPY, max, packedMaxData, 16); \
+    VXC_Clamp(dst, dst, min, max, VXC_MODIFIER_CLAMP(0, 15, 0, 0)); \
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0)); \
+}
+RELUN_SH_IMPL_8BITS_2D(U8, U8, vxc_uchar16, vxc_uchar16)
+RELUN_SH_IMPL_8BITS_2D(I8, I8, vxc_char16,  vxc_char16)
+
+#define RELUN_SH_IMPL_8BITSTOF16(name0, name1, src_type) \
+__kernel void relun_##name0##toF16 \
+( \
+    __read_only image2d_array_t   input, \
+    __write_only image2d_array_t  output \
+) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+ \
+    src_type src0; \
+    vxc_half8 min, max; \
+    vxc_half8  vec0, vec1; \
+    vxc_short8 dst0, dst1; \
+    VXC_ReadImage2DArray(vec0, input,  coord, 0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+ \
+    vxc_ushort8 multiplier; \
+    _viv_asm(COPY, multiplier, multAndoutZP, 16); \
+    VXC_DP2x8(vec0, src0, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_Lo_2x8); \
+    VXC_DP2x8(vec1, src0, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_Hi_2x8); \
+    _viv_asm(COPY, min, packedMinData, 16); \
+    _viv_asm(COPY, max, packedMaxData, 16); \
+    VXC_Clamp_Half(vec0, vec0, min, max, VXC_MODIFIER_CLAMP(0, 7, 0, 0)); \
+    VXC_Clamp_Half(vec1, vec1, min, max, VXC_MODIFIER_CLAMP(0, 7, 0, 0)); \
+    _viv_asm(COPY, dst0, vec0, 16); \
+    _viv_asm(COPY, dst1, vec1, 16); \
+    VXC_WriteImage2DArray(output, coord, dst0, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+    coord.x += 8; \
+    VXC_WriteImage2DArray(output, coord, dst1, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+}
+RELUN_SH_IMPL_8BITSTOF16(U8, U8, vxc_uchar16)
+RELUN_SH_IMPL_8BITSTOF16(I8, I8, vxc_char16)
+
+#define RELUN_SH_IMPL_8BITSTOF16_2D(name0, name1, src_type) \
+__kernel void relun_##name0##toF16_2D \
+( \
+    __read_only image2d_array_t   input, \
+    __write_only image2d_array_t  output \
+) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1)); \
+ \
+    src_type src0; \
+    vxc_half8 min, max; \
+    vxc_half8  vec0, vec1; \
+    vxc_short8 dst0, dst1; \
+    VXC_ReadImage(src0, input,  coord.xy, 0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+    coord.z += 8; \
+ \
+    vxc_ushort8 multiplier; \
+    _viv_asm(COPY, multiplier, multAndoutZP, 16); \
+    VXC_DP2x8(vec0, src0, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_Lo_2x8); \
+    VXC_DP2x8(vec1, src0, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_Hi_2x8); \
+    _viv_asm(COPY, min, packedMinData, 16); \
+    _viv_asm(COPY, max, packedMaxData, 16); \
+    VXC_Clamp_Half(vec0, vec0, min, max, VXC_MODIFIER_CLAMP(0, 7, 0, 0)); \
+    VXC_Clamp_Half(vec1, vec1, min, max, VXC_MODIFIER_CLAMP(0, 7, 0, 0)); \
+    _viv_asm(COPY, dst0, vec0, 16); \
+    _viv_asm(COPY, dst1, vec1, 16); \
+    VXC_WriteImage(output, coord.xy, dst0, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+    VXC_WriteImage(output, coord.zy, dst1, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+}
+RELUN_SH_IMPL_8BITSTOF16_2D(U8, U8, vxc_uchar16)
+RELUN_SH_IMPL_8BITSTOF16_2D(I8, I8, vxc_char16)
+
+#define RELUN_SH_IMPL_16BITS(name0, name1, src_type, read_type, dst_type, save_type, clamp_func) \
+__kernel void relun_##name0##to##name1 \
+( \
+    __read_only image2d_array_t   input, \
+    __write_only image2d_array_t  output \
+) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+ \
+    read_type vec0; \
+    src_type src0; \
+    dst_type min, max; \
+    dst_type dst; \
+    VXC_ReadImage2DArray(vec0, input,  coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    _viv_asm(COPY, src0, vec0, 16); \
+ \
+    vxc_ushort8 multiplier; \
+    _viv_asm(COPY, multiplier, multAndoutZP, 16); \
+    VXC_DP2x8(dst, src0, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_Lo_2x8); \
+    _viv_asm(COPY, min, packedMinData, 16); \
+    _viv_asm(COPY, max, packedMaxData, 16); \
+    clamp_func(dst, dst, min, max, VXC_MODIFIER_CLAMP(0, 7, 0, 0)); \
+    save_type result; \
+    _viv_asm(COPY, result, dst, 16); \
+    VXC_WriteImage2DArray(output, coord, result, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+}
+RELUN_SH_IMPL_16BITS(F16, F16, vxc_half8,  vxc_short8,  vxc_half8,  vxc_short8, VXC_Clamp_Half)
+RELUN_SH_IMPL_16BITS(F16, I16, vxc_half8,  vxc_short8,  vxc_short8, vxc_short8, VXC_Clamp)
+RELUN_SH_IMPL_16BITS(F16, U8,  vxc_half8,  vxc_short8,  vxc_uchar8, vxc_uchar8, VXC_Clamp)
+RELUN_SH_IMPL_16BITS(F16, I8,  vxc_half8,  vxc_short8,  vxc_char8,  vxc_char8, VXC_Clamp)
+RELUN_SH_IMPL_16BITS(I16, F16, vxc_short8,  vxc_short8, vxc_half8,  vxc_short8, VXC_Clamp_Half)
+RELUN_SH_IMPL_16BITS(I16, I16, vxc_short8,  vxc_short8, vxc_short8, vxc_short8, VXC_Clamp)
+
+
+#define RELUN_SH_IMPL_16BITS_2D(name0, name1, src_type, read_type, dst_type, save_type, clamp_func) \
+__kernel void relun_##name0##to##name1##_2D \
+( \
+    __read_only image2d_array_t   input, \
+    __write_only image2d_array_t  output \
+) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+ \
+    read_type vec0; \
+    src_type src0; \
+    dst_type min, max; \
+    dst_type dst; \
+    VXC_ReadImage(vec0, input,  coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    _viv_asm(COPY, src0, vec0, 16); \
+ \
+    vxc_ushort8 multiplier; \
+    _viv_asm(COPY, multiplier, multAndoutZP, 16); \
+    VXC_DP2x8(dst, src0, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_Lo_2x8); \
+    _viv_asm(COPY, min, packedMinData, 16); \
+    _viv_asm(COPY, max, packedMaxData, 16); \
+    clamp_func(dst, dst, min, max, VXC_MODIFIER_CLAMP(0, 7, 0, 0)); \
+    save_type result; \
+    _viv_asm(COPY, result, dst, 16); \
+    VXC_WriteImage(output, coord, result, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+}
+RELUN_SH_IMPL_16BITS_2D(F16, F16, vxc_half8,  vxc_short8,  vxc_half8,  vxc_short8, VXC_Clamp_Half)
+RELUN_SH_IMPL_16BITS_2D(F16, I16, vxc_half8,  vxc_short8,  vxc_short8, vxc_short8, VXC_Clamp)
+RELUN_SH_IMPL_16BITS_2D(F16, U8,  vxc_half8,  vxc_short8,  vxc_uchar8, vxc_uchar8, VXC_Clamp)
+RELUN_SH_IMPL_16BITS_2D(F16, I8,  vxc_half8,  vxc_short8,  vxc_char8,  vxc_char8, VXC_Clamp)
+RELUN_SH_IMPL_16BITS_2D(I16, F16, vxc_short8,  vxc_short8, vxc_half8,  vxc_short8, VXC_Clamp_Half)
+RELUN_SH_IMPL_16BITS_2D(I16, I16, vxc_short8,  vxc_short8, vxc_short8, vxc_short8, VXC_Clamp)

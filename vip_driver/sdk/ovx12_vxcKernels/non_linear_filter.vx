@@ -1,0 +1,1213 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform         int originx;
+_viv_uniform         int originy;
+
+#define NONE_LINEAR_FILTER_BOX3X3(name, mode) \
+__kernel void non_linear_filter_BOX_3x3_##name( \
+                       int func, \
+    __read_only  image2d_t input, \
+           vx_matrix_uchar matrix, \
+    __write_only image2d_t output \
+) \
+{ \
+    int2 coord = (int2)(get_global_id(0) - originx, get_global_id(1) - originy); \
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1)); \
+    vxc_uchar16 src0, src1, src2, dst; \
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+    VXC_OP4(filter, dst, src0, src1, src2, VXC_MODIFIER_FILTER(0, 7, 0, mode, 1)); \
+    VXC_WriteImage(output, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+}
+
+NONE_LINEAR_FILTER_BOX3X3(median, VXC_FM_Median)
+NONE_LINEAR_FILTER_BOX3X3(min,    VXC_FM_Min)
+NONE_LINEAR_FILTER_BOX3X3(max,    VXC_FM_Max)
+
+__kernel void non_linear_filter_CROSS_3x3_max(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0) - originx, get_global_id(1) - originy);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, src2, dst;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(1, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    vxc_uchar16 tmp;
+    VXC_OP4(filter, tmp, src1, src1, src1, VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+#if (VX_VERSION==1)
+    vxc_uchar16 tmp2;
+    tmp2 = max(src0, tmp);
+    dst  = max(tmp2, src2);
+#else
+    VXC_VertMax3(dst, src0, tmp, src2, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+#endif
+
+    VXC_WriteImage(output, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+
+__kernel void non_linear_filter_CROSS_3x3_min(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0) - originx, get_global_id(1) - originy);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, src2, dst;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(1, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    vxc_uchar16 tmp;
+    VXC_OP4(filter, tmp, src1, src1, src1, VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+#if (VX_VERSION==1)
+    vxc_uchar16 tmp2;
+    tmp2 = min(src0, tmp);
+    dst  = min(tmp2, src2);
+#else
+    VXC_VertMin3(dst, src0, tmp, src2, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+#endif
+
+    VXC_WriteImage(output, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void non_linear_filter_CROSS_3x3_median(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0) - originx, get_global_id(1) - originy);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, src2, dst;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord, VXC_5BITOFFSET_XY(1, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    vxc_uchar16 max_val, min_val, median_val;
+    VXC_OP4(filter, median_val, src1, src1, src1, VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Median, 1));
+    VXC_OP4(filter, max_val,    src1, src1, src1, VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, min_val,    src1, src1, src1, VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+    vxc_uchar16 tmp_max_val, tmp_min_val;
+
+    tmp_max_val  = max(src0, max_val);
+    tmp_min_val  = min(src0, max_val);
+    max_val      = tmp_max_val;
+    src0         = tmp_min_val;
+    tmp_max_val  = max(src0, median_val);
+    tmp_min_val  = min(src0, median_val);
+    median_val   = tmp_max_val;
+    src0         = tmp_min_val;
+    min_val      = max(src0, min_val);
+
+    tmp_max_val  = max(src2, max_val);
+    tmp_min_val  = min(src2, max_val);
+    max_val      = tmp_max_val;
+    src2         = tmp_min_val;
+    tmp_max_val  = max(src2, median_val);
+    tmp_min_val  = min(src2, median_val);
+    median_val   = tmp_max_val;
+    src2         = tmp_min_val;
+    dst          = max(src2, min_val);
+
+    VXC_WriteImage(output, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+
+__kernel void non_linear_filter_BOX_5x5_max(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0) - originx, get_global_id(1) - originy);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src[5], dst;
+    VXC_ReadImage(src[0], input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[1], input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[2], input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[3], input, coord, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[4], input, coord, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    vxc_uchar16 tmp0, tmp1, tmp2, tmp3;
+    vxc_uchar16 src_tmp[5];
+    VXC_OP4(filter, tmp0, src[0], src[1], src[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, tmp1, src[2], src[3], src[4], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    src_tmp[0] = src[0].s23456789abcdef01;
+    src_tmp[1] = src[1].s23456789abcdef01;
+    src_tmp[2] = src[2].s23456789abcdef01;
+    src_tmp[3] = src[3].s23456789abcdef01;
+    src_tmp[4] = src[4].s23456789abcdef01;
+    VXC_OP4(filter, tmp2, src_tmp[0], src_tmp[1], src_tmp[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, tmp3, src_tmp[2], src_tmp[3], src_tmp[4], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+
+    tmp2 = max(tmp2, tmp3);
+
+#if (VX_VERSION==1)
+    tmp0 = max(tmp0, tmp1);
+    dst  = max(tmp0, tmp2);
+#else
+    VXC_VertMax3(dst, tmp0, tmp1, tmp2, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+#endif
+
+    VXC_WriteImage(output, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void non_linear_filter_BOX_5x5_min(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0) - originx, get_global_id(1) - originy);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src[5], dst;
+    VXC_ReadImage(src[0], input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[1], input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[2], input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[3], input, coord, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[4], input, coord, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    vxc_uchar16 tmp0, tmp1, tmp2, tmp3;
+    vxc_uchar16 src_tmp[5];
+    VXC_OP4(filter, tmp0, src[0], src[1], src[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+    VXC_OP4(filter, tmp1, src[2], src[3], src[4], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+    src_tmp[0] = src[0].s23456789abcdef01;
+    src_tmp[1] = src[1].s23456789abcdef01;
+    src_tmp[2] = src[2].s23456789abcdef01;
+    src_tmp[3] = src[3].s23456789abcdef01;
+    src_tmp[4] = src[4].s23456789abcdef01;
+    VXC_OP4(filter, tmp2, src_tmp[0], src_tmp[1], src_tmp[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+    VXC_OP4(filter, tmp3, src_tmp[2], src_tmp[3], src_tmp[4], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+    tmp2 = min(tmp2, tmp3);
+
+#if (VX_VERSION==1)
+    tmp0 = min(tmp0, tmp1);
+    dst  = min(tmp0, tmp2);
+#else
+    VXC_VertMin3(dst, tmp0, tmp1, tmp2, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+#endif
+
+    VXC_WriteImage(output, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+
+
+__kernel void non_linear_filter_CROSS_5x5_max(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0) - originx, get_global_id(1) - originy);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src[5], dst;
+    VXC_ReadImage(src[0], input, coord, VXC_5BITOFFSET_XY(2, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[1], input, coord, VXC_5BITOFFSET_XY(2, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[2], input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[3], input, coord, VXC_5BITOFFSET_XY(2, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[4], input, coord, VXC_5BITOFFSET_XY(2, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    vxc_uchar16 tmp0, tmp1;
+    vxc_uchar16 src_tmp;
+    VXC_OP4(filter, tmp0, src[2], src[2], src[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    src_tmp = src[2].s23456789abcdef01;
+    VXC_OP4(filter, tmp1, src_tmp, src_tmp, src_tmp, VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+
+    src_tmp = max(tmp0, tmp1);
+
+#if (VX_VERSION==1)
+    tmp0 = max(src[0], src[1]);
+    tmp1 = max(tmp0,   src_tmp);
+    tmp0 = max(tmp1,   src[3]);
+    dst  = max(tmp0,   src[4]);
+#else
+    VXC_VertMax3(tmp0, src[0], src[1], src_tmp, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    VXC_VertMax3(dst,  src[3], src[4], tmp0, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+#endif
+
+    VXC_WriteImage(output, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void non_linear_filter_CROSS_5x5_min(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0) - originx, get_global_id(1) - originy);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src[5], dst;
+    VXC_ReadImage(src[0], input, coord, VXC_5BITOFFSET_XY(2, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[1], input, coord, VXC_5BITOFFSET_XY(2, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[2], input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[3], input, coord, VXC_5BITOFFSET_XY(2, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[4], input, coord, VXC_5BITOFFSET_XY(2, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    vxc_uchar16 tmp0, tmp1;
+    vxc_uchar16 src_tmp;
+    VXC_OP4(filter, tmp0, src[2], src[2], src[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+    src_tmp = src[2].s23456789abcdef01;
+    VXC_OP4(filter, tmp1, src_tmp, src_tmp, src_tmp, VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+    src_tmp = min(tmp0, tmp1);
+
+#if (VX_VERSION==1)
+    tmp0 = min(src[0], src[1]);
+    tmp1 = min(tmp0,   src_tmp);
+    tmp0 = min(tmp1,   src[3]);
+    dst  = min(tmp0,   src[4]);
+#else
+    VXC_VertMin3(tmp0, src[0], src[1], src_tmp, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    VXC_VertMin3(dst,  src[3], src[4], tmp0,    VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+#endif
+
+    VXC_WriteImage(output, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+
+__kernel void non_linear_filter_DISK_5x5_max(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0) - originx, get_global_id(1) - originy);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src[5], dst;
+    VXC_ReadImage(src[0], input, coord, VXC_5BITOFFSET_XY(1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[1], input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[2], input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[3], input, coord, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[4], input, coord, VXC_5BITOFFSET_XY(1, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    vxc_uchar16 tmp0, tmp1, tmp2;
+    vxc_uchar16 src_tmp[3];
+    VXC_OP4(filter, tmp0, src[0], src[1], src[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, tmp1, src[2], src[3], src[4], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    src_tmp[0] = src[1].s23456789abcdef01;
+    src_tmp[1] = src[2].s23456789abcdef01;
+    src_tmp[2] = src[3].s23456789abcdef01;
+    VXC_OP4(filter, tmp2, src_tmp[0], src_tmp[1], src_tmp[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+
+#if (VX_VERSION==1)
+    tmp0 = max(tmp0, tmp1);
+    dst  = max(tmp0, tmp2);
+#else
+    VXC_VertMax3(dst, tmp0, tmp1, tmp2, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+#endif
+
+    VXC_WriteImage(output, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void non_linear_filter_DISK_5x5_min(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0) - originx, get_global_id(1) - originy);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src[5], dst;
+    VXC_ReadImage(src[0], input, coord, VXC_5BITOFFSET_XY(1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[1], input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[2], input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[3], input, coord, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[4], input, coord, VXC_5BITOFFSET_XY(1, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    vxc_uchar16 tmp0, tmp1, tmp2;
+    vxc_uchar16 src_tmp[3];
+    VXC_OP4(filter, tmp0, src[0], src[1], src[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+    VXC_OP4(filter, tmp1, src[2], src[3], src[4], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+    src_tmp[0] = src[1].s23456789abcdef01;
+    src_tmp[1] = src[2].s23456789abcdef01;
+    src_tmp[2] = src[3].s23456789abcdef01;
+    VXC_OP4(filter, tmp2, src_tmp[0], src_tmp[1], src_tmp[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+#if (VX_VERSION==1)
+    tmp0 = min(tmp0, tmp1);
+    dst  = min(tmp0, tmp2);
+#else
+    VXC_VertMin3(dst, tmp0, tmp1, tmp2, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+#endif
+
+    VXC_WriteImage(output, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void non_linear_filter_CROSS_5x5_median(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0) - originx, get_global_id(1) - originy);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src[5], dst, sort[5], tmp0, tmp1, src_tmp;
+    VXC_ReadImage(src[0], input, coord, VXC_5BITOFFSET_XY(2, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[1], input, coord, VXC_5BITOFFSET_XY(2, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[2], input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[3], input, coord, VXC_5BITOFFSET_XY(2, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[4], input, coord, VXC_5BITOFFSET_XY(2, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    sort[0] = max(src[0], src[1]);
+    sort[1] = min(src[0], src[1]);
+
+    tmp0    = max(sort[0], src[3]);
+    tmp1    = min(sort[0], src[3]);
+    sort[0] = tmp0;
+    tmp0    = max(sort[1], tmp1);
+    sort[2] = min(sort[1], tmp1);
+    sort[1] = tmp0;
+
+    tmp0    = max(sort[0], src[4]);
+    tmp1    = min(sort[0], src[4]);
+    sort[0] = tmp0;
+    tmp0    = max(sort[1], tmp1);
+    tmp1    = min(sort[1], tmp1);
+    sort[1] = tmp0;
+    tmp0    = max(sort[2], tmp1);
+    sort[3] = min(sort[2], tmp1);
+    sort[2] = tmp0;
+
+    tmp0    = max(sort[0], src[2]);
+    tmp1    = min(sort[0], src[2]);
+    sort[0] = tmp0;
+    tmp0    = max(sort[1], tmp1);
+    tmp1    = min(sort[1], tmp1);
+    sort[1] = tmp0;
+    tmp0    = max(sort[2], tmp1);
+    tmp1    = min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0    = max(sort[3], tmp1);
+    sort[4] = min(sort[3], tmp1);
+    sort[3] = tmp0;
+
+    src_tmp = src[2].s123456789abcdef0;
+    tmp0    = max(sort[0], src_tmp);
+    tmp1    = min(sort[0], src_tmp);
+    sort[0] = tmp0;
+    tmp0    = max(sort[1], tmp1);
+    tmp1    = min(sort[1], tmp1);
+    sort[1] = tmp0;
+    tmp0    = max(sort[2], tmp1);
+    tmp1    = min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0    = max(sort[3], tmp1);
+    tmp1    = min(sort[3], tmp1);
+    sort[3] = tmp0;
+    sort[4] = max(sort[4], tmp1);
+
+    src_tmp = src[2].s23456789abcdef01;
+    tmp0    = max(sort[0], src_tmp);
+    tmp1    = min(sort[0], src_tmp);
+    sort[0] = tmp0;
+    tmp0    = max(sort[1], tmp1);
+    tmp1    = min(sort[1], tmp1);
+    sort[1] = tmp0;
+    tmp0    = max(sort[2], tmp1);
+    tmp1    = min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0    = max(sort[3], tmp1);
+    tmp1    = min(sort[3], tmp1);
+    sort[3] = tmp0;
+    sort[4] = max(sort[4], tmp1);
+
+    src_tmp = src[2].s3456789abcdef012;
+    tmp0    = max(sort[0], src_tmp);
+    tmp1    = min(sort[0], src_tmp);
+    sort[0] = tmp0;
+    tmp0    = max(sort[1], tmp1);
+    tmp1    = min(sort[1], tmp1);
+    sort[1] = tmp0;
+    tmp0    = max(sort[2], tmp1);
+    tmp1    = min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0    = max(sort[3], tmp1);
+    tmp1    = min(sort[3], tmp1);
+    sort[3] = tmp0;
+    sort[4] = max(sort[4], tmp1);
+
+    src_tmp = src[2].s456789abcdef0123;
+    tmp1    = min(sort[0], src_tmp);
+    tmp1    = min(sort[1], tmp1);
+    tmp1    = min(sort[2], tmp1);
+    tmp1    = min(sort[3], tmp1);
+    dst     = max(sort[4], tmp1);
+
+    VXC_WriteImage(output, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+
+#define BOX_5x5_PROCESS_MEDIAN(SRC) \
+    tmp0 = SRC.s3456789abcdef012; \
+    tmp1 = SRC.s456789abcdef0123; \
+    tmp_max = max(tmp0, tmp1); \
+    tmp_min = min(tmp0, tmp1); \
+    tmp0 =  max(sort[0], tmp_max); \
+    tmp1 =  min(sort[0], tmp_max); \
+    sort[0] = tmp0; \
+    tmp0 =  max(sort[1], tmp1); \
+    tmp1 =  min(sort[1], tmp1); \
+    sort[1] = tmp0; \
+    tmp0 =  max(sort[2], tmp1); \
+    tmp1 =  min(sort[2], tmp1); \
+    sort[2] = tmp0; \
+    tmp0 =  max(sort[3], tmp1); \
+    tmp1 =  min(sort[3], tmp1); \
+    sort[3] = tmp0; \
+    tmp0 =  max(sort[4], tmp1); \
+    tmp1 =  min(sort[4], tmp1); \
+    sort[4] = tmp0; \
+    tmp0 =  max(sort[5], tmp1); \
+    tmp1 =  min(sort[5], tmp1); \
+    sort[5] = tmp0; \
+    tmp0 =  max(sort[6], tmp1); \
+    tmp1 =  min(sort[6], tmp1); \
+    sort[6] = tmp0; \
+    tmp0 =  max(sort[7], tmp1); \
+    tmp1 =  min(sort[7], tmp1); \
+    sort[7] = tmp0; \
+    tmp0 =  max(sort[8], tmp1); \
+    tmp1 =  min(sort[8], tmp1); \
+    sort[8] = tmp0; \
+    tmp0 =  max(sort[9], tmp1); \
+    tmp1 =  min(sort[9], tmp1); \
+    sort[9] = tmp0; \
+    tmp0 =  max(sort[10], tmp1); \
+    tmp1 =  min(sort[10], tmp1); \
+    sort[10] = tmp0; \
+    tmp0 =  max(sort[11], tmp1); \
+    tmp1 =  min(sort[11], tmp1); \
+    sort[11] = tmp0; \
+    sort[12] =  max(sort[12], tmp1); \
+    tmp0 =  max(sort[1], tmp_min); \
+    tmp1 =  min(sort[1], tmp_min); \
+    sort[1] = tmp0; \
+    tmp0 =  max(sort[2], tmp1); \
+    tmp1 =  min(sort[2], tmp1); \
+    sort[2] = tmp0; \
+    tmp0 =  max(sort[3], tmp1); \
+    tmp1 =  min(sort[3], tmp1); \
+    sort[3] = tmp0; \
+    tmp0 =  max(sort[4], tmp1); \
+    tmp1 =  min(sort[4], tmp1); \
+    sort[4] = tmp0; \
+    tmp0 =  max(sort[5], tmp1); \
+    tmp1 =  min(sort[5], tmp1); \
+    sort[5] = tmp0; \
+    tmp0 = max(sort[6], tmp1); \
+    tmp1 = min(sort[6], tmp1); \
+    sort[6] = tmp0; \
+    tmp0 = max(sort[7], tmp1); \
+    tmp1 = min(sort[7], tmp1); \
+    sort[7] = tmp0; \
+    tmp0 =  max(sort[8], tmp1); \
+    tmp1 =  min(sort[8], tmp1); \
+    sort[8] = tmp0; \
+    tmp0 =  max(sort[9], tmp1); \
+    tmp1 =  min(sort[9], tmp1); \
+    sort[9] = tmp0; \
+    tmp0 =  max(sort[10], tmp1); \
+    tmp1 =  min(sort[10], tmp1); \
+    sort[10] = tmp0; \
+    tmp0 =  max(sort[11], tmp1); \
+    tmp1 =  min(sort[11], tmp1); \
+    sort[11] = tmp0; \
+    sort[12] =  max(sort[12], tmp1);
+
+
+__kernel void non_linear_filter_BOX_5x5_median(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0) - originx, get_global_id(1) - originy);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src[5], dst, sort[13], tmp_max, tmp_median, tmp_min, tmp0, tmp1;
+    VXC_ReadImage(src[0], input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[1], input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[2], input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[3], input, coord, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[4], input, coord, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    VXC_OP4(filter, sort[0], src[0], src[0], src[0], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, sort[1], src[0], src[0], src[0], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Median, 1));
+    VXC_OP4(filter, sort[2], src[0], src[0], src[0], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+    VXC_OP4(filter, tmp_max, src[1], src[1], src[1], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, tmp_median, src[1], src[1], src[1], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Median, 1));
+    VXC_OP4(filter, tmp_min, src[1], src[1], src[1], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+    tmp0 =  max(sort[0], tmp_max);
+    tmp1 =  min(sort[0], tmp_max);
+    sort[0] = tmp0;
+    tmp0 =  max(sort[1], tmp1);
+    tmp1 =  min(sort[1], tmp1);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    sort[3] =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+
+    tmp0 =  max(sort[1], tmp_median);
+    tmp1 =  min(sort[1], tmp_median);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    sort[4] =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+
+    tmp0 =  max(sort[2], tmp_min);
+    tmp1 =  min(sort[2], tmp_min);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    sort[5] =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+
+    VXC_OP4(filter, tmp_max, src[2], src[2], src[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, tmp_median, src[2], src[2], src[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Median, 1));
+    VXC_OP4(filter, tmp_min, src[2], src[2], src[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+    tmp0 =  max(sort[0], tmp_max);
+    tmp1 =  min(sort[0], tmp_max);
+    sort[0] = tmp0;
+    tmp0 =  max(sort[1], tmp1);
+    tmp1 =  min(sort[1], tmp1);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    sort[6] = min(sort[5], tmp1);
+    sort[5] = tmp0;
+
+    tmp0 =  max(sort[1], tmp_median);
+    tmp1 =  min(sort[1], tmp_median);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 =  max(sort[6], tmp1);
+    sort[7] = min(sort[6], tmp1);
+    sort[6] = tmp0;
+
+    tmp0 =  max(sort[2], tmp_min);
+    tmp1 =  min(sort[2], tmp_min);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 =  max(sort[6], tmp1);
+    tmp1 =  min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 =  max(sort[7], tmp1);
+    sort[8] = min(sort[7], tmp1);
+    sort[7] = tmp0;
+
+    VXC_OP4(filter, tmp_max, src[3], src[3], src[3], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, tmp_median, src[3], src[3], src[3], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Median, 1));
+    VXC_OP4(filter, tmp_min, src[3], src[3], src[3], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+    tmp0 =  max(sort[0], tmp_max);
+    tmp1 =  min(sort[0], tmp_max);
+    sort[0] = tmp0;
+    tmp0 =  max(sort[1], tmp1);
+    tmp1 =  min(sort[1], tmp1);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 =  max(sort[6], tmp1);
+    tmp1 =  min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 =  max(sort[7], tmp1);
+    tmp1 =  min(sort[7], tmp1);
+    sort[7] = tmp0;
+    tmp0 =  max(sort[8], tmp1);
+    sort[9] =  min(sort[8], tmp1);
+    sort[8] = tmp0;
+
+    tmp0 =  max(sort[1], tmp_median);
+    tmp1 =  min(sort[1], tmp_median);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 = max(sort[6], tmp1);
+    tmp1 = min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 = max(sort[7], tmp1);
+    tmp1 = min(sort[7], tmp1);
+    sort[7] = tmp0;
+    tmp0 = max(sort[8], tmp1);
+    tmp1 = min(sort[8], tmp1);
+    sort[8] = tmp0;
+    tmp0 = max(sort[9], tmp1);
+    sort[10] = min(sort[9], tmp1);
+    sort[9] = tmp0;
+
+    tmp0 =  max(sort[2], tmp_min);
+    tmp1 =  min(sort[2], tmp_min);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 =  max(sort[6], tmp1);
+    tmp1 =  min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 = max(sort[7], tmp1);
+    tmp1 = min(sort[7], tmp1);
+    sort[7] = tmp0;
+    tmp0 = max(sort[8], tmp1);
+    tmp1 = min(sort[8], tmp1);
+    sort[8] = tmp0;
+    tmp0 = max(sort[9], tmp1);
+    tmp1 = min(sort[9], tmp1);
+    sort[9] = tmp0;
+    tmp0 = max(sort[10], tmp1);
+    sort[11] = min(sort[10], tmp1);
+    sort[10] = tmp0;
+
+    VXC_OP4(filter, tmp_max, src[4], src[4], src[4], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, tmp_median, src[4], src[4], src[4], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Median, 1));
+    VXC_OP4(filter, tmp_min, src[4], src[4], src[4], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+    tmp0 =  max(sort[0], tmp_max);
+    tmp1 =  min(sort[0], tmp_max);
+    sort[0] = tmp0;
+    tmp0 =  max(sort[1], tmp1);
+    tmp1 =  min(sort[1], tmp1);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 =  max(sort[6], tmp1);
+    tmp1 =  min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 =  max(sort[7], tmp1);
+    tmp1 =  min(sort[7], tmp1);
+    sort[7] = tmp0;
+    tmp0 =  max(sort[8], tmp1);
+    tmp1 =  min(sort[8], tmp1);
+    sort[8] = tmp0;
+    tmp0 =  max(sort[9], tmp1);
+    tmp1 =  min(sort[9], tmp1);
+    sort[9] = tmp0;
+    tmp0 =  max(sort[10], tmp1);
+    tmp1 =  min(sort[10], tmp1);
+    sort[10] = tmp0;
+    tmp0 =  max(sort[11], tmp1);
+    sort[12] =  min(sort[11], tmp1);
+    sort[11] = tmp0;
+
+    tmp0 =  max(sort[1], tmp_median);
+    tmp1 =  min(sort[1], tmp_median);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 = max(sort[6], tmp1);
+    tmp1 = min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 = max(sort[7], tmp1);
+    tmp1 = min(sort[7], tmp1);
+    sort[7] = tmp0;
+    tmp0 =  max(sort[8], tmp1);
+    tmp1 =  min(sort[8], tmp1);
+    sort[8] = tmp0;
+    tmp0 =  max(sort[9], tmp1);
+    tmp1 =  min(sort[9], tmp1);
+    sort[9] = tmp0;
+    tmp0 =  max(sort[10], tmp1);
+    tmp1 =  min(sort[10], tmp1);
+    sort[10] = tmp0;
+    tmp0 =  max(sort[11], tmp1);
+    tmp1 =  min(sort[11], tmp1);
+    sort[11] = tmp0;
+    sort[12] =  max(sort[12], tmp1);
+
+    tmp0 =  max(sort[2], tmp_min);
+    tmp1 =  min(sort[2], tmp_min);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 =  max(sort[6], tmp1);
+    tmp1 =  min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 = max(sort[7], tmp1);
+    tmp1 = min(sort[7], tmp1);
+    sort[7] = tmp0;
+    tmp0 =  max(sort[8], tmp1);
+    tmp1 =  min(sort[8], tmp1);
+    sort[8] = tmp0;
+    tmp0 =  max(sort[9], tmp1);
+    tmp1 =  min(sort[9], tmp1);
+    sort[9] = tmp0;
+    tmp0 =  max(sort[10], tmp1);
+    tmp1 =  min(sort[10], tmp1);
+    sort[10] = tmp0;
+    tmp0 =  max(sort[11], tmp1);
+    tmp1 =  min(sort[11], tmp1);
+    sort[11] = tmp0;
+    sort[12] =  max(sort[12], tmp1);
+
+    BOX_5x5_PROCESS_MEDIAN(src[0])
+    BOX_5x5_PROCESS_MEDIAN(src[1])
+    BOX_5x5_PROCESS_MEDIAN(src[2])
+    BOX_5x5_PROCESS_MEDIAN(src[3])
+    BOX_5x5_PROCESS_MEDIAN(src[4])
+    dst = sort[12];
+    VXC_WriteImage(output, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+
+#define DISK_5x5_PROCESS_MEDIAN(SRC) \
+    tmp0 = SRC.s3456789abcdef012; \
+    tmp1 = SRC.s456789abcdef0123; \
+    tmp_max = max(tmp0, tmp1); \
+    tmp_min = min(tmp0, tmp1); \
+    tmp0 =  max(sort[0], tmp_max); \
+    tmp1 =  min(sort[0], tmp_max); \
+    sort[0] = tmp0; \
+    tmp0 =  max(sort[1], tmp1); \
+    tmp1 =  min(sort[1], tmp1); \
+    sort[1] = tmp0; \
+    tmp0 =  max(sort[2], tmp1); \
+    tmp1 =  min(sort[2], tmp1); \
+    sort[2] = tmp0; \
+    tmp0 =  max(sort[3], tmp1); \
+    tmp1 =  min(sort[3], tmp1); \
+    sort[3] = tmp0; \
+    tmp0 =  max(sort[4], tmp1); \
+    tmp1 =  min(sort[4], tmp1); \
+    sort[4] = tmp0; \
+    tmp0 =  max(sort[5], tmp1); \
+    tmp1 =  min(sort[5], tmp1); \
+    sort[5] = tmp0; \
+    tmp0 =  max(sort[6], tmp1); \
+    tmp1 =  min(sort[6], tmp1); \
+    sort[6] = tmp0; \
+    tmp0 =  max(sort[7], tmp1); \
+    tmp1 =  min(sort[7], tmp1); \
+    sort[7] = tmp0; \
+    tmp0 = max(sort[8], tmp1); \
+    tmp1 = min(sort[8], tmp1); \
+    sort[8] = tmp0; \
+    tmp0 = max(sort[9], tmp1); \
+    tmp1 = min(sort[9], tmp1); \
+    sort[9] = tmp0; \
+    sort[10] = max(sort[10], tmp1); \
+    tmp0 =  max(sort[1], tmp_min); \
+    tmp1 =  min(sort[1], tmp_min); \
+    sort[1] = tmp0; \
+    tmp0 =  max(sort[2], tmp1); \
+    tmp1 =  min(sort[2], tmp1); \
+    sort[2] = tmp0; \
+    tmp0 =  max(sort[3], tmp1); \
+    tmp1 =  min(sort[3], tmp1); \
+    sort[3] = tmp0; \
+    tmp0 =  max(sort[4], tmp1); \
+    tmp1 =  min(sort[4], tmp1); \
+    sort[4] = tmp0; \
+    tmp0 =  max(sort[5], tmp1); \
+    tmp1 =  min(sort[5], tmp1); \
+    sort[5] = tmp0; \
+    tmp0 = max(sort[6], tmp1); \
+    tmp1 = min(sort[6], tmp1); \
+    sort[6] = tmp0; \
+    tmp0 = max(sort[7], tmp1); \
+    tmp1 = min(sort[7], tmp1); \
+    sort[7] = tmp0; \
+    tmp0 = max(sort[8], tmp1); \
+    tmp1 = min(sort[8], tmp1); \
+    sort[8] = tmp0; \
+    tmp0 = max(sort[9], tmp1); \
+    tmp1 = min(sort[9], tmp1); \
+    sort[9] = tmp0; \
+    sort[10] = max(sort[10], tmp1);
+
+__kernel void non_linear_filter_DISK_5x5_median(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0) - originx, get_global_id(1) - originy);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src[5], dst, sort[11], tmp_max, tmp_median, tmp_min, tmp0, tmp1;
+    VXC_ReadImage(src[0], input, coord, VXC_5BITOFFSET_XY(1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[1], input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[2], input, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[3], input, coord, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src[4], input, coord, VXC_5BITOFFSET_XY(1, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    VXC_OP4(filter, sort[0], src[0], src[0], src[0], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, sort[1], src[0], src[0], src[0], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Median, 1));
+    VXC_OP4(filter, sort[2], src[0], src[0], src[0], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+    VXC_OP4(filter, tmp_max, src[1], src[1], src[1], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, tmp_median, src[1], src[1], src[1], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Median, 1));
+    VXC_OP4(filter, tmp_min, src[1], src[1], src[1], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+    tmp0 =  max(sort[0], tmp_max);
+    tmp1 =  min(sort[0], tmp_max);
+    sort[0] = tmp0;
+    tmp0 =  max(sort[1], tmp1);
+    tmp1 =  min(sort[1], tmp1);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    sort[3] =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+
+    tmp0 =  max(sort[1], tmp_median);
+    tmp1 =  min(sort[1], tmp_median);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    sort[4] =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+
+    tmp0 =  max(sort[2], tmp_min);
+    tmp1 =  min(sort[2], tmp_min);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    sort[5] =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+
+    VXC_OP4(filter, tmp_max, src[2], src[2], src[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, tmp_median, src[2], src[2], src[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Median, 1));
+    VXC_OP4(filter, tmp_min, src[2], src[2], src[2], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+    tmp0 =  max(sort[0], tmp_max);
+    tmp1 =  min(sort[0], tmp_max);
+    sort[0] = tmp0;
+    tmp0 =  max(sort[1], tmp1);
+    tmp1 =  min(sort[1], tmp1);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    sort[6] = min(sort[5], tmp1);
+    sort[5] = tmp0;
+
+    tmp0 =  max(sort[1], tmp_median);
+    tmp1 =  min(sort[1], tmp_median);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 =  max(sort[6], tmp1);
+    sort[7] = min(sort[6], tmp1);
+    sort[6] = tmp0;
+
+    tmp0 =  max(sort[2], tmp_min);
+    tmp1 =  min(sort[2], tmp_min);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 =  max(sort[6], tmp1);
+    tmp1 =  min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 =  max(sort[7], tmp1);
+    sort[8] = min(sort[7], tmp1);
+    sort[7] = tmp0;
+
+    VXC_OP4(filter, tmp_max, src[3], src[3], src[3], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, tmp_median, src[3], src[3], src[3], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Median, 1));
+    VXC_OP4(filter, tmp_min, src[3], src[3], src[3], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+    tmp0 =  max(sort[0], tmp_max);
+    tmp1 =  min(sort[0], tmp_max);
+    sort[0] = tmp0;
+    tmp0 =  max(sort[1], tmp1);
+    tmp1 =  min(sort[1], tmp1);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 =  max(sort[6], tmp1);
+    tmp1 =  min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 =  max(sort[7], tmp1);
+    tmp1 =  min(sort[7], tmp1);
+    sort[7] = tmp0;
+    tmp0 =  max(sort[8], tmp1);
+    sort[9] =  min(sort[8], tmp1);
+    sort[8] = tmp0;
+
+    tmp0 =  max(sort[1], tmp_median);
+    tmp1 =  min(sort[1], tmp_median);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 = max(sort[6], tmp1);
+    tmp1 = min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 = max(sort[7], tmp1);
+    tmp1 = min(sort[7], tmp1);
+    sort[7] = tmp0;
+    tmp0 = max(sort[8], tmp1);
+    tmp1 = min(sort[8], tmp1);
+    sort[8] = tmp0;
+    tmp0 = max(sort[9], tmp1);
+    sort[10] = min(sort[9], tmp1);
+    sort[9] = tmp0;
+
+    tmp0 =  max(sort[2], tmp_min);
+    tmp1 =  min(sort[2], tmp_min);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 =  max(sort[6], tmp1);
+    tmp1 =  min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 = max(sort[7], tmp1);
+    tmp1 = min(sort[7], tmp1);
+    sort[7] = tmp0;
+    tmp0 = max(sort[8], tmp1);
+    tmp1 = min(sort[8], tmp1);
+    sort[8] = tmp0;
+    tmp0 = max(sort[9], tmp1);
+    tmp1 = min(sort[9], tmp1);
+    sort[9] = tmp0;
+    sort[10] = max(sort[10], tmp1);
+
+    VXC_OP4(filter, tmp_max, src[4], src[4], src[4], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Max, 1));
+    VXC_OP4(filter, tmp_median, src[4], src[4], src[4], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Median, 1));
+    VXC_OP4(filter, tmp_min, src[4], src[4], src[4], VXC_MODIFIER_FILTER(0, 7, 0, VXC_FM_Min, 1));
+
+    tmp0 =  max(sort[0], tmp_max);
+    tmp1 =  min(sort[0], tmp_max);
+    sort[0] = tmp0;
+    tmp0 =  max(sort[1], tmp1);
+    tmp1 =  min(sort[1], tmp1);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 =  max(sort[6], tmp1);
+    tmp1 =  min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 =  max(sort[7], tmp1);
+    tmp1 =  min(sort[7], tmp1);
+    sort[7] = tmp0;
+    tmp0 = max(sort[8], tmp1);
+    tmp1 = min(sort[8], tmp1);
+    sort[8] = tmp0;
+    tmp0 = max(sort[9], tmp1);
+    tmp1 = min(sort[9], tmp1);
+    sort[9] = tmp0;
+    sort[10] = max(sort[10], tmp1);
+
+    tmp0 =  max(sort[1], tmp_median);
+    tmp1 =  min(sort[1], tmp_median);
+    sort[1] = tmp0;
+    tmp0 =  max(sort[2], tmp1);
+    tmp1 =  min(sort[2], tmp1);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 = max(sort[6], tmp1);
+    tmp1 = min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 = max(sort[7], tmp1);
+    tmp1 = min(sort[7], tmp1);
+    sort[7] = tmp0;
+    tmp0 = max(sort[8], tmp1);
+    tmp1 = min(sort[8], tmp1);
+    sort[8] = tmp0;
+    tmp0 = max(sort[9], tmp1);
+    tmp1 = min(sort[9], tmp1);
+    sort[9] = tmp0;
+    sort[10] = max(sort[10], tmp1);
+
+    tmp0 =  max(sort[2], tmp_min);
+    tmp1 =  min(sort[2], tmp_min);
+    sort[2] = tmp0;
+    tmp0 =  max(sort[3], tmp1);
+    tmp1 =  min(sort[3], tmp1);
+    sort[3] = tmp0;
+    tmp0 =  max(sort[4], tmp1);
+    tmp1 =  min(sort[4], tmp1);
+    sort[4] = tmp0;
+    tmp0 =  max(sort[5], tmp1);
+    tmp1 =  min(sort[5], tmp1);
+    sort[5] = tmp0;
+    tmp0 =  max(sort[6], tmp1);
+    tmp1 =  min(sort[6], tmp1);
+    sort[6] = tmp0;
+    tmp0 = max(sort[7], tmp1);
+    tmp1 = min(sort[7], tmp1);
+    sort[7] = tmp0;
+    tmp0 = max(sort[8], tmp1);
+    tmp1 = min(sort[8], tmp1);
+    sort[8] = tmp0;
+    tmp0 = max(sort[9], tmp1);
+    tmp1 = min(sort[9], tmp1);
+    sort[9] = tmp0;
+    sort[10] = max(sort[10], tmp1);
+
+    DISK_5x5_PROCESS_MEDIAN(src[1])
+    DISK_5x5_PROCESS_MEDIAN(src[2])
+    DISK_5x5_PROCESS_MEDIAN(src[3])
+    dst = sort[10];
+    VXC_WriteImage(output, coord_out, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}

@@ -1,0 +1,23 @@
+
+__kernel void accumulate_square_U8toI16
+    (
+    __read_only  image2d_t input,
+                 int       shift,
+                 image2d_t output
+    )
+{
+    int offset = get_global_id(0);
+
+    Image in = create_image_from_image2d(input, U8_ELEMENT_SIZE);
+    Image accu = create_image_from_image2d(output, I16_ELEMENT_SIZE);
+
+    uchar4 src = vload4(offset, in.ptr);
+    short4 acc = vload4(offset, (short*)accu.ptr);
+
+    int4 v0, v1;
+    _viv_asm(COPY, v0, src, 16);
+    _viv_asm(COPY, v1, acc, 16);
+    short4 dst = convert_short4_sat((v0 * v0 >> shift) + v1);
+
+    vstore4(dst, offset, (short*)accu.ptr);
+}

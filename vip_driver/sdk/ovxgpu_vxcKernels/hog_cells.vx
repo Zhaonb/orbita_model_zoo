@@ -1,0 +1,74 @@
+#define PI (3.14159265)
+#define RATIO (180/PI)
+#define EPSILON (0.00000000000001f)
+
+__kernel void hog_cells(
+    __read_only image2d_t in_image,
+    global int*  cell_width,
+    global int*  cell_height,
+    global int*  num_bins,
+    global void* magnitudes,
+    global void* bins,
+    global int*  data_type
+)
+{
+    const int cellx = get_global_id(0);
+    const int celly = get_global_id(1);
+    unsigned char gx1, gx2, gy1, gy2;
+    float gx;
+    float gy;
+    float orientation;
+    float magnitude;
+    char  bin;
+    int   dataType;
+    int   width, height;
+    int   cell_w, cell_h, num_orientations, num_cellw;
+    float num_div_360;
+
+    dataType     = *data_type;
+    cell_w       = *cell_width;
+    cell_h       = *cell_height;
+    width        = get_image_width(in_image);
+    height       = get_image_height(in_image);
+    num_orientations = *num_bins;
+    num_div_360  = (float)num_orientations / 360.0f;
+    num_cellw    = (int)floor(((float)width) / ((float)cell_w));
+
+    for (int y = 0; y < cell_h; y++){
+        for (int x = 0; x < cell_w; x++){
+            int i = cellx * cell_w + x;
+            int j = celly * cell_h + y;
+            int x1 = i - 1 < 0 ? 0 : i - 1;
+            int x2 = i + 1 >= width ? width - 1 : i + 1;
+            gx1 = (read_imageui(in_image, (int2)(x1,j))).x;
+            gx2 = (read_imageui(in_image, (int2)(x2,j))).x;
+            gx = (float)(gx2 - gx1);
+
+            int y1 = j - 1 < 0 ? 0 : j - 1;
+            int y2 = j + 1 >= height ? height - 1 : j + 1;
+            gy1 = read_imageui(in_image, (int2)(i,y1)).x;
+            gy2 = read_imageui(in_image, (int2)(i,y2)).x;
+            gy = (float)(gy2 - gy1);
+
+            magnitude = sqrt(gx*gx + gy*gy);
+            orientation = fmod(atan2(gy, gx + EPSILON)
+                * RATIO, 360);
+            if (orientation < 0){
+                orientation += 360;
+            }
+            bin = (char)floor(orientation * num_div_360);
+            int magnitudes_index = celly * num_cellw + cellx;
+            int bins_index = (celly * num_cellw + cellx) * num_orientations + bin;
+            int magnitudes_pos = magnitudes_index * sizeof(short);
+            int bins_pos = bins_index * sizeof(char) * dataType;
+            void *mag_ptr = (char *)magnitudes + magnitudes_pos;
+            void *bins_ptr = (char *)bins + bins_pos;
+            *(short *)(mag_ptr) += (short)((int)magnitude / (cell_w * cell_h));
+            if (dataType == 1){
+                *(char *)(bins_ptr) += (char)((int)magnitude / (cell_w * cell_h));
+            }else{
+                *(short *)(bins_ptr) += (short)((int)magnitude / (cell_w * cell_h));
+            }
+        }
+    }
+}

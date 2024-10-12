@@ -1,0 +1,36 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniConvertFstFp16Fp32_4x4;
+_viv_uniform VXC_512Bits uniConvertSecFp16Fp32_4x4;
+_viv_uniform VXC_512Bits uniConvertInt32toUint8_2x8;
+
+__kernel void weighted_average_u8(
+    __read_only  image2d_t input0,
+                     float alpha,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, dst;
+    vxc_float4  src0_tmp0, src0_tmp1;
+    vxc_float4  src1_tmp0, src1_tmp1;
+    vxc_float4  dst_tmp0, dst_tmp1;
+    uchar4      dst0, dst1;
+
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input1, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(src0_tmp0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertFstFp16Fp32_4x4);
+    VXC_DP4x4(src0_tmp1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertSecFp16Fp32_4x4);
+    VXC_DP4x4(src1_tmp0, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertFstFp16Fp32_4x4);
+    VXC_DP4x4(src1_tmp1, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertSecFp16Fp32_4x4);
+    dst_tmp0 = alpha * (src0_tmp0 - src1_tmp0) + src1_tmp0;
+    dst_tmp1 = alpha * (src0_tmp1 - src1_tmp1) + src1_tmp1;
+    _viv_asm(CONV, dst0, dst_tmp0);
+    _viv_asm(CONV, dst1, dst_tmp1);
+    VXC_DP2x8(dst, dst0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvertInt32toUint8_2x8);
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+

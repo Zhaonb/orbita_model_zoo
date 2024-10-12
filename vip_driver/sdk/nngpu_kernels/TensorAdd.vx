@@ -1,0 +1,1663 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+#pragma OPENCL EXTENSION  CL_VIV_asm : enable
+
+__kernel void gpuTensorAdd_F32_F32toF32
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    float4 src0, src1, dst = {0.0};
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imagef(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagef(input1, coord_in1);
+
+    dst.x = src0.x + src1.x * scale;
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_F32_F32toF32_BroadCastZ0
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    float4 src0, src1, dst = {0.0};
+
+    src0 = read_imagef(input0, coord.xy);
+    src1 = read_imagef(input1, coord);
+    dst.x = src0.x + src1.x * scale;
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_F32_F32toF32_BroadCastZ1
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    float4 src0, src1, dst = {0.0};
+
+    src0 = read_imagef(input0, coord);
+    src1 = read_imagef(input1, coord.xy);
+    dst.x = src0.x + src1.x * scale;
+    write_imagef(output, coord, dst);
+}
+
+
+__kernel void gpuTensorAdd_F32_F32toF32_2D_4X
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output,
+                 float     scale,
+                 float     scaleIn0,
+                 float     scaleIn1,
+                 float     tail0,
+                 float     tail1,
+                 float     minVal,
+                 float     maxVal
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    float4 src0, src1, dst;
+
+    src0 = read_imagef(input0, coord);
+    src1 = read_imagef(input1, coord);
+    dst = src0 + src1 * scale;
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_F32_F32toF32_2D_4S
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output,
+                 float     scale,
+                 float     scaleIn0,
+                 float     scaleIn1,
+                 float     tail0,
+                 float     tail1,
+                 float     minVal,
+                 float     maxVal
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(0));
+    float4 src0, src1, dst;
+
+    src0 = read_imagef(input0, coord.xy);
+    src1 = read_imagef(input1, coord.xy);
+    coord.x *= 4;
+    coord.zw = coord.xx + (int2)(1, 2);
+    dst = src0 + src1 * scale;
+    write_imagef(output, coord.xy, dst.xxxx);
+    write_imagef(output, coord.zy, dst.yyyy);
+    write_imagef(output, coord.wy, dst.zzzz);
+    coord.x += 3;
+    write_imagef(output, coord.xy, dst.wwww);
+}
+
+__kernel void gpuTensorAdd_I32_I32toI32_Sat
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+     )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    int4 src0, src1, dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imagei(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagei(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+
+    dst.x = floor(outPixel);
+    write_imagei(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_I32_I32toI32_Wrap
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+     )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    int4 src0, src1, dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imagei(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagei(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    outPixel = inPixel0 + inPixel1;
+
+    dst.x = floor(outPixel);
+    write_imagei(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_I32_I32toU32_Sat
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+     )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    int4 src0, src1;
+    uint4 dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imagei(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagei(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+
+    dst.x = floor(outPixel);
+    write_imageui(output, coord, dst);
+}
+
+
+__kernel void gpuTensorAdd_I32_I32toU32_Wrap
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+     )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    int4 src0, src1;
+    uint4 dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imagei(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagei(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    outPixel = inPixel0 + inPixel1, minVal, maxVal;
+
+    dst.x = floor(outPixel);
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U32_U32toU32_Sat
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+     )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0, src1, dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imageui(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+
+    dst.x = floor(outPixel);
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U32_U32toU32_Wrap
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+     )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0, src1, dst = {0};
+    float inPixel0, inPixel1;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imageui(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    uchar outPixel = inPixel0 + inPixel1;
+
+    int data = floor(inPixel0 + inPixel1);
+    dst.x = data & 0xFF;
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U32_U32toU32_2D_4X_Sat
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output,
+                 float     scale,
+                 float     scaleIn0,
+                 float     scaleIn1,
+                 float     tail0,
+                 float     tail1,
+                 float     minVal,
+                 float     maxVal
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src0, src1, dst = {0.0};
+    float4 inPixel0, inPixel1, outPixel;
+
+    src0 = read_imageui(input0, coord);
+    src1 = read_imageui(input1, coord);
+
+    inPixel0 = convert_float4(src0) * scaleIn0 + tail0;
+    inPixel1 = convert_float4(src1) * scaleIn1 + tail1;
+
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+
+    dst = convert_uint4(outPixel);
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U32_U32toU32_2D_4S_Sat
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output,
+                 float     scale,
+                 float     scaleIn0,
+                 float     scaleIn1,
+                 float     tail0,
+                 float     tail1,
+                 float     minVal,
+                 float     maxVal
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(0));
+    uint4 src0, src1, dst = {0.0};
+    float4 inPixel0, inPixel1, outPixel;
+
+    src0 = read_imageui(input0, coord.xy);
+    src1 = read_imageui(input1, coord.xy);
+
+    coord.x *= 4;
+    coord.zw = coord.xx + (int2)(1, 2);
+
+    inPixel0 = convert_float4(src0) * scaleIn0 + tail0;
+    inPixel1 = convert_float4(src1) * scaleIn1 + tail1;
+
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+
+    dst = convert_uint4(outPixel);
+    write_imageui(output, coord.xy, dst.xxxx);
+    write_imageui(output, coord.zy, dst.yyyy);
+    write_imageui(output, coord.wy, dst.zzzz);
+    coord.x += 3;
+    write_imageui(output, coord.xy, dst.wwww);
+}
+
+__kernel void gpuTensorAdd_I16_I16toI16_Wrap
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 int             scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+     )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    int4 src0, src1, dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imagei(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagei(input1, coord_in1);
+
+    dst.x = convert_int(convert_short(src0.x + src1.x * scaleIn1));
+
+    write_imagei(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_I8_I8toI8_Wrap
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 int             scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+     )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    int4 src0, src1, dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imagei(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagei(input1, coord_in1);
+
+    dst.x = convert_int(convert_char(src0.x + src1.x * scaleIn1));
+
+    write_imagei(output, coord, dst);
+}
+__kernel void gpuTensorAdd_U8_F16toU8_Sat
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0, dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 src1;
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+    dst.x = floor(outPixel);
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toU8_Wrap
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0, dst = {0};
+    float inPixel0, inPixel1;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 src1;
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+
+    int data = floor(inPixel0 + inPixel1);
+    dst.x = data & 0xFF;
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toU8_Sat_BroadCastZ0
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0, dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int2 coord_in0 = (int2)(x, y);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 src1;
+    int in1_depth = get_image_array_size(input1);
+
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+    dst.x = floor(outPixel);
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toU8_Wrap_BroadCastZ0
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0, dst = {0};
+    float inPixel0, inPixel1;
+    int2 coord_in0 = (int2)(x, y);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 src1;
+    int in1_depth = get_image_array_size(input1);
+
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+
+    int data = floor(inPixel0 + inPixel1);
+    dst.x = data & 0xFF;
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toU8_Sat_BroadCastZ1
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0, dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int2 coord_in1 = (int2)(x, y);
+    float4 src1;
+    int in0_depth = get_image_array_size(input0);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+    dst.x = floor(outPixel);
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toU8_Wrap_BroadCastZ1
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0, dst = {0};
+    float inPixel0, inPixel1;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int2 coord_in1 = (int2)(x, y);
+    float4 src1;
+    int in0_depth = get_image_array_size(input0);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+
+    int data = floor(inPixel0 + inPixel1);
+    dst.x = data & 0xFF;
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toU8_Sat_2D
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_t       output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(x, y);
+    uint4 src0, dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    float4 src1;
+
+    src0 = read_imageui(input0, coord);
+    src1 = read_imagef(input1, coord);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+    dst.x = floor(outPixel);
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toU8_Wrap_2D
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_t       output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(x, y);
+    uint4 src0, dst = {0};
+    float inPixel0, inPixel1;
+    float4 src1;
+
+    src0 = read_imageui(input0, coord);
+    src1 = read_imagef(input1, coord);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+
+    int data = floor(inPixel0 + inPixel1);
+    dst.x = data & 0xFF;
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toF16_Sat
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0;
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 src1, dst;
+
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1,minVal,maxVal);
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toF16_Wrap
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0;
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 src1, dst;
+
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = inPixel0 + inPixel1;
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toF16_Sat_BroadCastZ0
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0;
+    float inPixel0, inPixel1, outPixel;
+    int2 coord_in0 = (int2)(x, y);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 src1, dst;
+    int in1_depth = get_image_array_size(input1);
+
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1,minVal,maxVal);
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toF16_Wrap_BroadCastZ0
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0;
+    float inPixel0, inPixel1, outPixel;
+    int2 coord_in0 = (int2)(x, y);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 src1, dst;
+    int in1_depth = get_image_array_size(input1);
+
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = inPixel0 + inPixel1;
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toF16_Sat_BroadCastZ1
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0;
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int2 coord_in1 = (int2)(x, y);
+    float4 src1, dst;
+    int in0_depth = get_image_array_size(input0);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1,minVal,maxVal);
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toF16_Wrap_BroadCastZ1
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0;
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int2 coord_in1 = (int2)(x, y);
+    float4 src1, dst;
+    int in0_depth = get_image_array_size(input0);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = inPixel0 + inPixel1;
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toF16_Sat_2D
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_t       output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(x, y);
+    float inPixel0, inPixel1, outPixel;
+    uint4 src0;
+    float4 src1, dst;
+
+    src0 = read_imageui(input0, coord);
+    src1 = read_imagef(input1, coord);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1,minVal,maxVal);
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_F16toF16_Wrap_2D
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_t       output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(x, y);
+    float inPixel0, inPixel1, outPixel;
+    uint4 src0;
+    float4 src1, dst;
+
+    src0 = read_imageui(input0, coord);
+    src1 = read_imagef(input1, coord);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = inPixel0 + inPixel1;
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_U8toF16_Sat
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+     )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0, src1;
+    float4 dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imageui(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+
+    dst.x = outPixel;
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_U8toF16_Wrap
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+     )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0, src1;
+    float4 dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imageui(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    outPixel = inPixel0 + inPixel1;
+
+    dst.x = outPixel;
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_U8toF16_Sat_BroadCastZ0
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0, src1;
+    float inPixel0, inPixel1, outPixel;
+    int2 coord_in0 = (int2)(x, y);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 dst;
+    int in1_depth = get_image_array_size(input1);
+
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imageui(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1,minVal,maxVal);
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_U8toF16_Wrap_BroadCastZ0
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0, src1;
+    float inPixel0, inPixel1, outPixel;
+    int2 coord_in0 = (int2)(x, y);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 dst;
+    int in1_depth = get_image_array_size(input1);
+
+    src0 = read_imageui(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imageui(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    outPixel = inPixel0 + inPixel1;
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_U8toF16_Sat_BroadCastZ1
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0 ,src1;
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int2 coord_in1 = (int2)(x, y);
+    float4 dst;
+    int in0_depth = get_image_array_size(input0);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    src1 = read_imageui(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1,minVal,maxVal);
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_U8toF16_Wrap_BroadCastZ1
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 src0, src1;
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int2 coord_in1 = (int2)(x, y);
+    float4 dst;
+    int in0_depth = get_image_array_size(input0);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imageui(input0, coord_in0);
+    src1 = read_imageui(input1, coord_in1);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    outPixel = inPixel0 + inPixel1;
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_U8toF16_Sat_2D
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_t       output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(x, y);
+    float inPixel0, inPixel1, outPixel;
+    uint4 src0, src1;
+    float4 dst;
+
+    src0 = read_imageui(input0, coord);
+    src1 = read_imageui(input1, coord);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1,minVal,maxVal);
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_U8_U8toF16_Wrap_2D
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_t       output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(x, y);
+    float inPixel0, inPixel1, outPixel;
+    uint4 src0, src1;
+    float4 dst;
+
+    src0 = read_imageui(input0, coord);
+    src1 = read_imageui(input1, coord);
+
+    inPixel0 = convert_float(src0.x) * scaleIn0 + tail0;
+    inPixel1 = convert_float(src1.x) * scaleIn1 + tail1;
+    outPixel = inPixel0 + inPixel1;
+    dst.x = outPixel;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_F16_F16toU8_Sat
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 src0, src1;
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imagef(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = src0.x * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+    dst.x = floor(outPixel);
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_F16_F16toU8_Wrap
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 dst = {0};
+    float inPixel0, inPixel1;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 src0, src1;
+    int in0_depth = get_image_array_size(input0);
+    int in1_depth = get_image_array_size(input1);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imagef(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = src0.x * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+
+    int data = floor(inPixel0 + inPixel1);
+    dst.x = data & 0xFF;
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_F16_F16toU8_Sat_BroadCastZ0
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int2 coord_in0 = (int2)(x, y);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 src0, src1;
+    int in1_depth = get_image_array_size(input1);
+
+    src0 = read_imagef(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = src0.x * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+    dst.x = floor(outPixel);
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_F16_F16toU8_Wrap_BroadCastZ0
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_array_t input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 dst = {0};
+    float inPixel0, inPixel1;
+    int2 coord_in0 = (int2)(x, y);
+    int4 coord_in1 = (int4)(x, y, z, 0);
+    float4 src0, src1;
+    int in1_depth = get_image_array_size(input1);
+
+    src0 = read_imagef(input0, coord_in0);
+    _viv_asm(CLAMP0MAX, coord_in1.z, coord_in1.z, in1_depth - 1);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = src0.x * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+
+    int data = floor(inPixel0 + inPixel1);
+    dst.x = data & 0xFF;
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_F16_F16toU8_Sat_BroadCastZ1
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int2 coord_in1 = (int2)(x, y);
+    float4 src0, src1;
+    int in0_depth = get_image_array_size(input0);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imagef(input0, coord_in0);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = src0.x * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+    dst.x = floor(outPixel);
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_F16_F16toU8_Wrap_BroadCastZ1
+    (
+    __read_only  image2d_array_t input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_array_t output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x, y, z, 0);
+    uint4 dst = {0};
+    float inPixel0, inPixel1;
+    int4 coord_in0 = (int4)(x, y, z, 0);
+    int2 coord_in1 = (int2)(x, y);
+    float4 src0, src1;
+    int in0_depth = get_image_array_size(input0);
+
+    _viv_asm(CLAMP0MAX, coord_in0.z, coord_in0.z, in0_depth - 1);
+    src0 = read_imagef(input0, coord_in0);
+    src1 = read_imagef(input1, coord_in1);
+
+    inPixel0 = src0.x * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+
+    int data = floor(inPixel0 + inPixel1);
+    dst.x = data & 0xFF;
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_F16_F16toU8_Sat_2D
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_t       output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(x, y);
+    uint4 dst = {0};
+    float inPixel0, inPixel1, outPixel;
+    float4 src0, src1;
+
+    src0 = read_imagef(input0, coord);
+    src1 = read_imagef(input1, coord);
+
+    inPixel0 = src0.x * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+    outPixel = clamp(inPixel0 + inPixel1, minVal, maxVal);
+    dst.x = floor(outPixel);
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuTensorAdd_F16_F16toU8_Wrap_2D
+    (
+    __read_only  image2d_t       input0,
+    __read_only  image2d_t       input1,
+    __write_only image2d_t       output,
+                 float           scale,
+                 float           scaleIn0,
+                 float           scaleIn1,
+                 float           tail0,
+                 float           tail1,
+                 float           minVal,
+                 float           maxVal
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(x, y);
+    uint4 dst = {0};
+    float inPixel0, inPixel1;
+    float4 src0, src1;
+
+    src0 = read_imagef(input0, coord);
+    src1 = read_imagef(input1, coord);
+
+    inPixel0 = src0.x * scaleIn0 + tail0;
+    inPixel1 = src1.x * scaleIn1 + tail1;
+
+    int data = floor(inPixel0 + inPixel1);
+    dst.x = data & 0xFF;
+    write_imageui(output, coord, dst);
+}

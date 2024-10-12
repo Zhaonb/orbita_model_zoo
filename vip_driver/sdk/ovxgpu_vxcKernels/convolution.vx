@@ -1,0 +1,65 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform int conv_width;
+_viv_uniform int conv_height;
+_viv_uniform int offset_width;
+_viv_uniform int offset_height;
+_viv_uniform float scale;
+
+__kernel void custom_convolution_U8toU8
+(
+    __read_only image2d_t   in_image,
+         global short* conv_base_ptr,
+    __write_only image2d_t  out_image
+)
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    int2 coord = (int2)(pix, piy);
+    uint4 src;
+    int sum = 0;
+
+    for (int j = 0; j < conv_height; j++)
+    {
+        for (int i = 0; i < conv_width; i++)
+        {
+            short *conv_ptr = (short*)conv_base_ptr + conv_width * j + i;
+            short data = conv_ptr[0];
+            src = read_imageui(in_image, (int2)(pix + offset_width - i, piy + offset_height - j));
+            sum += data * src.x;
+        }
+    }
+    sum = sum/scale;
+    uint4 dst;
+    dst.x = clamp(sum, 0, 255);
+    write_imageui(out_image, coord, dst);
+}
+
+__kernel void custom_convolution_U8toS16
+(
+    __read_only image2d_t   in_image,
+         global short* conv_base_ptr,
+    __write_only image2d_t  out_image
+)
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    int2 coord = (int2)(pix, piy);
+    uint4 src;
+    int sum = 0;
+
+    for (int j = 0; j < conv_height; j++)
+    {
+        for (int i = 0; i < conv_width; i++)
+        {
+            short *conv_ptr = (short*)conv_base_ptr + conv_width * j + i;
+            short data = conv_ptr[0];
+            src = read_imageui(in_image, (int2)(pix + offset_width - i, piy + offset_height - j));
+            sum += data * src.x;
+        }
+    }
+    sum = sum/scale;
+    int4 dst;
+    dst.x = clamp(sum, -32768, 32767);
+    write_imagei(out_image, coord, dst);
+}

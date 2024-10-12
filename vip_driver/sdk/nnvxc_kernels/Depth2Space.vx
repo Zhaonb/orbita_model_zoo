@@ -1,0 +1,181 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform float output_scale;
+_viv_uniform float output_tail;
+_viv_uniform int outDepth;
+_viv_uniform int outDepth2x;
+_viv_uniform VXC_512Bits uniU8toFp32Lo_dp4x4;
+_viv_uniform VXC_512Bits uniInt32toUint8_dp2x8;
+_viv_uniform VXC_512Bits uniPackU8EvenOdd_dp2x8;
+_viv_uniform VXC_512Bits uniPackS16EvenOdd_dp2x8;
+__kernel void depth2space_U8toU8Block2
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_size
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+    int inx = gidx >> 1;
+    int iny = gidy >> 1;
+    int inz = gidz;
+    int4 coord_in = (int4)(inx, iny, inz, 0);
+    vxc_uchar8 src0, src1, src2, src3;
+    VXC_ReadImage2DArray(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coord_in.z += outDepth;
+    VXC_ReadImage2DArray(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coord_in.z = outDepth2x + gidz;
+    VXC_ReadImage2DArray(src2, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coord_in.z += outDepth;
+    VXC_ReadImage2DArray(src3, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    float4 valLo;
+    VXC_DP4x4(valLo, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniU8toFp32Lo_dp4x4);
+    valLo = valLo * output_scale + output_tail;
+    int4 valIntLo;
+    valIntLo = convert_int4_rte(valLo);
+    VXC_DP2x8(src0, valIntLo, valIntLo, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniInt32toUint8_dp2x8);
+    VXC_DP4x4(valLo, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniU8toFp32Lo_dp4x4);
+    valLo = valLo * output_scale + output_tail;
+    valIntLo = convert_int4_rte(valLo);
+    VXC_DP2x8(src1, valIntLo, valIntLo, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniInt32toUint8_dp2x8);
+    VXC_DP2x8(src0, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniPackU8EvenOdd_dp2x8);
+    VXC_WriteImage2DArray(output, coord_out, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(valLo, src2, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniU8toFp32Lo_dp4x4);
+    valLo = valLo * output_scale + output_tail;
+    valIntLo = convert_int4_rte(valLo);
+    VXC_DP2x8(src2, valIntLo, valIntLo, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniInt32toUint8_dp2x8);
+    VXC_DP4x4(valLo, src3, src3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniU8toFp32Lo_dp4x4);
+    valLo = valLo * output_scale + output_tail;
+    valIntLo = convert_int4_rte(valLo);
+    VXC_DP2x8(src3, valIntLo, valIntLo, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniInt32toUint8_dp2x8);
+    VXC_DP2x8(src2, src2, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniPackU8EvenOdd_dp2x8);
+    coord_out.y++;
+    VXC_WriteImage2DArray(output, coord_out, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+__kernel void depth2space_U8toU8
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_size
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+    int inx = gidx / block_size;
+    int iny = gidy / block_size;
+    int inz = (gidx % block_size) * outDepth + (gidy % block_size) * block_size * outDepth + gidz;
+    int4 coord_in = (int4)(inx, iny, inz, 0);
+    vxc_uchar8 src0;
+    VXC_ReadImage2DArray(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    float valLo;
+    VXC_DP4x4(valLo, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniU8toFp32Lo_dp4x4);
+    valLo = valLo * output_scale + output_tail;
+    int4 valIntLo;
+    valIntLo = convert_int4_rte(valLo);
+    VXC_DP2x8(src0, valIntLo, valIntLo, VXC_MODIFIER(0, 0, 0, VXC_RM_ToNearestEven, 1), uniInt32toUint8_dp2x8);
+    VXC_WriteImage2DArray(output, coord_out, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+__kernel void depth2space_F16toF16Block2
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_size
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+    int inx = gidx >> 1;
+    int iny = gidy >> 1;
+    int inz = gidz;
+    int4 coord_in = (int4)(inx, iny, inz, 0);
+    vxc_short8 src0, src1, src2, src3;
+    VXC_ReadImage2DArray(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coord_in.z += outDepth;
+    VXC_ReadImage2DArray(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coord_in.z = outDepth2x + gidz;
+    VXC_ReadImage2DArray(src2, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coord_in.z += outDepth;
+    VXC_ReadImage2DArray(src3, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(src0, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniPackS16EvenOdd_dp2x8);
+    VXC_WriteImage2DArray(output, coord_out, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(src2, src2, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniPackS16EvenOdd_dp2x8);
+    coord_out.y++;
+    VXC_WriteImage2DArray(output, coord_out, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+__kernel void depth2space_F16toF16
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_size
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+    int inx = gidx / block_size;
+    int iny = gidy / block_size;
+    int inz = (gidx % block_size) * outDepth + (gidy % block_size) * block_size * outDepth + gidz;
+    int4 coord_in = (int4)(inx, iny, inz, 0);
+    vxc_short8 src0;
+    VXC_ReadImage2DArray(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+    VXC_WriteImage2DArray(output, coord_out, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void depth2space_U8toU8Block2_sp
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_size
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+    int inx = gidx >> 1;
+    int iny = gidy >> 1;
+    int inz = gidz;
+    int4 coord_in = (int4)(inx, iny, inz, 0);
+    vxc_uchar8 src0, src1, src2, src3;
+    VXC_ReadImage2DArray(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coord_in.z += outDepth;
+    VXC_ReadImage2DArray(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coord_in.z = outDepth2x + gidz;
+    VXC_ReadImage2DArray(src2, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coord_in.z += outDepth;
+    VXC_ReadImage2DArray(src3, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(src0, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniPackU8EvenOdd_dp2x8);
+    VXC_WriteImage2DArray(output, coord_out, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(src2, src2, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniPackU8EvenOdd_dp2x8);
+    coord_out.y++;
+    VXC_WriteImage2DArray(output, coord_out, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+__kernel void depth2space_U8toU8_sp
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_size
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+    int inx = gidx / block_size;
+    int iny = gidy / block_size;
+    int inz = (gidx % block_size) * outDepth + (gidy % block_size) * block_size * outDepth + gidz;
+    int4 coord_in = (int4)(inx, iny, inz, 0);
+    vxc_uchar8 src0;
+    VXC_ReadImage2DArray(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage2DArray(output, coord_out, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}

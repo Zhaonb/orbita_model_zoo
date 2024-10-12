@@ -1,0 +1,47 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int width;
+
+__kernel void pre_nonmaxsuppression
+(
+    __read_only image2d_t input,
+                float     thresh,
+                float     radius,
+    __write_only image2d_t tmp_out
+)
+{
+    Image img_in = create_image_from_image2d(input, 4);
+    Image img_out = create_image_from_image2d(tmp_out, 4);
+    __global float* input_ptr = (__global float*)img_in.ptr;
+    __global float* output_ptr = (__global float*)img_out.ptr;
+
+    int index = get_global_id(1) * width + get_global_id(0);
+    int offset = index - 1;
+    float4 data = vload4(0, input_ptr + offset);
+    float4 data1 = vload4(0, input_ptr + offset + width);
+    bool flg0 = data.y >= thresh && data.y >= data.x && data.y > data.z &&
+                data.y > data1.x && data.y > data1.y && data.y > data1.z;
+    bool flg1 = data1.y >= thresh && data1.y >= data1.x && data1.y > data1.z &&
+                data1.y >= data.x && data1.y >= data.y && data1.y >= data.z;
+
+    if(flg0)
+    {
+        float4 data0 = vload4(0, input_ptr + offset - width);
+        flg1 = 0;
+        if(data.y >= data0.x && data.y >= data0.y && data.y >= data0.z)
+        {
+            output_ptr[index] = data.y;
+        }
+    }
+
+    if(flg1)
+    {
+        float4 data2 = vload4(0, input_ptr + offset + width * 2);
+        if(data1.y > data2.x && data1.y > data2.y && data1.y > data2.z)
+        {
+            output_ptr[index + width] = data1.y;
+        }
+    }
+}

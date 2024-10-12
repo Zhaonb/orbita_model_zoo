@@ -1,0 +1,254 @@
+
+__kernel void vxBatchNorm_FP32_4x
+    (
+    __read_only     image2d_array_t inputs,
+    __read_only     image2d_t weights,
+    __read_only     image2d_t biases,
+    __write_only    image2d_array_t outputs
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    float4 data = read_imagef(inputs, coord);
+    float4 wData = read_imagef(weights, coord.zw);
+    float4 bData = read_imagef(biases, coord.zw);
+
+    data = data * wData.xxxx + bData.xxxx;
+    write_imagef(outputs, coord, data);
+}
+
+__kernel void vxBatchNorm_FP32_4s
+    (
+    __read_only     image2d_array_t inputs,
+    __read_only     image2d_t weights,
+    __read_only     image2d_t biases,
+    __write_only    image2d_array_t outputs
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    float4 data = read_imagef(inputs, coord);
+    float4 wData = read_imagef(weights, coord.zw);
+    float4 bData = read_imagef(biases, coord.zw);
+
+    coord.x *= 4;
+    data = data * wData.xxxx + bData.xxxx;
+    write_imagef(outputs, coord, data.xxxx);
+    coord.x ++;
+    write_imagef(outputs, coord, data.yyyy);
+    coord.x ++;
+    write_imagef(outputs, coord, data.zzzz);
+    coord.x ++;
+    write_imagef(outputs, coord, data.wwww);
+}
+
+__kernel void vxBatchNorm_FP32_2D_4x
+    (
+    __read_only     image2d_t inputs,
+    __read_only     image2d_t weights,
+    __read_only     image2d_t biases,
+    __write_only    image2d_t outputs
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    float4 data = read_imagef(inputs, coord.xy);
+    float4 wData = read_imagef(weights, coord.yy);
+    float4 bData = read_imagef(biases, coord.yy);
+
+    data = data * wData.xxxx + bData.xxxx;
+    write_imagef(outputs, coord, data);
+}
+
+__kernel void vxBatchNorm_FP32_2D_4s
+    (
+    __read_only     image2d_t inputs,
+    __read_only     image2d_t weights,
+    __read_only     image2d_t biases,
+    __write_only    image2d_t outputs
+    )
+{
+    int tmpIdx = get_global_id(0) * 4;
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), tmpIdx, tmpIdx);
+    float4 data = read_imagef(inputs, coord.xy);
+    float4 wData = read_imagef(weights, coord.yy);
+    float4 bData = read_imagef(biases, coord.yy);
+
+    coord.x = tmpIdx;
+    coord.zw += (int2)(1, 2);
+
+    data = data * wData.xxxx + bData.xxxx;
+    write_imagef(outputs, coord.xy, data.xxxx);
+    write_imagef(outputs, coord.zy, data.yyyy);
+    write_imagef(outputs, coord.wy, data.zzzz);
+    coord.x += 3;
+    write_imagef(outputs, coord.xy, data.wwww);
+}
+
+__kernel void vxBatchNorm_Quant8_4x
+    (
+    __read_only     image2d_array_t inputs,
+    __read_only     image2d_t weights,
+    __read_only     image2d_t biases,
+    __write_only    image2d_array_t outputs
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    uint4 data = read_imageui(inputs, coord);
+    float4 wData = read_imagef(weights, coord.zw);
+    float4 bData = read_imagef(biases, coord.zw);
+
+    data = convert_uint4(convert_float4(data) * wData.xxxx + bData.xxxx);
+    write_imageui(outputs, coord, data);
+}
+
+__kernel void vxBatchNorm_Quant8_4s
+    (
+    __read_only     image2d_array_t inputs,
+    __read_only     image2d_t weights,
+    __read_only     image2d_t biases,
+    __write_only    image2d_array_t outputs
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    uint4 data = read_imageui(inputs, coord);
+    float4 wData = read_imagef(weights, coord.zw);
+    float4 bData = read_imagef(biases, coord.zw);
+
+    coord.x *= 4;
+
+    data = convert_uint4(convert_float4(data) * wData.xxxx + bData.xxxx);
+
+    write_imageui(outputs, coord, data.xxxx);
+    coord.x ++;
+    write_imageui(outputs, coord, data.yyyy);
+    coord.x ++;
+    write_imageui(outputs, coord, data.zzzz);
+    coord.x ++;
+    write_imageui(outputs, coord, data.wwww);
+}
+
+__kernel void vxBatchNorm_Quant8_2D_4x
+    (
+    __read_only     image2d_t inputs,
+    __read_only     image2d_t weights,
+    __read_only     image2d_t biases,
+    __write_only    image2d_t outputs
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 data = read_imageui(inputs, coord.xy);
+    float4 wData = read_imagef(weights, coord.yy);
+    float4 bData = read_imagef(biases, coord.yy);
+
+    data = convert_uint4(convert_float4(data) * wData.xxxx + bData.xxxx);
+    write_imageui(outputs, coord, data);
+}
+
+__kernel void vxBatchNorm_Quant8_2D_4s
+    (
+    __read_only     image2d_t inputs,
+    __read_only     image2d_t weights,
+    __read_only     image2d_t biases,
+    __write_only    image2d_t outputs
+    )
+{
+    int tmpIdx = get_global_id(0) * 4;
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), tmpIdx, tmpIdx);
+    uint4 data = read_imageui(inputs, coord.xy);
+    float4 wData = read_imagef(weights, coord.yy);
+    float4 bData = read_imagef(biases, coord.yy);
+
+    coord.x = tmpIdx;
+    coord.zw += (int2)(1, 2);
+
+    data = convert_uint4(convert_float4(data) * wData.xxxx + bData.xxxx);
+
+    write_imageui(outputs, coord.xy, data.xxxx);
+    write_imageui(outputs, coord.zy, data.yyyy);
+    write_imageui(outputs, coord.wy, data.zzzz);
+    coord.x += 3;
+    write_imageui(outputs, coord.xy, data.wwww);
+}
+
+__kernel void vxBatchNorm_FP32_Axis0_2D_4x
+    (
+    __read_only     image2d_t inputs,
+    __read_only     image2d_t weights,
+    __read_only     image2d_t biases,
+    __write_only    image2d_t outputs
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    float4 data = read_imagef(inputs, coord.xy);
+    float4 wData = read_imagef(weights, coord.xx);
+    float4 bData = read_imagef(biases, coord.xx);
+
+    data = data * wData + bData;
+    write_imagef(outputs, coord, data);
+}
+
+__kernel void vxBatchNorm_FP32_Axis0_2D_4s
+    (
+    __read_only     image2d_t inputs,
+    __read_only     image2d_t weights,
+    __read_only     image2d_t biases,
+    __write_only    image2d_t outputs
+    )
+{
+    int tmpIdx = get_global_id(0) * 4;
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), tmpIdx, tmpIdx);
+    float4 data = read_imagef(inputs, coord.xy);
+    float4 wData = read_imagef(weights, coord.xx);
+    float4 bData = read_imagef(biases, coord.xx);
+    coord.x = tmpIdx;
+    coord.zw += (int2)(1, 2);
+
+    data = data * wData + bData;
+    write_imagef(outputs, coord.xy, data.xxxx);
+    write_imagef(outputs, coord.zy, data.yyyy);
+    write_imagef(outputs, coord.wy, data.zzzz);
+    coord.x += 3;
+    write_imagef(outputs, coord.xy, data.wwww);
+}
+
+__kernel void vxBatchNorm_Quant8_Axis0_2D_4x
+    (
+    __read_only     image2d_t inputs,
+    __read_only     image2d_t weights,
+    __read_only     image2d_t biases,
+    __write_only    image2d_t outputs
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 data = read_imageui(inputs, coord.xy);
+    float4 wData = read_imagef(weights, coord.xx);
+    float4 bData = read_imagef(biases, coord.xx);
+
+    data = convert_uint4(convert_float4(data) * wData + bData);
+    write_imageui(outputs, coord, data);
+}
+
+__kernel void vxBatchNorm_Quant8_Axis0_2D_4s
+    (
+    __read_only     image2d_t inputs,
+    __read_only     image2d_t weights,
+    __read_only     image2d_t biases,
+    __write_only    image2d_t outputs
+    )
+{
+    int tmpIdx = get_global_id(0) * 4;
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), tmpIdx, tmpIdx);
+    uint4 data = read_imageui(inputs, coord.xy);
+    float4 wData = read_imagef(weights, coord.xx);
+    float4 bData = read_imagef(biases, coord.xx);
+
+    coord.x = tmpIdx;
+    coord.zw += (int2)(1, 2);
+
+    data = convert_uint4(convert_float4(data) * wData + bData);
+
+    write_imageui(outputs, coord.xy, data.xxxx);
+    write_imageui(outputs, coord.zy, data.yyyy);
+    write_imageui(outputs, coord.wy, data.zzzz);
+    coord.x += 3;
+    write_imageui(outputs, coord.xy, data.wwww);
+}
+

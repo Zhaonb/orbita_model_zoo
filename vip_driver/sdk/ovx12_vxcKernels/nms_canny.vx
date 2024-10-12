@@ -1,0 +1,69 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniBitExtractI32toU8_2x8;
+_viv_uniform VXC_512Bits uniConvert1stU8toI32_4x4;
+_viv_uniform VXC_512Bits uniConvert2ndU8toI32_4x4;
+_viv_uniform VXC_512Bits uniConvertInt32toUint8_2x8;
+
+constant int shift_bits[18] = {
+    48, 80, 0, 160, 16, 144,
+    32, 128, 80, 48, 160, 0,
+    144, 16, 128, 32, 48, 80
+};
+
+constant int shift_bits_0[18] = {
+    64, 96, 0, 160, 16, 144,
+    32, 128, 96, 64, 160, 0,
+    144, 16, 128, 32, 64, 96
+};
+
+constant int shift_bits_1[18] = {
+    80, 112, 16, 176, 32, 160,
+    48, 144, 112, 80, 176, 16,
+    160, 32, 144, 48, 80, 112
+};
+
+__kernel void nonmaximasuppressioncanny
+(
+    __read_only image2d_t  input_mag,
+    __read_only image2d_t  input_ang,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_ushort8 src0, src1, tmpMag, result;
+    vxc_uchar8 src3;
+
+    VXC_ReadImage(src0, input_mag, coord, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src0, input_mag, coord, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input_mag, coord, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input_ang, coord, 0, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+
+    uchar2 angle = (uchar2)(127 - src3.s0, 127 - src3.s1);
+    uint2 idx = (uint2)(angle.x + 16, angle.y + 16);
+    idx >>= 5;
+
+    int4 zero = (int4)(0);
+    int4 masks = (int4)(16, 16, 16, 16);
+    int4 ni0 = zero, ni1 = zero;
+    int2 shift0 = vload2(idx.x, shift_bits_0);
+    int2 shift1 = vload2(idx.y, shift_bits_1);
+    ni0.xy = shift0;
+    ni0.z = 80;
+    ni1.xy = shift1;
+    ni1.z = 96;
+
+    vxc_uchar16 bitMask = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10};
+    VXC_DP2x8(bitMask, ni0, ni1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniBitExtractI32toU8_2x8);
+
+    VXC_BitExtract(tmpMag, src0, src1, bitMask, VXC_MODIFIER_BIN(0, 7, 0));
+    VXC_DP4x4(ni0, tmpMag, zero, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toI32_4x4);
+    VXC_DP4x4(ni1, tmpMag, zero, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndU8toI32_4x4);
+    zero.x = ni0.z > ni0.x && ni0.z > ni0.y ? ni0.z : 0;
+    zero.y = ni1.z > ni1.x && ni1.z > ni1.y ? ni1.z : 0;
+    VXC_DP2x8(result, zero, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvertInt32toUint8_2x8);
+
+    VXC_WriteImage(output, coord, result, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+}

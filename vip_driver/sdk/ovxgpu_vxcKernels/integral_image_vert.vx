@@ -1,0 +1,22 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform int height;
+
+__kernel void integral_image_vert
+    (
+    __read_only  image2d_t input,
+    __read_only  image2d_t acc_row,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 sum = (uint4)0;
+
+    for(; coord.y < height; coord.y++)
+    {
+        uint4 data = read_imageui(acc_row, coord);
+        sum += data;
+        write_imageui(output, coord, sum);
+    }
+}

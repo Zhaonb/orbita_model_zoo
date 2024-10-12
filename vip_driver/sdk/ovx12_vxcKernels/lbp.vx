@@ -1,0 +1,324 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+__kernel void lbp_Standard_3
+(
+    __read_only  image2d_t  src_image,
+    __read_only  int        format,
+    __read_only  char       ksize,
+    __write_only image2d_t  dst_image
+)
+{
+    int2 pos = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_uchar16 L0_0, L0_1, L0_2;
+    vxc_uchar16 L1_2, L1_1, L1_0;
+    vxc_uchar16 L2_1, L2_0, L2_2;
+
+    VXC_ReadImage(L1_1, src_image, pos, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L0_0, src_image, pos, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L0_1, src_image, pos, VXC_5BITOFFSET_XY(0, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L0_2, src_image, pos, VXC_5BITOFFSET_XY(1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L1_2, src_image, pos, VXC_5BITOFFSET_XY(1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L1_0, src_image, pos, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L2_2, src_image, pos, VXC_5BITOFFSET_XY(1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L2_1, src_image, pos, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L2_0, src_image, pos, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Clamp(L0_0, L0_0, L1_1, L0_0, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_0 = sub_sat(L0_0, 0xFE);
+
+    VXC_Clamp(L0_1, L0_1, L1_1, L0_1, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_1 = sub_sat(L0_1, 0xFE);
+    L0_0 = L0_1 * 2 + L0_0;
+
+    VXC_Clamp(L0_2, L0_2, L1_1, L0_2, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_2 = sub_sat(L0_2, 0xFE);
+    L0_0 = L0_2 * 4 + L0_0;
+
+    VXC_Clamp(L1_2, L1_2, L1_1, L1_2, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L1_2 = sub_sat(L1_2, 0xFE);
+    L0_0 = L1_2 * 8 + L0_0;
+
+    VXC_Clamp(L1_0, L1_0, L1_1, L1_0, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_0 = L1_0 * 128 + L0_0;
+
+    VXC_Clamp(L2_2, L2_2, L1_1, L2_2, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L2_2 = sub_sat(L2_2, 0xFE);
+    L0_0 = L2_2 * 16 + L0_0;
+
+    VXC_Clamp(L2_1, L2_1, L1_1, L2_1, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L2_1 = sub_sat(L2_1, 0xFE);
+    L0_0 = L2_1 * 32 + L0_0;
+
+    VXC_Clamp(L2_0, L2_0, L1_1, L2_0, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L2_0 = sub_sat(L2_0, 0xFE);
+    L0_0 = L2_0 * 64 + L0_0;
+
+    VXC_WriteImage(dst_image, pos, L0_0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void lbp_Standard_5
+(
+    __read_only  image2d_t  src_image,
+    __read_only  int        format,
+    __read_only  char       ksize,
+    __write_only image2d_t  dst_image
+)
+{
+    int2 pos = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_uchar16 L0_0, L0_2, L0_4;
+    vxc_uchar16 L2_0, L2_2, L2_4;
+    vxc_uchar16 L4_0, L4_2, L4_4;
+
+    VXC_ReadImage(L2_2, src_image, pos, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L0_0, src_image, pos, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L0_2, src_image, pos, VXC_5BITOFFSET_XY(0, -2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L0_4, src_image, pos, VXC_5BITOFFSET_XY(1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L2_0, src_image, pos, VXC_5BITOFFSET_XY(2, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L2_4, src_image, pos, VXC_5BITOFFSET_XY(1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L4_0, src_image, pos, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L4_2, src_image, pos, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L4_4, src_image, pos, VXC_5BITOFFSET_XY(-2, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Clamp(L0_0, L0_0, L2_2, L0_0, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_0 = sub_sat(L0_0, 0xFE);
+
+    VXC_Clamp(L0_2, L0_2, L2_2, L0_2, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_2 = sub_sat(L0_2, 0xFE);
+    L0_0 = L0_2 * 2 + L0_0;
+
+    VXC_Clamp(L0_4, L0_4, L2_2, L0_4, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_4 = sub_sat(L0_4, 0xFE);
+    L0_0 = L0_4 * 4 + L0_0;
+
+    VXC_Clamp(L2_0, L2_0, L2_2, L2_0, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L2_0 = sub_sat(L2_0, 0xFE);
+    L0_0 = L2_0 * 8 + L0_0;
+
+    VXC_Clamp(L2_4, L2_4, L2_2, L2_4, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L2_4 = sub_sat(L2_4, 0xFE);
+    L0_0 = L2_4 * 16 + L0_0;
+
+    VXC_Clamp(L4_0, L4_0, L2_2, L4_0, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L4_0 = sub_sat(L4_0, 0xFE);
+    L0_0 = L4_0 * 32 + L0_0;
+
+    VXC_Clamp(L4_2, L4_2, L2_2, L4_2, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L4_2 = sub_sat(L4_2, 0xFE);
+    L0_0 = L4_2 * 64 + L0_0;
+
+    VXC_Clamp(L4_4, L4_4, L2_2, L4_4, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_0 = L4_4 * 128 + L0_0;
+
+    VXC_WriteImage(dst_image, pos, L0_0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void lbp_Modified_5
+(
+    __read_only  image2d_t  src_image,
+    __read_only  int        format,
+    __read_only  char       ksize,
+    __write_only image2d_t  dst_image
+)
+{
+    int2 pos = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 line0, line1, line2;
+    vxc_uchar8 avg, dst, bits;
+    vxc_short8 sum0, sum1;
+
+    VXC_ReadImage(line0, src_image, pos, VXC_5BITOFFSET_XY(-2, -2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(line2, src_image, pos, VXC_5BITOFFSET_XY(-2, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(line1, src_image, pos, VXC_5BITOFFSET_XY(-2, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    const uint16 uniLine0AddLine2_4x8 = (uint16)(
+        0x55555555, 0x55555555, // TCfg
+        0x46181040, 0x39188289, 0x20c499ca, 0x06aa4e5a, 0xbad27b29, // BinSelect
+        0x00000400, // AccumType, ConstantType, and PostShift
+        0x01010101, 0x01010101, 0x01010101, 0x01010101, 0x01010101, 0x01010101, 0x01010101, 0x01010101 // Constant
+    );
+    const uint16 uniLine1AddLine2_4x8 = (uint16)(
+        0x55555555, 0x55555555, // TCfg
+        0xca1a4880, 0x3b50c2ac, 0x5904bd4e, 0x46cdd25c, 0xde567d61, // BinSelect
+        0x00000400, // AccumType, ConstantType, and PostShift
+        0x01010101, 0x01010101, 0x01010101, 0x01010101, 0x01010101, 0x01010101, 0x01010101, 0x01010101 // Constant
+    );
+    const uint16 uniS16AddS16PostShift3_2x8 = (uint16)(
+        0x55555555, // TCfg
+        0x44444444, // ASelt
+        0x33221100, 0x77665544, // ABin
+        0xaaaaaaaa, // BSelt
+        0x00000000, 0x00000000, // BBin
+        0x00000303, // AccumType, ConstantType, and PostShift
+        0x00010001, 0x00010001, 0x00010001, 0x00010001, 0x00010001, 0x00010001, 0x00010001, 0x00010001 // Constant
+    );
+
+    VXC_DP4x8(sum0, line0, line2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniLine0AddLine2_4x8);
+    VXC_DP4x8(sum1, line1, line2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniLine1AddLine2_4x8);
+    sum0 += 1;
+    VXC_DP2x8(avg, sum0, sum1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniS16AddS16PostShift3_2x8);
+    avg = add_sat(avg, 1);
+
+    VXC_Clamp(bits, line0, avg, line0, VXC_MODIFIER_CLAMP(0, 7, 0, 1));
+    dst = sub_sat(bits, 0xFE);
+
+    line0 = line0.s23456789abcdef01;
+    VXC_Clamp(bits, line0, avg, line0, VXC_MODIFIER_CLAMP(0, 7, 0, 1));
+    bits = sub_sat(bits, 0xFE);
+    dst  = bits * 2 + dst;
+
+    line0 = line0.s23456789abcdef01;
+    VXC_Clamp(bits, line0, avg, line0, VXC_MODIFIER_CLAMP(0, 7, 0, 1));
+    bits = sub_sat(bits, 0xFE);
+    dst  = bits * 4 + dst;
+
+    VXC_Clamp(bits, line1, avg, line1, VXC_MODIFIER_CLAMP(0, 7, 0, 1));
+    dst  = bits * 128 + dst;
+
+    line1 = line1.s456789abcdef0123;
+    VXC_Clamp(bits, line1, avg, line1, VXC_MODIFIER_CLAMP(0, 7, 0, 1));
+    bits = sub_sat(bits, 0xFE);
+    dst  = bits * 8 + dst;
+
+    VXC_Clamp(bits, line2, avg, line2, VXC_MODIFIER_CLAMP(0, 7, 0, 1));
+    bits = sub_sat(bits, 0xFE);
+    dst  = bits * 64 + dst;
+
+    line2 = line2.s23456789abcdef01;
+    VXC_Clamp(bits, line2, avg, line2, VXC_MODIFIER_CLAMP(0, 7, 0, 1));
+    bits = sub_sat(bits, 0xFE);
+    dst  = bits * 32 + dst;
+
+    line2 = line2.s23456789abcdef01;
+    VXC_Clamp(bits, line2, avg, line2, VXC_MODIFIER_CLAMP(0, 7, 0, 1));
+    bits = sub_sat(bits, 0xFE);
+    dst  = bits * 16 + dst;
+
+    VXC_WriteImage(dst_image, pos, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void lbp_Uniform_3
+(
+    __read_only  image2d_t  src_image,
+    __read_only  int        format,
+    __read_only  char       ksize,
+    __write_only image2d_t  dst_image
+)
+{
+    int2 pos = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_uchar16 L0_0, L0_1, L0_2;
+    vxc_uchar16 L1_2, L1_1, L1_0;
+    vxc_uchar16 L2_1, L2_0, L2_2;
+
+    VXC_ReadImage(L1_1, src_image, pos, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L0_0, src_image, pos, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L0_1, src_image, pos, VXC_5BITOFFSET_XY(0, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L0_2, src_image, pos, VXC_5BITOFFSET_XY(1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L1_2, src_image, pos, VXC_5BITOFFSET_XY(1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L1_0, src_image, pos, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L2_2, src_image, pos, VXC_5BITOFFSET_XY(1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L2_1, src_image, pos, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L2_0, src_image, pos, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Clamp(L0_0, L0_0, L1_1, L0_0, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_0 = sub_sat(L0_0, 0xFE);
+
+    VXC_Clamp(L0_1, L0_1, L1_1, L0_1, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_1 = sub_sat(L0_1, 0xFE);
+    L0_0 = L0_1 * 2 + L0_0;
+
+    VXC_Clamp(L0_2, L0_2, L1_1, L0_2, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_2 = sub_sat(L0_2, 0xFE);
+    L0_0 = L0_2 * 4 + L0_0;
+
+    VXC_Clamp(L1_2, L1_2, L1_1, L1_2, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L1_2 = sub_sat(L1_2, 0xFE);
+    L0_0 = L1_2 * 8 + L0_0;
+
+    VXC_Clamp(L1_0, L1_0, L1_1, L1_0, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_0 = L1_0 * 128 + L0_0;
+
+    VXC_Clamp(L2_2, L2_2, L1_1, L2_2, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L2_2 = sub_sat(L2_2, 0xFE);
+    L0_0 = L2_2 * 16 + L0_0;
+
+    VXC_Clamp(L2_1, L2_1, L1_1, L2_1, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L2_1 = sub_sat(L2_1, 0xFE);
+    L0_0 = L2_1 * 32 + L0_0;
+
+    VXC_Clamp(L2_0, L2_0, L1_1, L2_0, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L2_0 = sub_sat(L2_0, 0xFE);
+    L0_0 = L2_0 * 64 + L0_0;
+
+    L0_1 = rotate(L0_0, 1);
+    L0_1 = L0_1 ^ L0_0;
+    L0_1 = popcount(L0_1);
+    L0_0 = L0_1 <=2 ? L0_0: 9;
+
+    VXC_WriteImage(dst_image, pos, L0_0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void lbp_Uniform_5
+(
+    __read_only  image2d_t  src_image,
+    __read_only  int        format,
+    __read_only  char       ksize,
+    __write_only image2d_t  dst_image
+)
+{
+    int2 pos = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_uchar16 L0_0, L0_2, L0_4;
+    vxc_uchar16 L2_0, L2_2, L2_4;
+    vxc_uchar16 L4_0, L4_2, L4_4;
+
+    VXC_ReadImage(L2_2, src_image, pos, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L0_0, src_image, pos, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L0_2, src_image, pos, VXC_5BITOFFSET_XY(0, -2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L0_4, src_image, pos, VXC_5BITOFFSET_XY(1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L2_0, src_image, pos, VXC_5BITOFFSET_XY(2, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L2_4, src_image, pos, VXC_5BITOFFSET_XY(1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L4_0, src_image, pos, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L4_2, src_image, pos, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(L4_4, src_image, pos, VXC_5BITOFFSET_XY(-2, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Clamp(L0_0, L0_0, L2_2, L0_0, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_0 = sub_sat(L0_0, 0xFE);
+
+    VXC_Clamp(L0_2, L0_2, L2_2, L0_2, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_2 = sub_sat(L0_2, 0xFE);
+    L0_0 = L0_2 * 2 + L0_0;
+
+    VXC_Clamp(L0_4, L0_4, L2_2, L0_4, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_4 = sub_sat(L0_4, 0xFE);
+    L0_0 = L0_4 * 4 + L0_0;
+
+    VXC_Clamp(L2_0, L2_0, L2_2, L2_0, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L2_0 = sub_sat(L2_0, 0xFE);
+    L0_0 = L2_0 * 8 + L0_0;
+
+    VXC_Clamp(L2_4, L2_4, L2_2, L2_4, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L2_4 = sub_sat(L2_4, 0xFE);
+    L0_0 = L2_4 * 16 + L0_0;
+
+    VXC_Clamp(L4_0, L4_0, L2_2, L4_0, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L4_0 = sub_sat(L4_0, 0xFE);
+    L0_0 = L4_0 * 32 + L0_0;
+
+    VXC_Clamp(L4_2, L4_2, L2_2, L4_2, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L4_2 = sub_sat(L4_2, 0xFE);
+    L0_0 = L4_2 * 64 + L0_0;
+
+    VXC_Clamp(L4_4, L4_4, L2_2, L4_4, VXC_MODIFIER_CLAMP(0, 15, 0, 1));
+    L0_0 = L4_4 * 128 + L0_0;
+
+    L0_2 = rotate(L0_0, 1);
+    L0_2 = L0_2 ^ L0_0;
+    L0_2 = popcount(L0_2);
+    L0_0 = L0_2 <=2 ? L0_0: 9;
+
+    VXC_WriteImage(dst_image, pos, L0_0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}

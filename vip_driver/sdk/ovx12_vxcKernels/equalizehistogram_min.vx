@@ -1,0 +1,57 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniConvert1stU8toI32_4x4;
+_viv_uniform VXC_512Bits uniConvert2ndU8toI32_4x4;
+_viv_uniform VXC_512Bits uniConvert3rdU8toI32_4x4;
+_viv_uniform VXC_512Bits uniConvert4thU8toI32_4x4;
+
+__kernel void equalizehistogram_min(
+        image2d_t src,
+        __write_only image2d_t output,
+        __global int* out_min)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 val0;
+    VXC_ReadImage(val0, src, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    vxc_int4 data0, data1, data2, data3;
+
+    vxc_uchar16 tmpMin, minVal;
+
+#if (VX_VERSION==1)
+    VXC_Filter(minVal, val0, val0, val0, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Min, 1));
+    VXC_Filter(tmpMin, minVal.s0369cddddddddddd, minVal.s9cdddddddddddddd, minVal,
+                             VXC_MODIFIER_FILTER(0, 0, 0, VXC_FM_Min, 1));
+#else
+    VXC_HorzMin3(tmpMin, val0, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMin3(minVal, tmpMin.s0369cddddddddddd, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_HorzMin3(tmpMin, minVal.s0333333333333333, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+#endif
+    VXC_DP4x4(data0, tmpMin, tmpMin, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toI32_4x4);
+    atom_min(out_min, data0.x);
+    VXC_DP4x4(data0, val0, val0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toI32_4x4);
+    VXC_DP4x4(data1, val0, val0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndU8toI32_4x4);
+    VXC_DP4x4(data2, val0, val0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert3rdU8toI32_4x4);
+    VXC_DP4x4(data3, val0, val0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert4thU8toI32_4x4);
+
+    Image img = create_image_from_image2d(output, 4);
+    __global uint* out_hist = (__global uint*)img.ptr;
+
+    atomic_inc(out_hist + data0.x);
+    atomic_inc(out_hist + data0.y);
+    atomic_inc(out_hist + data0.z);
+    atomic_inc(out_hist + data0.w);
+    atomic_inc(out_hist + data1.x);
+    atomic_inc(out_hist + data1.y);
+    atomic_inc(out_hist + data1.z);
+    atomic_inc(out_hist + data1.w);
+    atomic_inc(out_hist + data2.x);
+    atomic_inc(out_hist + data2.y);
+    atomic_inc(out_hist + data2.z);
+    atomic_inc(out_hist + data2.w);
+    atomic_inc(out_hist + data3.x);
+    atomic_inc(out_hist + data3.y);
+    atomic_inc(out_hist + data3.z);
+    atomic_inc(out_hist + data3.w);
+}

@@ -1,0 +1,142 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform int originx;
+_viv_uniform int originy;
+_viv_uniform int mrows;
+_viv_uniform int mcols;
+_viv_uniform int low_x;
+_viv_uniform int low_y;
+_viv_uniform int high_x;
+_viv_uniform int high_y;
+
+__kernel void non_linear_filter_min
+(
+                       int func,
+    __read_only  image2d_t input,
+             global uchar* matrix,
+    __write_only image2d_t output
+)
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    if (pix < low_x || pix > high_x || piy < low_y || piy > high_y)
+    {
+        uint4 src = read_imageui(input, (int2)(pix, piy));
+        write_imageui(output, (int2)(pix, piy), src);
+    }
+    else
+    {
+        uint min_data = 256;
+        int i, j;
+        uint4 src;
+        uchar *conv_ptr;
+        uchar mask_data;
+        for (j = -originy; j < mcols - originy;j++)
+        {
+            for (i = -originx; i < mrows - originx;i++)
+            {
+                conv_ptr = (uchar*)matrix + mrows * (j + originy) + (i + originx);
+                mask_data = conv_ptr[0];
+                if (mask_data != 0)
+                {
+                    src = read_imageui(input, (int2)(pix + i, piy + j));
+                    min_data = min(min_data, src.x);
+                }
+            }
+        }
+        write_imageui(output, (int2)(pix, piy), (uint4)(min_data,0,0,0));
+    }
+}
+
+__kernel void non_linear_filter_max
+(
+                       int func,
+    __read_only  image2d_t input,
+             global uchar* matrix,
+    __write_only image2d_t output
+)
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    if (pix < low_x || pix > high_x || piy < low_y || piy > high_y)
+    {
+        uint4 src = read_imageui(input, (int2)(pix, piy));
+        write_imageui(output, (int2)(pix, piy), src);
+    }
+    else
+    {
+        uint max_data = 0;
+        int i, j;
+        uint4 src;
+        uchar *conv_ptr;
+        uchar mask_data;
+        for (j = -originy; j < mcols - originy;j++)
+        {
+            for (i = -originx; i < mrows - originx;i++)
+            {
+                conv_ptr = (uchar*)matrix + mrows * (j + originy) + (i + originx);
+                mask_data = conv_ptr[0];
+                if (mask_data != 0)
+                {
+                    src = read_imageui(input, (int2)(pix + i, piy + j));
+                    max_data = max(max_data, src.x);
+                }
+            }
+        }
+        write_imageui(output, (int2)(pix, piy), (uint4)(max_data,0,0,0));
+    }
+}
+
+__kernel void non_linear_filter_median
+(
+                       int func,
+    __read_only  image2d_t input,
+             global uchar* matrix,
+    __write_only image2d_t output
+)
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    if (pix < low_x || pix > high_x || piy < low_y || piy > high_y)
+    {
+        uint4 src = read_imageui(input, (int2)(pix, piy));
+        write_imageui(output, (int2)(pix, piy), src);
+    }
+    else
+    {
+        uint replace;
+        uint order[25] = {0};
+        uint count = 0;
+        int i, j;
+        uint4 src;
+        uchar *conv_ptr;
+        uchar mask_data;
+        for (j = -originy; j < mcols - originy;j++)
+        {
+            for (i = -originx; i < mrows - originx;i++)
+            {
+                conv_ptr = (uchar*)matrix + mrows * (j + originy) + (i + originx);
+                mask_data = conv_ptr[0];
+                if (mask_data != 0)
+                {
+                    src = read_imageui(input, (int2)(pix + i, piy + j));
+                    order[count] = src.x;
+                    count++;
+                }
+            }
+        }
+        for (i = 0; i < count - 1; i++)
+        {
+            for (j = i + 1; j < count; j++)
+            {
+                if (order[j] > order[i])
+                {
+                    replace = order[j];
+                    order[j] = order[i];
+                    order[i] = replace;
+                }
+            }
+        }
+        write_imageui(output, (int2)(pix, piy), (uint4)(order[(count-1) >> 1],0,0,0));
+    }
+}

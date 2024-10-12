@@ -1,0 +1,39 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniConvSub_2x8;
+
+#define IMAGESUB(in0, in1, out, policy_name, input_type0, input_type1, output_type, policy_val) \
+__kernel void subtract_##in0##_##in1##to##out##_##policy_name \
+    ( \
+    __read_only  image2d_t input0, \
+    __read_only  image2d_t input1, \
+                 int       policy, \
+    __write_only image2d_t output \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    input_type0 src0; \
+    input_type1 src1; \
+    output_type dst; \
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    VXC_ReadImage(src1, input1, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    VXC_DP2x8(dst, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, policy_val), uniConvSub_2x8); \
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+}
+
+IMAGESUB(U8,  U8,  U8,  wrap,      vxc_uchar8, vxc_uchar8, vxc_uchar8, 0)
+IMAGESUB(U8,  U8,  U8,  saturate,  vxc_uchar8, vxc_uchar8, vxc_uchar8, 1)
+
+IMAGESUB(U8,  U8,  S16,  wrap,      vxc_uchar8, vxc_uchar8, vxc_short8, 0)
+IMAGESUB(U8,  U8,  S16,  saturate,  vxc_uchar8, vxc_uchar8, vxc_short8, 1)
+
+IMAGESUB(U8,  S16, S16, wrap,      vxc_uchar8, vxc_short8, vxc_short8, 0)
+IMAGESUB(U8,  S16, S16, saturate,  vxc_uchar8, vxc_short8, vxc_short8, 1)
+
+IMAGESUB(S16, U8, S16, wrap,      vxc_short8, vxc_uchar8, vxc_short8, 0)
+IMAGESUB(S16, U8, S16, saturate,  vxc_short8, vxc_uchar8, vxc_short8, 1)
+
+IMAGESUB(S16, S16, S16, wrap,      vxc_short8, vxc_short8, vxc_short8, 0)
+IMAGESUB(S16, S16, S16, saturate,  vxc_short8, vxc_short8, vxc_short8, 1)

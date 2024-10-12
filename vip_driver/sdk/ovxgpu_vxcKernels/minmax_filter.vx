@@ -1,0 +1,102 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform int width;
+
+__kernel void minmaxlocfilter_opt_u8
+    (
+    __read_only  image2d_t input0,
+    __global int* minData, __global int* maxData
+    )
+{
+    int gidx = get_global_id(0);
+
+    Image in0 = create_image_from_image2d(input0, U8_ELEMENT_SIZE);
+    uchar* input_ptr = get_image_ptr_from_coord(in0, (int2)(0, get_global_id(1)));
+    uchar4 src0 = vload4(gidx, input_ptr);
+    uchar4 src1 = vload4(gidx, input_ptr + width);
+    uchar4 src2 = vload4(gidx, input_ptr + width * 2);
+    uchar4 src3 = vload4(gidx, input_ptr + width * 3);
+
+    uchar4 tmpMin0 = min(src0, src1);
+    uchar4 tmpMin1 = min(src2, src3);
+    uchar4 tmpMin2 = min(tmpMin0, tmpMin1);
+
+    uchar4 tmpMax0 = max(src0, src1);
+    uchar4 tmpMax1 = max(src2, src3);
+    uchar4 tmpMax2 = max(tmpMax0, tmpMax1);
+
+    int minDst0 = (int)min(tmpMin2.x, tmpMin2.y);
+    int minDst1 = (int)min(tmpMin2.z, tmpMin2.w);
+    int minVal = (int)min(minDst0, minDst1);
+
+    int maxDst0 = (int)max(tmpMax2.x, tmpMax2.y);
+    int maxDst1 = (int)max(tmpMax2.z, tmpMax2.w);
+    int maxVal = (int)max(maxDst0, maxDst1);
+
+    atom_max(maxData, maxVal);
+    atom_min(minData, minVal);
+}
+
+__kernel void minmaxlocfilter_opt_i16
+    (
+    __read_only  image2d_t input0,
+    __global int* minData, __global int* maxData
+    )
+{
+    int gidx = get_global_id(0);
+
+    Image in0 = create_image_from_image2d(input0, I16_ELEMENT_SIZE);
+    short* input_ptr = (short*)get_image_ptr_from_coord(in0, (int2)(0, get_global_id(1)));
+    short4 src0 = vload4(gidx, input_ptr);
+    short4 src1 = vload4(gidx, input_ptr + width);
+    short4 src2 = vload4(gidx, input_ptr + width * 2);
+    short4 src3 = vload4(gidx, input_ptr + width * 3);
+
+    short4 tmpMin0 = min(src0, src1);
+    short4 tmpMin1 = min(src2, src3);
+    short4 tmpMin2 = min(tmpMin0, tmpMin1);
+
+    short4 tmpMax0 = max(src0, src1);
+    short4 tmpMax1 = max(src2, src3);
+    short4 tmpMax2 = max(tmpMax0, tmpMax1);
+
+    int minDst0 = (int)min(tmpMin2.x, tmpMin2.y);
+    int minDst1 = (int)min(tmpMin2.z, tmpMin2.w);
+    int minVal = (int)min(minDst0, minDst1);
+
+    int maxDst0 = (int)max(tmpMax2.x, tmpMax2.y);
+    int maxDst1 = (int)max(tmpMax2.z, tmpMax2.w);
+    int maxVal = (int)max(maxDst0, maxDst1);
+
+    atom_max(maxData, maxVal);
+    atom_min(minData, minVal);
+}
+
+__kernel void minmaxlocfilter_u8
+    (
+    __read_only  image2d_t input,
+    __global int* minData, __global int* maxData
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 src0 = read_imageui(input, coord);
+
+    atom_max(maxData, src0.x);
+    atom_min(minData, src0.x);
+}
+
+__kernel void minmaxlocfilter_i16
+    (
+    __read_only  image2d_t input,
+    __global int* minData, __global int* maxData
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    int4 src0 = read_imagei(input, coord);
+
+    atom_max(maxData, src0.x);
+    atom_min(minData, src0.x);
+}

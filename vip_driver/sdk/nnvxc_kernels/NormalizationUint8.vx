@@ -1,0 +1,1043 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int   in_zeros_point;
+_viv_uniform float out_zeros_point;
+_viv_uniform float in_scale_fl32;
+_viv_uniform float out_scale_fl32;
+_viv_uniform float alphaDivNs11Uint8;
+_viv_uniform VXC_512Bits UniformDp4x4_subZeroToFloatLower;
+_viv_uniform VXC_512Bits Uniform_Dp2x8_int32ToUint8;
+_viv_uniform float bias;
+
+__kernel void vxcNormalization_AcrossMapsNs11Uint8toUint8(
+    __read_only  image2d_array_t   input,
+    int               width,
+    int               height,
+    int               channel,
+    int               type,
+    int               norm_size,
+    float             alpha,
+    float             beta,
+    __write_only image2d_array_t   output)
+{
+    int4 coordIn = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    int4 coordOut = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    vxc_uchar4  din0, din1, din2, din3, din4, din5, din;
+    vxc_uchar4  input_zp;
+    float4      din0Fl32, din1Fl32, din2Fl32, din3Fl32,
+        din4Fl32, din5Fl32, din6Fl32, din7Fl32,
+        din8Fl32, din9Fl32, din10Fl32, dinFl32, doutFl32;
+    float4      sum, sumCompute;
+    int4        output_int4;
+    vxc_uchar16 output_data;
+
+    VXC_ReadImage2DArray(din0, input, coordIn, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coordIn.z++;
+    VXC_ReadImage2DArray(din1, input, coordIn, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coordIn.z++;
+    VXC_ReadImage2DArray(din2, input, coordIn, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coordIn.z++;
+    VXC_ReadImage2DArray(din3, input, coordIn, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coordIn.z++;
+    VXC_ReadImage2DArray(din4, input, coordIn, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coordIn.z++;
+    VXC_ReadImage2DArray(din5, input, coordIn, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(CONV, input_zp , in_zeros_point );
+    VXC_DP4x4(din0Fl32, din0, input_zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDp4x4_subZeroToFloatLower);
+    din0Fl32 = din0Fl32 * in_scale_fl32;
+    VXC_DP4x4(din1Fl32, din1, input_zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDp4x4_subZeroToFloatLower);
+    din1Fl32 = din1Fl32 * in_scale_fl32;
+    VXC_DP4x4(din2Fl32, din2, input_zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDp4x4_subZeroToFloatLower);
+    din2Fl32 = din2Fl32 * in_scale_fl32;
+    VXC_DP4x4(din3Fl32, din3, input_zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDp4x4_subZeroToFloatLower);
+    din3Fl32 = din3Fl32 * in_scale_fl32;
+    VXC_DP4x4(din4Fl32, din4, input_zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDp4x4_subZeroToFloatLower);
+    din4Fl32 = din4Fl32 * in_scale_fl32;
+    VXC_DP4x4(din5Fl32, din5, input_zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDp4x4_subZeroToFloatLower);
+    din5Fl32 = din5Fl32 * in_scale_fl32;
+
+    sum  = din0Fl32 * din0Fl32;
+    sum += din1Fl32 * din1Fl32;
+    sum += din2Fl32 * din2Fl32;
+    sum += din3Fl32 * din3Fl32;
+    sum += din4Fl32 * din4Fl32;
+    sum += din5Fl32 * din5Fl32;
+
+    sumCompute = sum * alphaDivNs11Uint8;
+    sumCompute += bias;
+    sumCompute = rsqrt(sumCompute);
+    doutFl32 = din0Fl32;
+    sumCompute = din0Fl32 * sumCompute;
+
+    sumCompute = sumCompute * out_scale_fl32 + out_zeros_point;
+    output_int4 = convert_int4_rte(sumCompute);
+    VXC_DP2x8(output_data, output_int4, output_int4, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), Uniform_Dp2x8_int32ToUint8);
+    VXC_WriteImage2DArray(output, coordOut, output_data, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    int i = 1;
+    while(i < channel)
+    {
+        coordOut.z = i;
+        coordIn.z++;
+        if(i < channel - 5)
+        {
+            VXC_ReadImage2DArray(din, input, coordIn, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            VXC_DP4x4(dinFl32, din, input_zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDp4x4_subZeroToFloatLower);
+            dinFl32 = dinFl32 * in_scale_fl32;
+            sum += dinFl32 * dinFl32;
+        }
+        if(i == 1)
+        {
+            doutFl32 = din1Fl32;
+            din6Fl32 = dinFl32;
+        }
+        else if(i == 2)
+        {
+            doutFl32 = din2Fl32;
+            din7Fl32 = dinFl32;
+        }
+        else if(i == 3)
+        {
+            doutFl32 = din3Fl32;
+            din8Fl32 = dinFl32;
+        }
+        else if(i == 4)
+        {
+            doutFl32 = din4Fl32;
+            din9Fl32 = dinFl32;
+        }
+        else if(i == 5)
+        {
+            doutFl32 = din5Fl32;
+            din10Fl32 = dinFl32;
+        }
+        else
+        {
+            sum -= din0Fl32 * din0Fl32;
+            doutFl32 = din6Fl32;
+            din0Fl32 = din1Fl32;
+            din1Fl32 = din2Fl32;
+            din2Fl32 = din3Fl32;
+            din3Fl32 = din4Fl32;
+            din4Fl32 = din5Fl32;
+            din5Fl32 = din6Fl32;
+            din6Fl32 = din7Fl32;
+            din7Fl32 = din8Fl32;
+            din8Fl32 = din9Fl32;
+            din9Fl32 = din10Fl32;
+            din10Fl32 = dinFl32;
+        }
+
+        sumCompute = sum * alphaDivNs11Uint8;
+        sumCompute += bias;
+        sumCompute = rsqrt(sumCompute);
+        sumCompute = doutFl32 * sumCompute;
+
+        sumCompute = sumCompute * out_scale_fl32 + out_zeros_point;
+        output_int4 = convert_int4_rte(sumCompute);
+        VXC_DP2x8(output_data, output_int4, output_int4, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), Uniform_Dp2x8_int32ToUint8);
+        VXC_WriteImage2DArray(output, coordOut, output_data, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        i++;
+    }
+
+}
+_viv_uniform VXC_512Bits uniConvertUint8ToFp32_4x4;
+_viv_uniform VXC_512Bits uniConvertSubZpUint8Fp32_4x4;
+_viv_uniform VXC_512Bits uniConvertInt32toUint8_2x8;
+_viv_uniform int input_ZP;
+_viv_uniform float output_ZP;
+_viv_uniform float inputScale;
+_viv_uniform float outputScale;
+_viv_uniform float alpha_nsz;
+
+__kernel void vxcNormalization_AcrossMapsNs5Uint8toUint8
+    (
+    __read_only  image2d_array_t   input,
+    int               width,
+    int               height,
+    int               channel,
+    int               type,
+    int               norm_size,
+    float             alpha,
+    float             beta,
+    __write_only image2d_array_t   output)
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+    int4 coord_in = (int4)(gidx, gidy, gidz, 0);
+    vxc_uchar16 img_val;
+    vxc_uchar16 out_val;
+    vxc_float4 tmpVal0, tmpVal1, tmpVal2, tmpVal3, tmpRow0, tmpRow1;
+    uchar zp = input_ZP;
+    vxc_int4 tmpOut = 0;
+    vxc_int4 tmpOut1 = 0;
+    vxc_float4 tmp = 0;
+    vxc_float4 tmp1 = 0;
+    vxc_float4 sum = {0, 0, 0, 0};
+    vxc_float4 sum1 = {0, 0, 0, 0};
+    int nsz2 = norm_size / 2;
+    VXC_ReadImage2DArray(img_val, input,  coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(tmpVal0, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertUint8ToFp32_4x4);
+    VXC_DP4x4(tmpVal2, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertSubZpUint8Fp32_4x4);
+    tmpRow0 = (tmpVal0) * inputScale;
+    sum += tmpRow0 * tmpRow0;
+    tmpRow1 = (tmpVal2) * inputScale;
+    sum1 += tmpRow1 * tmpRow1;
+
+    int i = gidz - 1;
+    if(i >= 0)
+    {
+        coord_in.z = i;
+        VXC_ReadImage2DArray(img_val, input,  coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(tmpVal0, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertUint8ToFp32_4x4);
+        VXC_DP4x4(tmpVal2, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertSubZpUint8Fp32_4x4);
+        tmpVal1 = (tmpVal0) * inputScale;
+        sum += tmpVal1 * tmpVal1;
+        tmpVal3 = (tmpVal2) * inputScale;
+        sum1 += tmpVal3 * tmpVal3;
+    }
+    i--;
+    if(i >= 0)
+    {
+        coord_in.z = i;
+        VXC_ReadImage2DArray(img_val, input,  coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(tmpVal0, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertUint8ToFp32_4x4);
+        VXC_DP4x4(tmpVal2, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertSubZpUint8Fp32_4x4);
+        tmpVal1 = (tmpVal0) * inputScale;
+        sum += tmpVal1 * tmpVal1;
+        tmpVal3 = (tmpVal2) * inputScale;
+        sum1 += tmpVal3 * tmpVal3;
+    }
+    i = gidz + 1;
+    if(i < channel)
+    {
+        coord_in.z = i;
+        VXC_ReadImage2DArray(img_val, input,  coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(tmpVal0, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertUint8ToFp32_4x4);
+        VXC_DP4x4(tmpVal2, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertSubZpUint8Fp32_4x4);
+        tmpVal1 = (tmpVal0) * inputScale;
+        sum += tmpVal1 * tmpVal1;
+        tmpVal3 = (tmpVal2) * inputScale;
+        sum1 += tmpVal3 * tmpVal3;
+    }
+    i++;
+    if(i < channel)
+    {
+        coord_in.z = i;
+        VXC_ReadImage2DArray(img_val, input,  coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(tmpVal0, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertUint8ToFp32_4x4);
+        VXC_DP4x4(tmpVal2, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertSubZpUint8Fp32_4x4);
+        tmpVal1 = (tmpVal0) * inputScale;
+        sum += tmpVal1 * tmpVal1;
+        tmpVal3 = (tmpVal2) * inputScale;
+        sum1 += tmpVal3 * tmpVal3;
+    }
+    coord_in.z = gidz;
+    tmp = (bias+(alpha_nsz)*sum);
+    tmp = tmp * tmp * tmp;
+    tmp = sqrt(tmp);
+    tmp = rsqrt(tmp);
+    tmp *= tmpRow0;
+    tmpOut = convert_int4_rte(tmp * outputScale + output_ZP);
+    tmpOut = clamp(tmpOut, 0, 255);
+
+    tmp1 = (bias+(alpha_nsz)*sum1);
+    tmp1 = tmp1 * tmp1 * tmp1;
+    tmp1 = sqrt(tmp1);
+    tmp1 = rsqrt(tmp1);
+    tmp1 *= tmpRow1;
+    tmpOut1 = convert_int4_rte(tmp1 * outputScale + output_ZP);
+    tmpOut1 = clamp(tmpOut1, 0, 255);
+    VXC_DP2x8(out_val, tmpOut, tmpOut1, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniConvertInt32toUint8_2x8);
+    VXC_WriteImage2DArray(output, coord_in, out_val, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcNormalization_AcrossMapsNs3Uint8toUint8
+    (
+    __read_only  image2d_array_t   input,
+    int               width,
+    int               height,
+    int               channel,
+    int               type,
+    int               norm_size,
+    float             alpha,
+    float             beta,
+    __write_only image2d_array_t   output)
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+    int4 coord_in = (int4)(gidx, gidy, gidz, 0);
+    vxc_uchar16 img_val;
+    vxc_uchar16 out_val;
+    vxc_float4 tmpVal0, tmpVal1, tmpVal2, tmpVal3, tmpRow0, tmpRow1;
+    uchar zp = input_ZP;
+    vxc_int4 tmpOut = 0;
+    vxc_int4 tmpOut1 = 0;
+    vxc_float4 tmp = 0;
+    vxc_float4 tmp1 = 0;
+    vxc_float4 sum = {0, 0, 0, 0};
+    vxc_float4 sum1 = {0, 0, 0, 0};
+    int nsz2 = norm_size / 2;
+    VXC_ReadImage2DArray(img_val, input,  coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(tmpVal0, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertUint8ToFp32_4x4);
+    VXC_DP4x4(tmpVal2, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertSubZpUint8Fp32_4x4);
+    tmpRow0 = (tmpVal0) * inputScale;
+    sum += tmpRow0 * tmpRow0;
+    tmpRow1 = (tmpVal2) * inputScale;
+    sum1 += tmpRow1 * tmpRow1;
+
+    int i = gidz - 1;
+    if(i >= 0)
+    {
+        coord_in.z = i;
+        VXC_ReadImage2DArray(img_val, input,  coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(tmpVal0, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertUint8ToFp32_4x4);
+        VXC_DP4x4(tmpVal2, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertSubZpUint8Fp32_4x4);
+        tmpVal1 = (tmpVal0) * inputScale;
+        sum += tmpVal1 * tmpVal1;
+        tmpVal3 = (tmpVal2) * inputScale;
+        sum1 += tmpVal3 * tmpVal3;
+    }
+    i = gidz + 1;
+    if(i < channel)
+    {
+        coord_in.z = i;
+        VXC_ReadImage2DArray(img_val, input,  coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(tmpVal0, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertUint8ToFp32_4x4);
+        VXC_DP4x4(tmpVal2, img_val, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertSubZpUint8Fp32_4x4);
+        tmpVal1 = (tmpVal0) * inputScale;
+        sum += tmpVal1 * tmpVal1;
+        tmpVal3 = (tmpVal2) * inputScale;
+        sum1 += tmpVal3 * tmpVal3;
+    }
+    coord_in.z = gidz;
+    tmp = (bias+(alpha_nsz)*sum);
+    tmp = tmp * tmp * tmp;
+    tmp = sqrt(tmp);
+    tmp = rsqrt(tmp);
+    tmp *= tmpRow0;
+    tmpOut = convert_int4_rte(tmp * outputScale + output_ZP);
+    tmp1 = (bias+(alpha_nsz)*sum1);
+    tmp1 = tmp1 * tmp1 * tmp1;
+    tmp1 = sqrt(tmp1);
+    tmp1 = rsqrt(tmp1);
+    tmp1 *= tmpRow1;
+    tmpOut1 = convert_int4_rte(tmp1 * outputScale + output_ZP);
+    VXC_DP2x8(out_val, tmpOut, tmpOut1, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniConvertInt32toUint8_2x8);
+    VXC_WriteImage2DArray(output, coord_in, out_val, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform int inputZPGen;
+_viv_uniform float inputScaleGen;
+_viv_uniform float alphaNszGen;
+_viv_uniform float outputScaleGen;
+_viv_uniform float outputZPGen;
+_viv_uniform int nsz_div2_acrgen;
+_viv_uniform VXC_512Bits uniUint8SubZPtoFp32Lo_dp4x4;
+_viv_uniform VXC_512Bits uniUint8SubZPtoFp32Hi_dp4x4;
+_viv_uniform VXC_512Bits uniInt32toUint8_dp2x8;
+__kernel void vxcNormalization_AcrossMapsGenUint8toUint8(
+    __read_only  image2d_array_t   input,
+    int               width,
+    int               height,
+    int               channel,
+    int               type,
+    int               norm_size,
+    float             alpha,
+    float             beta,
+    __write_only image2d_array_t   output)
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    vxc_uchar8 src;
+    float4 sum_lo;
+    float4 sum_hi;
+    float4 tmp;
+    uchar inputZP;
+    _viv_asm(COPY, inputZP, inputZPGen, 4);
+    for(int ch = 0; ch <= nsz_div2_acrgen && ch < channel; ch++)
+    {
+        sum_lo = 0;
+        sum_hi = 0;
+        for(coord_in.z = ch - nsz_div2_acrgen; coord_in.z <= ch + nsz_div2_acrgen && coord_in.z < channel; coord_in.z++)
+        {
+            if(coord_in.z < 0)
+                continue;
+            VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+            tmp *= inputScaleGen;
+            sum_lo += tmp * tmp;
+            VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+            tmp *= inputScaleGen;
+            sum_hi += tmp * tmp;
+        }
+        coord_in.z = ch;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        float4 sum2;
+        sum2 = mad(sum_lo, alphaNszGen, bias);
+        sum2 = exp2(beta*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        tmp = tmp * outputScaleGen + outputZPGen;
+        int4 valIntLo;
+        valIntLo = convert_int4_rte(tmp);
+        sum2 = mad(sum_hi, alphaNszGen, bias);
+        sum2 = exp2(beta*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        tmp = tmp * outputScaleGen + outputZPGen;
+        int4 valIntHi;
+        valIntHi = convert_int4_rte(tmp);
+        VXC_DP2x8(src, valIntLo, valIntHi, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniInt32toUint8_dp2x8);
+        VXC_WriteImage2DArray(output, coord_in, src, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    }
+    for(int ch = nsz_div2_acrgen + 1; ch < channel - nsz_div2_acrgen; ch++)
+    {
+        vxc_uchar8 src1,src2;
+        coord_in.z = ch - nsz_div2_acrgen - 1;
+        VXC_ReadImage2DArray(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_in.z = ch + nsz_div2_acrgen;
+        VXC_ReadImage2DArray(src2, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(tmp, src1, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        sum_lo -= tmp * tmp;
+        VXC_DP4x4(tmp, src2, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        sum_lo += tmp * tmp;
+        VXC_DP4x4(tmp, src1, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+        tmp *= inputScaleGen;
+        sum_hi -= tmp * tmp;
+        VXC_DP4x4(tmp, src2, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+        tmp *= inputScaleGen;
+        sum_hi += tmp * tmp;
+        coord_in.z = ch;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        float4 sum2;
+        sum2 = mad(sum_lo, alphaNszGen, bias);
+        sum2 = exp2(beta*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        tmp = tmp * outputScaleGen + outputZPGen;
+        int4 valIntLo;
+        valIntLo = convert_int4_rte(tmp);
+        sum2 = mad(sum_hi, alphaNszGen, bias);
+        sum2 = exp2(beta*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        tmp = tmp * outputScaleGen + outputZPGen;
+        int4 valIntHi;
+        valIntHi = convert_int4_rte(tmp);
+        VXC_DP2x8(src, valIntLo, valIntHi, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniInt32toUint8_dp2x8);
+        VXC_WriteImage2DArray(output, coord_in, src, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    }
+    for(int ch = channel - nsz_div2_acrgen; ch < channel && ch > 0; ch++)
+    {
+        sum_lo = 0;
+        sum_hi = 0;
+        for(coord_in.z = ch - nsz_div2_acrgen; coord_in.z <= ch + nsz_div2_acrgen && coord_in.z < channel; coord_in.z++)
+        {
+            if(coord_in.z < 0)
+                continue;
+            VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+            tmp *= inputScaleGen;
+            sum_lo += tmp * tmp;
+            VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+            tmp *= inputScaleGen;
+            sum_hi += tmp * tmp;
+        }
+        coord_in.z = ch;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        float4 sum2;
+        sum2 = mad(sum_lo, alphaNszGen, bias);
+        sum2 = exp2(beta*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        tmp = tmp * outputScaleGen + outputZPGen;
+        int4 valIntLo;
+        valIntLo = convert_int4_rte(tmp);
+        sum2 = mad(sum_hi, alphaNszGen, bias);
+        sum2 = exp2(beta*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        tmp = tmp * outputScaleGen + outputZPGen;
+        int4 valIntHi;
+        valIntHi = convert_int4_rte(tmp);
+        VXC_DP2x8(src, valIntLo, valIntHi, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniInt32toUint8_dp2x8);
+        VXC_WriteImage2DArray(output, coord_in, src, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcNormalization_AcrossMapsGenInt8toInt8(
+    __read_only  image2d_array_t   input,
+    int               width,
+    int               height,
+    int               channel,
+    int               type,
+    int               norm_size,
+    float             alpha,
+    float             beta,
+    __write_only image2d_array_t   output)
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    vxc_char8 src;
+    float4 sum_lo;
+    float4 tmp;
+    short inputZP = (short)inputZPGen;
+    float4 betas = (float4)(beta, beta, beta, beta);
+    for(int ch = 0; ch <= nsz_div2_acrgen && ch < channel; ch++)
+    {
+        sum_lo = 0;
+        for(coord_in.z = ch - nsz_div2_acrgen; coord_in.z <= ch + nsz_div2_acrgen && coord_in.z < channel; coord_in.z++)
+        {
+            if(coord_in.z < 0)
+                continue;
+            VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+            tmp *= inputScaleGen;
+            sum_lo += tmp * tmp;
+        }
+        coord_in.z = ch;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        float4 sum2;
+        sum2 = mad(sum_lo, alphaNszGen, bias);
+        sum2 = exp2(betas*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        tmp = tmp * outputScaleGen + outputZPGen;
+        int4 valIntLo;
+        valIntLo = convert_int4_rte(tmp);
+        VXC_DP2x8(src, valIntLo, valIntLo, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniInt32toUint8_dp2x8);
+        VXC_WriteImage2DArray(output, coord_in, src, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    }
+    for(int ch = nsz_div2_acrgen + 1; ch < channel - nsz_div2_acrgen; ch++)
+    {
+        vxc_char8 src1,src2;
+        coord_in.z = ch - nsz_div2_acrgen - 1;
+        VXC_ReadImage2DArray(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        coord_in.z = ch + nsz_div2_acrgen;
+        VXC_ReadImage2DArray(src2, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(tmp, src1, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        sum_lo -= tmp * tmp;
+        VXC_DP4x4(tmp, src2, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        sum_lo += tmp * tmp;
+        coord_in.z = ch;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        float4 sum2;
+        sum2 = mad(sum_lo, alphaNszGen, bias);
+        //sum2 = pow(sum2, beta);
+        sum2 = exp2(betas*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        tmp = tmp * outputScaleGen + outputZPGen;
+        int4 valIntLo;
+        valIntLo = convert_int4_rte(tmp);
+        VXC_DP2x8(src, valIntLo, valIntLo, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniInt32toUint8_dp2x8);
+        VXC_WriteImage2DArray(output, coord_in, src, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    }
+    for(int ch = channel - nsz_div2_acrgen; ch < channel && ch > 0; ch++)
+    {
+        sum_lo = 0;
+        for(coord_in.z = ch - nsz_div2_acrgen; coord_in.z <= ch + nsz_div2_acrgen && coord_in.z < channel; coord_in.z++)
+        {
+            if(coord_in.z < 0)
+                continue;
+            VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+            VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+            tmp *= inputScaleGen;
+            sum_lo += tmp * tmp;
+        }
+        coord_in.z = ch;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        float4 sum2;
+        sum2 = mad(sum_lo, alphaNszGen, bias);
+        //sum2 = pow(sum2, beta);
+        sum2 = exp2(betas*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        tmp = tmp * outputScaleGen + outputZPGen;
+        int4 valIntLo;
+        valIntLo = convert_int4_rte(tmp);
+        VXC_DP2x8(src, valIntLo, valIntLo, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniInt32toUint8_dp2x8);
+        VXC_WriteImage2DArray(output, coord_in, src, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+_viv_uniform VXC_512Bits uniConvertHalftoFp16_2x8;
+__kernel void vxcNormalization_AcrossMapsGenUint8toFp16(
+    __read_only  image2d_array_t   input,
+    int               width,
+    int               height,
+    int               channel,
+    int               type,
+    int               norm_size,
+    float             alpha,
+    float             beta,
+    __write_only image2d_array_t   output)
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    vxc_uchar8 src;
+    float4 sum_lo;
+    float4 sum_hi;
+    float4 tmp;
+    uchar inputZP;
+    vxc_half8 dst;
+    vxc_short8 result;
+    _viv_asm(COPY, inputZP, inputZPGen, 4);
+    for(int ch = 0; ch <= nsz_div2_acrgen && ch < channel; ch++)
+    {
+        sum_lo = 0;
+        sum_hi = 0;
+        for(coord_in.z = ch - nsz_div2_acrgen; coord_in.z <= ch + nsz_div2_acrgen && coord_in.z < channel; coord_in.z++)
+        {
+            if(coord_in.z < 0)
+                continue;
+            VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+            tmp *= inputScaleGen;
+            sum_lo += tmp * tmp;
+            VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+            tmp *= inputScaleGen;
+            sum_hi += tmp * tmp;
+        }
+        coord_in.z = ch;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        float4 sum2;
+        sum2 = mad(sum_lo, alphaNszGen, bias);
+        sum2 = exp2(beta*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        half4 valIntLo;
+        _viv_asm(CONV, valIntLo, tmp);
+        sum2 = mad(sum_hi, alphaNszGen, bias);
+        sum2 = exp2(beta*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        half4 valIntHi;
+        _viv_asm(CONV, valIntHi, tmp);
+        VXC_DP2x8(dst, valIntLo, valIntHi, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvertHalftoFp16_2x8);
+        _viv_asm(COPY, result, dst, 16);
+        VXC_WriteImage2DArray(output, coord_in, result, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    }
+    for(int ch = nsz_div2_acrgen + 1; ch < channel - nsz_div2_acrgen; ch++)
+    {
+        vxc_uchar8 src1,src2;
+        coord_in.z = ch - nsz_div2_acrgen - 1;
+        VXC_ReadImage2DArray(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_in.z = ch + nsz_div2_acrgen;
+        VXC_ReadImage2DArray(src2, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(tmp, src1, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        sum_lo -= tmp * tmp;
+        VXC_DP4x4(tmp, src2, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        sum_lo += tmp * tmp;
+        VXC_DP4x4(tmp, src1, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+        tmp *= inputScaleGen;
+        sum_hi -= tmp * tmp;
+        VXC_DP4x4(tmp, src2, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+        tmp *= inputScaleGen;
+        sum_hi += tmp * tmp;
+        coord_in.z = ch;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        float4 sum2;
+        sum2 = mad(sum_lo, alphaNszGen, bias);
+        sum2 = exp2(beta*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        half4 valIntLo;
+        _viv_asm(CONV, valIntLo, tmp);
+        sum2 = mad(sum_hi, alphaNszGen, bias);
+        sum2 = exp2(beta*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        half4 valIntHi;
+        _viv_asm(CONV, valIntHi, tmp);
+        VXC_DP2x8(dst, valIntLo, valIntHi, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvertHalftoFp16_2x8);
+        _viv_asm(COPY, result, dst, 16);
+        VXC_WriteImage2DArray(output, coord_in, result, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    }
+    for(int ch = channel - nsz_div2_acrgen; ch < channel && ch > 0; ch++)
+    {
+        sum_lo = 0;
+        sum_hi = 0;
+        for(coord_in.z = ch - nsz_div2_acrgen; coord_in.z <= ch + nsz_div2_acrgen && coord_in.z < channel; coord_in.z++)
+        {
+            if(coord_in.z < 0)
+                continue;
+            VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+            tmp *= inputScaleGen;
+            sum_lo += tmp * tmp;
+            VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+            tmp *= inputScaleGen;
+            sum_hi += tmp * tmp;
+        }
+        coord_in.z = ch;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        float4 sum2;
+        sum2 = mad(sum_lo, alphaNszGen, bias);
+        sum2 = exp2(beta*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Lo_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        half4 valIntLo;
+        _viv_asm(CONV, valIntLo, tmp);
+        sum2 = mad(sum_hi, alphaNszGen, bias);
+        sum2 = exp2(beta*log2(sum2));
+        VXC_DP4x4(tmp, src, inputZP, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniUint8SubZPtoFp32Hi_dp4x4);
+        tmp *= inputScaleGen;
+        tmp = tmp / sum2;
+        half4 valIntHi;
+        _viv_asm(CONV, valIntHi, tmp);
+        VXC_DP2x8(dst, valIntLo, valIntHi, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvertHalftoFp16_2x8);
+        _viv_asm(COPY, result, dst, 16);
+        VXC_WriteImage2DArray(output, coord_in, result, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+_viv_uniform VXC_512Bits uniSqrSumUint8_16x1;
+_viv_uniform VXC_512Bits uniSqrSumUint8N_16x1;
+_viv_uniform VXC_512Bits uniConvertUint8SubZpToFp32_4x4;
+
+_viv_uniform int input_X8SqrZP;
+_viv_uniform int input_ResSqrZP;
+_viv_uniform float inputSqrScale;
+_viv_uniform float inOut_Scale;
+_viv_uniform int nsz_div2_samgen;
+_viv_uniform int x_len_8x;
+_viv_uniform int x_len_remain;
+_viv_uniform float alpha_nsz_samgen;
+
+__kernel void vxcNormalization_genSameMapUint8In(
+    __read_only  image2d_array_t   input,
+    int               width,
+    int               height,
+    int               channel,
+    int               type,
+    int               norm_size,
+    float             alpha,
+    float             beta,
+    __write_only image2d_array_t   output)
+{
+    int4 coord_in = (int4)(get_global_id(0), 0, get_global_id(2), 0);
+    int coord_w = coord_in.x;
+    vxc_uchar8 src;
+
+    float sum = 0;
+    int intSum = 0;
+    int tmpSum = 0;
+
+    short zp = input_ZP;
+    short tmpZp = zp << 1;
+
+    for (int h = 0; (h <= nsz_div2_samgen) && (h < height); h++)
+    {
+        sum = 0;
+        intSum = 0;
+        for (coord_in.y = h - nsz_div2_samgen; coord_in.y <= h + nsz_div2_samgen; coord_in.y++)
+        {
+            if((coord_in.y < 0) || (coord_in.y >= height))
+                continue;
+            coord_in.x = coord_w - nsz_div2_samgen;
+            if (x_len_8x)
+            {
+                for (; coord_in.x <= (coord_w + nsz_div2_samgen - 8); coord_in.x += 8)
+                {
+                    VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                    VXC_DP16x1(tmpSum, src, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8_16x1);
+                    intSum += tmpSum;
+                }
+                intSum += input_X8SqrZP;
+            }
+            if (x_len_remain)
+            {
+                VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_DP16x1(tmpSum, src, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8N_16x1);
+                intSum += (tmpSum + input_ResSqrZP);
+            }
+        }
+        sum = intSum * inputSqrScale;
+
+        coord_in.x = coord_w;
+        coord_in.y = h;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        float sum2;
+        sum2 = mad(sum, alpha_nsz_samgen, bias);
+        //sum2 = pow(sum2, beta);
+        sum2 = exp2(beta*log2(sum2));
+        float4 val_f;
+        VXC_DP4x4(val_f, src, zp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvertUint8SubZpToFp32_4x4);
+        float val = val_f.x * inOut_Scale / sum2 + output_ZP;
+        int4 dst;
+        dst.x = convert_int_rte(val);
+        VXC_DP2x8(src, dst, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_ToNearestEven, 1), uniConvertInt32toUint8_2x8);
+        VXC_WriteImage2DArray(output, coord_in, src, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+    for (int h = nsz_div2_samgen + 1; h < height - nsz_div2_samgen; h++)
+    {
+        vxc_uchar8 src1,src2;
+        coord_in.x = coord_w - nsz_div2_samgen;
+        intSum = 0;
+        int tmpSum1 = 0;
+
+        if (x_len_8x)
+        {
+            for (; coord_in.x <= (coord_w + nsz_div2_samgen - 8); coord_in.x += 8)
+            {
+                coord_in.y = h - nsz_div2_samgen - 1;
+                VXC_ReadImage2DArray(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                coord_in.y = h + nsz_div2_samgen;
+                VXC_ReadImage2DArray(src2, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_DP16x1(tmpSum, src1, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8_16x1);
+                VXC_DP16x1(tmpSum1, src2, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8_16x1);
+                intSum += (tmpSum1 - tmpSum);
+            }
+        }
+        if (x_len_remain)
+        {
+            coord_in.y = h - nsz_div2_samgen - 1;
+            VXC_ReadImage2DArray(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            coord_in.y = h + nsz_div2_samgen;
+            VXC_ReadImage2DArray(src2, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+            VXC_DP16x1(tmpSum, src1, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8N_16x1);
+            VXC_DP16x1(tmpSum1, src2, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8N_16x1);
+            intSum += (tmpSum1 - tmpSum);
+        }
+        sum += intSum * inputSqrScale;
+
+        coord_in.x = coord_w;
+        coord_in.y = h;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        float sum2;
+        sum2 = mad(sum, alpha_nsz_samgen, bias);
+        //sum2 = pow(sum2, beta);
+        sum2 = exp2(beta*log2(sum2));
+        float4 val_f;
+        VXC_DP4x4(val_f, src, zp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvertUint8SubZpToFp32_4x4);
+        float val = val_f.x * inOut_Scale / sum2 + output_ZP;
+        int4 dst;
+        dst.x = convert_int_rte(val);
+        VXC_DP2x8(src, dst, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_ToNearestEven, 1), uniConvertInt32toUint8_2x8);
+        VXC_WriteImage2DArray(output, coord_in, src, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+    for (int h = height - nsz_div2_samgen; (h < height) && (h > 0); h++)
+    {
+        sum = 0;
+        intSum = 0;
+        for (coord_in.y = h - nsz_div2_samgen; coord_in.y <= h + nsz_div2_samgen; coord_in.y++)
+        {
+            if((coord_in.y >= height) || (coord_in.y < 0))
+                continue;
+            coord_in.x = coord_w - nsz_div2_samgen;
+            if (x_len_8x)
+            {
+                for (; coord_in.x <= (coord_w + nsz_div2_samgen - 8); coord_in.x += 8)
+                {
+                    VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                    VXC_DP16x1(tmpSum, src, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8_16x1);
+                    intSum += tmpSum;
+                }
+                intSum += input_X8SqrZP;
+            }
+            if (x_len_remain)
+            {
+                VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_DP16x1(tmpSum, src, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8N_16x1);
+                intSum += (tmpSum + input_ResSqrZP);
+            }
+        }
+        sum += intSum * inputSqrScale;
+        coord_in.x = coord_w;
+        coord_in.y = h;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        float sum2;
+        sum2 = mad(sum, alpha_nsz_samgen, bias);
+        //sum2 = pow(sum2, beta);
+        sum2 = exp2(beta*log2(sum2));
+        float4 val_f;
+        VXC_DP4x4(val_f, src, zp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvertUint8SubZpToFp32_4x4);
+        float val = val_f.x * inOut_Scale / sum2 + output_ZP;
+        int4 dst;
+        dst.x = convert_int_rte(val);
+        VXC_DP2x8(src, dst, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_ToNearestEven, 1), uniConvertInt32toUint8_2x8);
+        VXC_WriteImage2DArray(output, coord_in, src, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcNormalization_genSameMapInt8In(
+    __read_only  image2d_array_t   input,
+    int               width,
+    int               height,
+    int               channel,
+    int               type,
+    int               norm_size,
+    float             alpha,
+    float             beta,
+    __write_only image2d_array_t   output)
+{
+    int4 coord_in = (int4)(get_global_id(0), 0, get_global_id(2), 0);
+    int coord_w = coord_in.x;
+    vxc_char8 src;
+
+    float sum = 0;
+    int intSum = 0;
+    int tmpSum = 0;
+
+    short zp = input_ZP;
+    short tmpZp = zp << 1;
+
+    for (int h = 0; (h <= nsz_div2_samgen) && (h < height); h++)
+    {
+        sum = 0;
+        intSum = 0;
+        for (coord_in.y = h - nsz_div2_samgen; coord_in.y <= h + nsz_div2_samgen; coord_in.y++)
+        {
+            if((coord_in.y < 0) || (coord_in.y >= height))
+                continue;
+            coord_in.x = coord_w - nsz_div2_samgen;
+            if (x_len_8x)
+            {
+                for (; coord_in.x <= (coord_w + nsz_div2_samgen - 8); coord_in.x += 8)
+                {
+                    VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                    VXC_DP16x1(tmpSum, src, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8_16x1);
+                    intSum += tmpSum;
+                }
+                intSum += input_X8SqrZP;
+            }
+            if (x_len_remain)
+            {
+                VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_DP16x1(tmpSum, src, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8N_16x1);
+                intSum += (tmpSum + input_ResSqrZP);
+            }
+        }
+        sum = intSum * inputSqrScale;
+
+        coord_in.x = coord_w;
+        coord_in.y = h;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        float sum2;
+        sum2 = mad(sum, alpha_nsz_samgen, bias);
+        //sum2 = pow(sum2, beta);
+        sum2 = exp2(beta*log2(sum2));
+        float4 val_f;
+        VXC_DP4x4(val_f, src, zp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvertUint8SubZpToFp32_4x4);
+        float val = val_f.x * inOut_Scale / sum2 + output_ZP;
+        int4 dst;
+        dst.x = convert_int_rte(val);
+        VXC_DP2x8(src, dst, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_ToNearestEven, 1), uniConvertInt32toUint8_2x8);
+        VXC_WriteImage2DArray(output, coord_in, src, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+    for (int h = nsz_div2_samgen + 1; h < height - nsz_div2_samgen; h++)
+    {
+        vxc_char8 src1,src2;
+        coord_in.x = coord_w - nsz_div2_samgen;
+        intSum = 0;
+        int tmpSum1 = 0;
+
+        if (x_len_8x)
+        {
+            for (; coord_in.x <= (coord_w + nsz_div2_samgen - 8); coord_in.x += 8)
+            {
+                coord_in.y = h - nsz_div2_samgen - 1;
+                VXC_ReadImage2DArray(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                coord_in.y = h + nsz_div2_samgen;
+                VXC_ReadImage2DArray(src2, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_DP16x1(tmpSum, src1, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8_16x1);
+                VXC_DP16x1(tmpSum1, src2, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8_16x1);
+                intSum += (tmpSum1 - tmpSum);
+            }
+        }
+        if (x_len_remain)
+        {
+            coord_in.y = h - nsz_div2_samgen - 1;
+            VXC_ReadImage2DArray(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            coord_in.y = h + nsz_div2_samgen;
+            VXC_ReadImage2DArray(src2, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+            VXC_DP16x1(tmpSum, src1, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8N_16x1);
+            VXC_DP16x1(tmpSum1, src2, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8N_16x1);
+            intSum += (tmpSum1 - tmpSum);
+        }
+        sum += intSum * inputSqrScale;
+
+        coord_in.x = coord_w;
+        coord_in.y = h;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        float sum2;
+        sum2 = mad(sum, alpha_nsz_samgen, bias);
+        //sum2 = pow(sum2, beta);
+        sum2 = exp2(beta*log2(sum2));
+        float4 val_f;
+        VXC_DP4x4(val_f, src, zp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvertUint8SubZpToFp32_4x4);
+        float val = val_f.x * inOut_Scale / sum2 + output_ZP;
+        int4 dst;
+        dst.x = convert_int_rte(val);
+        VXC_DP2x8(src, dst, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_ToNearestEven, 1), uniConvertInt32toUint8_2x8);
+        VXC_WriteImage2DArray(output, coord_in, src, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+    for (int h = height - nsz_div2_samgen; (h < height) && (h > 0); h++)
+    {
+        sum = 0;
+        intSum = 0;
+        for (coord_in.y = h - nsz_div2_samgen; coord_in.y <= h + nsz_div2_samgen; coord_in.y++)
+        {
+            if((coord_in.y >= height) || (coord_in.y < 0))
+                continue;
+            coord_in.x = coord_w - nsz_div2_samgen;
+            if (x_len_8x)
+            {
+                for (; coord_in.x <= (coord_w + nsz_div2_samgen - 8); coord_in.x += 8)
+                {
+                    VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                    VXC_DP16x1(tmpSum, src, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8_16x1);
+                    intSum += tmpSum;
+                }
+                intSum += input_X8SqrZP;
+            }
+            if (x_len_remain)
+            {
+                VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                VXC_DP16x1(tmpSum, src, tmpZp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSqrSumUint8N_16x1);
+                intSum += (tmpSum + input_ResSqrZP);
+            }
+        }
+        sum += intSum * inputSqrScale;
+        coord_in.x = coord_w;
+        coord_in.y = h;
+        VXC_ReadImage2DArray(src, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        float sum2;
+        sum2 = mad(sum, alpha_nsz_samgen, bias);
+        //sum2 = pow(sum2, beta);
+        sum2 = exp2(beta*log2(sum2));
+        float4 val_f;
+        VXC_DP4x4(val_f, src, zp, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvertUint8SubZpToFp32_4x4);
+        float val = val_f.x * inOut_Scale / sum2 + output_ZP;
+        int4 dst;
+        dst.x = convert_int_rte(val);
+        VXC_DP2x8(src, dst, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_ToNearestEven, 1), uniConvertInt32toUint8_2x8);
+        VXC_WriteImage2DArray(output, coord_in, src, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+}

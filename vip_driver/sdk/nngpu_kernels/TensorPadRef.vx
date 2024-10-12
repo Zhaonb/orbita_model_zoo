@@ -1,0 +1,252 @@
+#pragma OPENCL EXTENSION CL_VIV_asm : enable
+
+__kernel void gpuTensorPadRef_F32toBF16
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             inWidthMinus1,
+                 int             inHeightMinus1,
+                 int             inDepthMinus1,
+                 int             out_chn,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+    int4 coord_in = coord_out;
+    coord_in = coord_in - (int4)(padLeft, padTop, padChn, padChn);
+
+    if (coord_in.x < 0)
+    {
+        coord_in.x = -coord_in.x;
+    }
+    else if (coord_in.x >= inWidthMinus1)
+    {
+        coord_in.x = inWidthMinus1 * 2 - coord_in.x;
+    }
+    if (coord_in.y < 0)
+    {
+        coord_in.y = -coord_in.y;
+    }
+    else if (coord_in.y >= inHeightMinus1)
+    {
+        coord_in.y = inHeightMinus1 * 2 - coord_in.y;
+    }
+    if (coord_in.z < 0)
+    {
+        coord_in.z = -coord_in.z;
+    }
+    else if (coord_in.z >= inDepthMinus1)
+    {
+        coord_in.z = inDepthMinus1 * 2 - coord_in.z;
+    }
+
+    float4 tmp = read_imagef(input, coord_in);
+    uint4 src, dst;
+    _viv_asm(COPY, src, tmp, 16);
+    dst = src >> 16;
+    write_imageui(output, coord_out, dst);
+}
+
+__kernel void gpuTensorPadRef_BF16toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             inWidthMinus1,
+                 int             inHeightMinus1,
+                 int             inDepthMinus1,
+                 int             out_chn,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+    int4 coord_in = coord_out;
+    coord_in = coord_in - (int4)(padLeft, padTop, padChn, padChn);
+
+    if (coord_in.x < 0)
+    {
+        coord_in.x = -coord_in.x;
+    }
+    else if (coord_in.x >= inWidthMinus1)
+    {
+        coord_in.x = inWidthMinus1 * 2 - coord_in.x;
+    }
+    if (coord_in.y < 0)
+    {
+        coord_in.y = -coord_in.y;
+    }
+    else if (coord_in.y >= inHeightMinus1)
+    {
+        coord_in.y = inHeightMinus1 * 2 - coord_in.y;
+    }
+    if (coord_in.z < 0)
+    {
+        coord_in.z = -coord_in.z;
+    }
+    else if (coord_in.z >= inDepthMinus1)
+    {
+        coord_in.z = inDepthMinus1 * 2 - coord_in.z;
+    }
+
+    uint4 src = read_imageui(input, coord_in);
+    float4 dst;
+    src = src << 16;
+    _viv_asm(COPY, dst, src, 16);
+    write_imagef(output, coord_out, dst);
+}
+
+__kernel void gpuTensorPadRef_F32toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             inWidthMinus1,
+                 int             inHeightMinus1,
+                 int             inDepthMinus1,
+                 int             out_chn,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+    int4 coord_in = coord_out;
+    coord_in = coord_in - (int4)(padLeft, padTop, padChn, padChn);
+
+    if (coord_in.x < 0)
+    {
+        coord_in.x = -coord_in.x;
+    }
+    else if (coord_in.x >= inWidthMinus1)
+    {
+        coord_in.x = inWidthMinus1 * 2 - coord_in.x;
+    }
+    if (coord_in.y < 0)
+    {
+        coord_in.y = -coord_in.y;
+    }
+    else if (coord_in.y >= inHeightMinus1)
+    {
+        coord_in.y = inHeightMinus1 * 2 - coord_in.y;
+    }
+    if (coord_in.z < 0)
+    {
+        coord_in.z = -coord_in.z;
+    }
+    else if (coord_in.z >= inDepthMinus1)
+    {
+        coord_in.z = inDepthMinus1 * 2 - coord_in.z;
+    }
+
+    float4 src = read_imagef(input, coord_in);
+    write_imagef(output, coord_out, src);
+}
+
+__kernel void gpuTensorPadRef_U32toU32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             inWidthMinus1,
+                 int             inHeightMinus1,
+                 int             inDepthMinus1,
+                 int             out_chn,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+    int4 coord_in = coord_out;
+    coord_in = coord_in - (int4)(padLeft, padTop, padChn, padChn);
+
+    if (coord_in.x < 0)
+    {
+        coord_in.x = -coord_in.x;
+    }
+    else if (coord_in.x >= inWidthMinus1)
+    {
+        coord_in.x = inWidthMinus1 * 2 - coord_in.x;
+    }
+    if (coord_in.y < 0)
+    {
+        coord_in.y = -coord_in.y;
+    }
+    else if (coord_in.y >= inHeightMinus1)
+    {
+        coord_in.y = inHeightMinus1 * 2 - coord_in.y;
+    }
+    if (coord_in.z < 0)
+    {
+        coord_in.z = -coord_in.z;
+    }
+    else if (coord_in.z >= inDepthMinus1)
+    {
+        coord_in.z = inDepthMinus1 * 2 - coord_in.z;
+    }
+
+    uint4 src = read_imageui(input, coord_in);
+    write_imageui(output, coord_out, src);
+}
+
+__kernel void gpuTensorPadRef_I32toI32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             inWidthMinus1,
+                 int             inHeightMinus1,
+                 int             inDepthMinus1,
+                 int             out_chn,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+    int4 coord_in = coord_out;
+    coord_in = coord_in - (int4)(padLeft, padTop, padChn, padChn);
+
+    if (coord_in.x < 0)
+    {
+        coord_in.x = -coord_in.x;
+    }
+    else if (coord_in.x >= inWidthMinus1)
+    {
+        coord_in.x = inWidthMinus1 * 2 - coord_in.x;
+    }
+    if (coord_in.y < 0)
+    {
+        coord_in.y = -coord_in.y;
+    }
+    else if (coord_in.y >= inHeightMinus1)
+    {
+        coord_in.y = inHeightMinus1 * 2 - coord_in.y;
+    }
+    if (coord_in.z < 0)
+    {
+        coord_in.z = -coord_in.z;
+    }
+    else if (coord_in.z >= inDepthMinus1)
+    {
+        coord_in.z = inDepthMinus1 * 2 - coord_in.z;
+    }
+
+    int4 src = read_imagei(input, coord_in);
+    write_imagei(output, coord_out, src);
+}

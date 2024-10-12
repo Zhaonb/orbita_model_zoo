@@ -1,0 +1,61 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniPackU1_16x1;
+_viv_uniform VXC_512Bits uniAddTree_4x8;
+
+__kernel void median_3x3_U8toU8(
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(1), get_global_id(1));
+    vxc_uchar16 src0, src1, src2, src3, src4, dst;
+
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(-1,  0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord.xy, VXC_5BITOFFSET_XY(-1,  1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input, coord.xy, VXC_5BITOFFSET_XY(-1,  2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src4, input, coord.xy, VXC_5BITOFFSET_XY(-1,  3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.zw = coord.yy + (int2)(1, 2);
+
+    VXC_OP4(filter, dst, src0, src1, src2, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Median, 1));
+    VXC_WriteImage(output, coord.xy, dst, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(filter, dst, src1, src2, src3, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Median, 1));
+    VXC_WriteImage(output, coord.xz, dst, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(filter, dst, src2, src3, src4, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Median, 1));
+    VXC_WriteImage(output, coord.xw, dst, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+}
+
+
+__kernel void median_3x3_U1toU1(
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, src2, temp;
+    vxc_uchar8 dst_tmp, dst;
+    vxc_uchar16 config0 = {0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    vxc_uchar16 config1 = {0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src0, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src0, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1,  0), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src1, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src1, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1,  1), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src2, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src2, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    temp = src0 + src1 + src2;
+    VXC_DP4x8(dst_tmp, temp, temp, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniAddTree_4x8);
+    vxc_uchar8 zero = (vxc_uchar8)(0, 0, 0, 0, 0, 0, 0, 0);
+    vxc_uchar8 one  = (vxc_uchar8)(1, 1, 1, 1, 1, 1, 1, 1);
+    dst = dst_tmp > 4 ? one : zero;
+    dst <<= (vxc_uchar8)(0, 1, 2, 3, 4, 5, 6, 7);
+    VXC_DP16x1(dst, dst, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniPackU1_16x1);
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}

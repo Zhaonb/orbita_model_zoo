@@ -1,0 +1,37 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int4 upper;
+_viv_uniform int4 upper_plus1;
+_viv_uniform int4 lower_plus1;
+_viv_uniform int4 max_f;
+_viv_uniform VXC_512Bits uniAddU16toU8_2x8;
+
+__kernel void edgetrace_threshold
+(
+    __read_only image2d_t  input,
+    __global int*  threshold,
+    __write_only image2d_t mcOutput,
+    __write_only image2d_t output,
+    __global int* count
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_ushort8 src0, src1, src2, minVal1, maxVal, maxVal1, max_short;
+    vxc_uchar8 dst;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, minVal1, lower_plus1, 16);
+    _viv_asm(COPY, maxVal, upper, 16);
+    _viv_asm(COPY, maxVal1, upper_plus1, 16);
+    _viv_asm(COPY, max_short, max_f, 16);
+
+    VXC_Clamp(src1, src0, minVal1, maxVal, VXC_MODIFIER_CLAMP(0, 7, 0, 1));
+    VXC_Clamp(src2, src0, maxVal1, max_short, VXC_MODIFIER_CLAMP(0, 7, 0, 1));
+
+    src1 >>= 15;
+    src2 >>= 8;
+    VXC_DP2x8(dst, src1, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniAddU16toU8_2x8);
+    VXC_WriteImage(mcOutput, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}

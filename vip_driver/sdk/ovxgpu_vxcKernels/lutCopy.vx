@@ -1,0 +1,28 @@
+
+__kernel void copy_U8toU8(
+    global uchar* input,
+    global uchar* output,
+    global int* siSize,
+    global int* diSize,
+    global int* outNum
+)
+{
+    const int idx = get_global_id(0);
+    uchar* input_ptr = (uchar*)input + idx;
+    uchar  output_data = input_ptr[0];
+    *((uchar*)output + idx) = output_data;
+}
+
+__kernel void copy_S16toS16(
+    global short* input,
+    global short* output,
+    global int* siSize,
+    global int* diSize,
+    global int* outNum
+)
+{
+    const int idx = get_global_id(0);
+    short* input_ptr = (short*)input + idx;
+    short  output_data = input_ptr[0];
+    *((short*)output + idx) = output_data;
+}

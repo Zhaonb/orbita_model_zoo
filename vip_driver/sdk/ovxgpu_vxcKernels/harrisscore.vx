@@ -1,0 +1,57 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform int   b2;
+_viv_uniform float scale;
+
+__kernel void harris_score
+(
+    __read_only  image2d_t gradx,
+    __read_only  image2d_t grady,
+                 float     sensitive,
+                 int       win,
+                 int       block,
+                 float     shift,
+    __write_only image2d_t output
+)
+{
+
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int i,j;
+    float4 gx,gy;
+    uint4  pregx,pregy;
+    half4  gx16, gy16;
+    float k = sensitive;
+    float sum_ix2 = 0.0f;
+    float sum_iy2 = 0.0f;
+    float sum_ixy = 0.0f;
+    float det_A   = 0.0f;
+    float trace_A = 0.0f;
+    float M_c     = 0.0f;
+    float ktrace_A2 = 0.0f;
+    float scale_pw2 = scale * scale;
+
+    for (j = -b2; j <= b2; j++)
+    {
+        for (i = -b2; i <= b2; i++)
+        {
+            pregx = read_imageui(gradx, (int2)(x + i, y + j));
+            pregy = read_imageui(grady, (int2)(x + i, y + j));
+
+            _viv_asm(COPY, gx16, pregx, 16);
+            _viv_asm(COPY, gy16, pregy, 16);
+
+            _viv_asm(CONV, gx, gx16);
+            _viv_asm(CONV, gy, gy16);
+
+            sum_ix2 = sum_ix2 + gx.x * gx.x * scale_pw2;
+            sum_iy2 = sum_iy2 + gy.x * gy.x * scale_pw2;
+            sum_ixy = sum_ixy + gx.x * gy.x * scale_pw2;
+        }
+    }
+    det_A = (sum_ix2 * sum_iy2) - (sum_ixy * sum_ixy);
+    trace_A = sum_ix2 + sum_iy2;
+    ktrace_A2 = (k * (trace_A * trace_A));
+    M_c = det_A - ktrace_A2;
+    write_imagef(output, (int2)(x,y), (float4)(M_c,0,0,0));
+}

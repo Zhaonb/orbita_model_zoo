@@ -1,0 +1,21 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform int offset;
+_viv_uniform int numBins;
+_viv_uniform int range;
+
+__kernel void histogram(
+        __read_only  image2d_t input,
+        __global int* out_dist)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src0 = read_imageui(input, coord);
+
+    int tmpData = src0.x - offset;
+    if(tmpData >= 0 && tmpData < range)
+    {
+        int index = (short)((short)tmpData * (short)numBins) / (short)range;
+        atomic_inc(out_dist + index);
+    }
+}

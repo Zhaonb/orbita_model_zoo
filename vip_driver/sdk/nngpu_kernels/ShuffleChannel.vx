@@ -1,0 +1,98 @@
+#define SUFFLE_CHANNEL_FUN_4X(name, src_type, read_fun, write_fun) \
+__kernel void shuffleChannel_##name##_4X( \
+    image2d_array_t input, \
+    image2d_array_t output, \
+    int group_number, \
+    int group_column) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    src_type inPixel; \
+    inPixel = read_fun(input, coord); \
+    int coordz = coord.z; \
+    int index_col = (int)((short)coordz / (short)group_column); \
+    int index_row = coordz - index_col * group_column; \
+    coord.z = index_row * group_number + index_col; \
+    write_fun(output, coord, inPixel); \
+}
+
+SUFFLE_CHANNEL_FUN_4X(U8toU8,   uint4,  read_imageui, write_imageui)
+SUFFLE_CHANNEL_FUN_4X(F32toF32, float4, read_imagef,  write_imagef)
+SUFFLE_CHANNEL_FUN_4X(I32toI32, int4,   read_imagei,  write_imagei)
+
+#define SUFFLE_CHANNEL_FUN_4S(name, src_type, read_fun, write_fun) \
+__kernel void shuffleChannel_##name##_4S( \
+    image2d_array_t input, \
+    image2d_array_t output, \
+    int group_number, \
+    int group_column) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    src_type inPixel; \
+    inPixel = read_fun(input, coord); \
+    int coordz = coord.z; \
+    int index_col = (int)((short)coordz / (short)group_column); \
+    int index_row = coordz - index_col * group_column; \
+    coord.z = index_row * group_number + index_col; \
+    coord.x = coord.x * 4; \
+    write_fun(output, coord, inPixel.xxxx); \
+    coord.x++; \
+    write_fun(output, coord, inPixel.yyyy); \
+    coord.x++; \
+    write_fun(output, coord, inPixel.zzzz); \
+    coord.x++; \
+    write_fun(output, coord, inPixel.wwww); \
+}
+
+SUFFLE_CHANNEL_FUN_4S(U8toU8,   uint4,  read_imageui, write_imageui)
+SUFFLE_CHANNEL_FUN_4S(F32toF32, float4, read_imagef,  write_imagef)
+SUFFLE_CHANNEL_FUN_4S(I32toI32, int4,   read_imagei,  write_imagei)
+
+
+#define SUFFLE_CHANNEL_FUN_4X_AXIS1(name, src_type, read_fun, write_fun) \
+__kernel void shuffleChannel_##name##_4X_Axis1( \
+    image2d_array_t input, \
+    image2d_array_t output, \
+    int group_number, \
+    int group_column) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    src_type inPixel; \
+    inPixel = read_fun(input, coord); \
+    int coordy = coord.y; \
+    int index_col = (int)((short)coordy / (short)group_column); \
+    int index_row = coordy - index_col * group_column; \
+    coord.y = index_row * group_number + index_col; \
+    write_fun(output, coord, inPixel); \
+}
+
+SUFFLE_CHANNEL_FUN_4X_AXIS1(U8toU8,   uint4,  read_imageui, write_imageui)
+SUFFLE_CHANNEL_FUN_4X_AXIS1(F32toF32, float4, read_imagef,  write_imagef)
+SUFFLE_CHANNEL_FUN_4X_AXIS1(I32toI32, int4,   read_imagei,  write_imagei)
+
+#define SUFFLE_CHANNEL_FUN_4S_AXIS1(name, src_type, read_fun, write_fun) \
+__kernel void shuffleChannel_##name##_4S_Axis1( \
+    image2d_array_t input, \
+    image2d_array_t output, \
+    int group_number, \
+    int group_column) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    src_type inPixel; \
+    inPixel = read_fun(input, coord); \
+    int coordy = coord.y; \
+    int index_col = (int)((short)coordy / (short)group_column); \
+    int index_row = coordy - index_col * group_column; \
+    coord.y = index_row * group_number + index_col; \
+    coord.x = coord.x * 4; \
+    write_fun(output, coord, inPixel.xxxx); \
+    coord.x++; \
+    write_fun(output, coord, inPixel.yyyy); \
+    coord.x++; \
+    write_fun(output, coord, inPixel.zzzz); \
+    coord.x++; \
+    write_fun(output, coord, inPixel.wwww); \
+}
+
+SUFFLE_CHANNEL_FUN_4S_AXIS1(U8toU8,   uint4,  read_imageui, write_imageui)
+SUFFLE_CHANNEL_FUN_4S_AXIS1(F32toF32, float4, read_imagef,  write_imagef)
+SUFFLE_CHANNEL_FUN_4S_AXIS1(I32toI32, int4,   read_imagei,  write_imagei)

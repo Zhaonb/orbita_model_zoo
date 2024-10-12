@@ -1,0 +1,83 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+__kernel void upsample_convert_u8_to_u8
+(
+    __read_only  image2d_t      src_image,
+    __write_only image2d_t      dst_image
+)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(1), get_global_id(1));
+    vxc_uchar16 src0, src1;
+    VXC_ReadImage(src0, src_image, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, src_image, coord.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.z ++;
+    vxc_uchar16 four = (vxc_uchar16)(4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4);
+    _viv_asm(MULSAT, src0, src0, four);
+    _viv_asm(MULSAT, src1, src1, four);
+
+    VXC_WriteImage(dst_image, coord.xy, src0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(dst_image, coord.xz, src1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits uniIntergeMul4_2x8;
+__kernel void upsample_convert_u8_to_s16
+(
+    __read_only  image2d_t      src_image,
+    __write_only image2d_t      dst_image
+)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(1), get_global_id(1));
+    vxc_uchar8 src0, src1;
+    vxc_short8 dst0, dst1;
+    VXC_ReadImage(src0, src_image, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, src_image, coord.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord.z ++;
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniIntergeMul4_2x8);
+    VXC_DP2x8(dst1, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniIntergeMul4_2x8);
+
+    VXC_WriteImage(dst_image, coord.xy, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(dst_image, coord.xz, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void upsample_convert_s16_to_u8
+(
+    __read_only  image2d_t      src_image,
+    __write_only image2d_t      dst_image
+)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(1), get_global_id(1));
+    vxc_short8 src0, src1;
+    vxc_uchar8 dst0, dst1;
+    VXC_ReadImage(src0, src_image, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, src_image, coord.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord.z ++;
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniIntergeMul4_2x8);
+    VXC_DP2x8(dst1, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniIntergeMul4_2x8);
+
+    VXC_WriteImage(dst_image, coord.xy, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(dst_image, coord.xz, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void upsample_convert_s16_to_s16
+(
+    __read_only  image2d_t      src_image,
+    __write_only image2d_t      dst_image
+)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(1), get_global_id(1));
+    vxc_short8 src0, src1;
+    VXC_ReadImage(src0, src_image, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, src_image, coord.xy, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord.z ++;
+    VXC_DP2x8(src0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniIntergeMul4_2x8);
+    VXC_DP2x8(src1, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniIntergeMul4_2x8);
+
+    VXC_WriteImage(dst_image, coord.xy, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(dst_image, coord.xz, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}

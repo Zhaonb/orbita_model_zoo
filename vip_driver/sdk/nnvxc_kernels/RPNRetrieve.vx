@@ -1,0 +1,90 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+_viv_uniform VXC_512Bits UniDp2x8_pack;
+_viv_uniform VXC_512Bits UniDp2x8_pack0;
+_viv_uniform VXC_512Bits UniDp2x8_pack1;
+_viv_uniform int imgWid;
+_viv_uniform int storeScore;
+
+__kernel void vxcRPN_Retrieve_FP16
+    (
+    image2d_array_t proposal,
+    image2d_array_t roi_indices,
+    unsigned int real_roi_t,
+    image2d_array_t roi_output,
+    image2d_array_t score_output
+    )
+{
+    int x = get_global_id(0);
+
+    if (imgWid - x < 4)
+        x = imgWid - 4;
+
+    float4 idx_f;
+    int4 idx_i;
+    int4   cood = (int4)(x, 0, 0, 0);
+    idx_f = read_imagef(roi_indices, cood);
+    idx_i = convert_int4_rte(idx_f);
+
+    vxc_short8 w0, w1, w2, w3;
+    vxc_short8 w00, w11, w22, w33;
+    VXC_ReadImage(w0, proposal, (int2)(0, idx_i.x), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(w1, proposal, (int2)(0, idx_i.y), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(w2, proposal, (int2)(0, idx_i.z), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(w3, proposal, (int2)(0, idx_i.w), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP2x8(w00, w0, w0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniDp2x8_pack);
+    VXC_DP2x8(w11, w1, w1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniDp2x8_pack);
+    VXC_DP2x8(w22, w2, w2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniDp2x8_pack);
+    VXC_DP2x8(w33, w3, w3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniDp2x8_pack);
+
+    VXC_WriteImage(roi_output, (int2)(0, x)  , w00, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(roi_output, (int2)(0, x+1), w11, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(roi_output, (int2)(0, x+2), w22, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(roi_output, (int2)(0, x+3), w33, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    if (storeScore){
+        VXC_DP2x8(w00, w0, w1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniDp2x8_pack0);
+        VXC_DP2x8(w11, w2, w3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniDp2x8_pack0);
+        VXC_DP2x8(w00, w00, w11, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniDp2x8_pack1);
+        VXC_WriteImage(score_output, (int2)(x, 0), w00, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    }
+}
+__kernel void vxcRPN_Retrieve_noScore_FP16
+    (
+    image2d_array_t proposal,
+    image2d_array_t roi_indices,
+    unsigned int real_roi_t,
+    image2d_array_t roi_output
+    )
+{
+    int x = get_global_id(0);
+
+    if (imgWid - x < 4)
+        x = imgWid - 4;
+
+    float4 idx_f;
+    int4 idx_i;
+    int4   cood = (int4)(x, 0, 0, 0);
+    idx_f = read_imagef(roi_indices, cood);
+    idx_i = convert_int4_rte(idx_f);
+
+    vxc_short8 w0, w1, w2, w3;
+    vxc_short8 w00, w11, w22, w33;
+    VXC_ReadImage(w0, proposal, (int2)(0, idx_i.x), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(w1, proposal, (int2)(0, idx_i.y), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(w2, proposal, (int2)(0, idx_i.z), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(w3, proposal, (int2)(0, idx_i.w), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP2x8(w00, w0, w0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniDp2x8_pack);
+    VXC_DP2x8(w11, w1, w1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniDp2x8_pack);
+    VXC_DP2x8(w22, w2, w2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniDp2x8_pack);
+    VXC_DP2x8(w33, w3, w3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniDp2x8_pack);
+
+    VXC_WriteImage(roi_output, (int2)(0, x)  , w00, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(roi_output, (int2)(0, x+1), w11, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(roi_output, (int2)(0, x+2), w22, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(roi_output, (int2)(0, x+3), w33, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+
+}

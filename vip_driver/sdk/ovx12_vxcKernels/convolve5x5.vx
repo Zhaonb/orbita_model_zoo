@@ -1,0 +1,144 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniConvolution5x5_8x2;
+_viv_uniform float scale_inv;
+_viv_uniform int in_width;
+_viv_uniform int in_height;
+
+
+
+#define CONV5x5_PROCESS(src_type, dst_type) \
+    const int pX = get_global_id(0); \
+    const int pY = get_global_id(1); \
+    src_type v0, v1, v2, v3, v4; \
+    vxc_short8 w0, w1, w2, w3, w4; \
+    float4       result; \
+    dst_type dst; \
+    short *conv_ptr = (short *)(in_conv.matrix); \
+    VXC_ReadImage(v0, in_image, (int2)(pX - 2, pY - 2), 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    VXC_ReadImage(v1, in_image, (int2)(pX - 2, pY - 1), 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    VXC_ReadImage(v2, in_image, (int2)(pX - 2, pY),     0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    VXC_ReadImage(v3, in_image, (int2)(pX - 2, pY + 1), 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    VXC_ReadImage(v4, in_image, (int2)(pX - 2, pY + 2), 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    if (pY < 2) \
+    { \
+        if ( 0 == pY ) \
+        { \
+            v1 = 0; \
+        } \
+        else if ( 1 == pY ) \
+        { \
+            v0 = 0; \
+        } \
+    } \
+    else if (pY >= (in_height - 2)) \
+    { \
+        if (1 == (in_height - pY)) \
+        { \
+            v3 = v1; \
+        } \
+        else if (2 == (in_height - pY)) \
+        { \
+            v4 = v2; \
+        } \
+    } \
+    if (pX < 2) \
+    { \
+        if ( 0 == pX ) \
+        { \
+            v0.s1 = 0; \
+            v1.s1 = 0; \
+            v2.s1 = 0; \
+            v3.s1 = 0; \
+            v4.s1 = 0; \
+        } \
+        else if ( 1 == pX ) \
+        { \
+            v0.s0 = 0; \
+            v1.s0 = 0; \
+            v2.s0 = 0; \
+            v3.s0 = 0; \
+            v4.s0 = 0; \
+        } \
+    } \
+    else if (pX >= (in_width - 2)) \
+    { \
+        if (1 == (in_width - pX)) \
+        { \
+            v0.s3 = v0.s1; \
+            v1.s3 = v1.s1; \
+            v2.s3 = v2.s1; \
+            v3.s3 = v3.s1; \
+            v4.s3 = v4.s1; \
+        } \
+        else if (2 == (in_width - pX)) \
+        { \
+            v0.s4 = v0.s2; \
+            v1.s4 = v1.s2; \
+            v2.s4 = v2.s2; \
+            v3.s4 = v3.s2; \
+            v4.s4 = v4.s2; \
+        } \
+    } \
+    VXC_Vload8(w0, conv_ptr, 0); \
+    conv_ptr = conv_ptr + 5; \
+    VXC_Vload8(w1, conv_ptr, 0); \
+    conv_ptr = conv_ptr + 5; \
+    VXC_Vload8(w2, conv_ptr, 0); \
+    conv_ptr = conv_ptr + 5; \
+    VXC_Vload8(w3, conv_ptr, 0); \
+    conv_ptr = conv_ptr + 5; \
+    VXC_Vload8(w4, conv_ptr, 0); \
+    VXC_DP8x2(result, v0, w4, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvolution5x5_8x2);  \
+    VXC_DP8x2(result, v1, w3, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniConvolution5x5_8x2);  \
+    VXC_DP8x2(result, v2, w2, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniConvolution5x5_8x2);  \
+    VXC_DP8x2(result, v3, w1, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniConvolution5x5_8x2);  \
+    result.x = result.x + result.y + result.z + result.w; \
+    VXC_DP8x2(result, v4, w0, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniConvolution5x5_8x2); \
+    result.x += result.y; \
+    result.x  = result.x * scale_inv; \
+    _viv_asm(CONV_SAT, dst, result); \
+    VXC_WriteImage(out_image, (int2)(pX, pY), dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+
+__kernel void convolve5x5_u8tou8
+(
+    __read_only image2d_t      in_image,
+    vx_convolution             in_conv,
+    __write_only image2d_t     out_image
+)
+{
+    CONV5x5_PROCESS(vxc_uchar8, vxc_uchar4)
+}
+
+__kernel void convolve5x5_u8tos16
+(
+    __read_only image2d_t      in_image,
+    vx_convolution             in_conv,
+    __write_only image2d_t     out_image
+)
+{
+    CONV5x5_PROCESS(vxc_uchar8, vxc_short4)
+}
+
+__kernel void convolve5x5_s16tos16
+(
+    __read_only image2d_t      in_image,
+    vx_convolution             in_conv,
+    __write_only image2d_t     out_image
+)
+{
+    CONV5x5_PROCESS(vxc_short8, vxc_short4)
+}
+
+__kernel void convolve5x5_s16tou8
+(
+    __read_only image2d_t      in_image,
+    vx_convolution             in_conv,
+    __write_only image2d_t     out_image
+)
+{
+    CONV5x5_PROCESS(vxc_short8, vxc_uchar4)
+}

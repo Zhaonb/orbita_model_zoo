@@ -1,0 +1,225 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniPackU1_16x1;
+_viv_uniform VXC_512Bits uniAddTree_4x8;
+_viv_uniform         int thread_value;
+_viv_uniform         int originx;
+_viv_uniform         int originy;
+
+__kernel void non_linear_filter_u1_BOX_3x3(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1) - originy);
+    vxc_uchar16 src0, src1, src2, temp;
+    vxc_uchar8 dst_tmp, dst;
+    vxc_uchar16 config0 = {0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    vxc_uchar16 config1 = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    config0.s01234567 = config0.s01234567 - (uchar)originx;
+    config1.s01234567 = config1.s01234567 - (uchar)originx;
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src0, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src0, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1,  1), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src1, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src1, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1,  2), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src2, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src2, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    temp = src0 + src1 + src2;
+    VXC_DP4x8(dst_tmp, temp, temp, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniAddTree_4x8);
+    vxc_uchar8 zero = (vxc_uchar8)(0, 0, 0, 0, 0, 0, 0, 0);
+    vxc_uchar8 one  = (vxc_uchar8)(1, 1, 1, 1, 1, 1, 1, 1);
+    vxc_uchar8 thread_vec;
+    thread_vec = (uchar)thread_value;
+    dst = dst_tmp > thread_vec ? one : zero;
+    dst <<= (vxc_uchar8)(0, 1, 2, 3, 4, 5, 6, 7);
+    VXC_DP16x1(dst, dst, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniPackU1_16x1);
+    coord.y = get_global_id(1);
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void non_linear_filter_u1_CROSS_3x3(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1) - originy);
+    vxc_uchar8  src0, src2, temp;
+    vxc_uchar16 src1;
+    vxc_uchar8  dst_tmp, dst;
+    vxc_uchar16 config0 = {0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    vxc_uchar16 config1 = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    vxc_uchar16 config2 = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    config0.s01234567 = config0.s01234567 - (uchar)originx;
+    config1.s01234567 = config1.s01234567 - (uchar)originx;
+    config2.s01234567 = config2.s01234567 + (uchar)(1 - originx);
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src0, temp, temp, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1,  1), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src1, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src1, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(0,  2), VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src2, temp, temp, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x8(temp, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniAddTree_4x8);
+    dst_tmp = src0 + temp + src2;
+    vxc_uchar8 zero = (vxc_uchar8)(0, 0, 0, 0, 0, 0, 0, 0);
+    vxc_uchar8 one  = (vxc_uchar8)(1, 1, 1, 1, 1, 1, 1, 1);
+    vxc_uchar8 thread_vec;
+    thread_vec = (uchar)thread_value;
+    dst = dst_tmp > thread_vec ? one : zero;
+    dst <<= (vxc_uchar8)(0, 1, 2, 3, 4, 5, 6, 7);
+    VXC_DP16x1(dst, dst, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniPackU1_16x1);
+    coord.y = get_global_id(1);
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits uniAddFour_4x8;
+_viv_uniform VXC_512Bits uniAddFive_2x8;
+_viv_uniform VXC_512Bits uniAddDisk_4x8;
+
+__kernel void non_linear_filter_u1_CROSS_5x5(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1) - originy);
+    vxc_uchar8  src0, src1, src2, src3, temp;
+    vxc_uchar16 src4;
+    vxc_uchar8  dst_tmp, dst;
+    vxc_uchar16 config0 = {0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    vxc_uchar16 config1 = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    vxc_uchar16 config2 = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    config0.s01234567 = config0.s01234567 - (uchar)originx;
+    config1.s01234567 = config1.s01234567 - (uchar)originx;
+    config2.s01234567 = config2.s01234567 + (uchar)(2 - originx);
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src0, temp, temp, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src1, temp, temp, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1,  2), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src4, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src4, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src2, temp, temp, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src3, temp, temp, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP4x8(temp, src4, src4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniAddFour_4x8);
+    VXC_DP2x8(temp, temp, src4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniAddFive_2x8);
+
+    dst_tmp = src0 + src1 + src2 + src3 + temp;
+    vxc_uchar8 zero = (vxc_uchar8)(0, 0, 0, 0, 0, 0, 0, 0);
+    vxc_uchar8 one  = (vxc_uchar8)(1, 1, 1, 1, 1, 1, 1, 1);
+    vxc_uchar8 thread_vec;
+    thread_vec = (uchar)thread_value;
+    dst = dst_tmp > thread_vec ? one : zero;
+    dst <<= (vxc_uchar8)(0, 1, 2, 3, 4, 5, 6, 7);
+    VXC_DP16x1(dst, dst, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniPackU1_16x1);
+    coord.y = get_global_id(1);
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void non_linear_filter_u1_BOX_5x5(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1) - originy);
+    vxc_uchar16  src0, src1, src2, src3, src4, temp;
+    vxc_uchar8  dst_tmp, dst;
+    vxc_uchar16 config0 = {0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    vxc_uchar16 config1 = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    config0.s01234567 = config0.s01234567 - (uchar)originx;
+    config1.s01234567 = config1.s01234567 - (uchar)originx;
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src0, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src0, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src1, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src1, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src2, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src2, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src3, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src3, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src4, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src4, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+
+    temp = src0 + src1 + src2 + src3 + src4;
+
+    VXC_DP4x8(dst_tmp, temp, temp, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniAddFour_4x8);
+    VXC_DP2x8(dst_tmp, dst_tmp, temp, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniAddFive_2x8);
+
+    vxc_uchar8 zero = (vxc_uchar8)(0, 0, 0, 0, 0, 0, 0, 0);
+    vxc_uchar8 one  = (vxc_uchar8)(1, 1, 1, 1, 1, 1, 1, 1);
+    vxc_uchar8 thread_vec;
+    thread_vec = (uchar)thread_value;
+    dst = dst_tmp > thread_vec ? one : zero;
+    dst <<= (vxc_uchar8)(0, 1, 2, 3, 4, 5, 6, 7);
+    VXC_DP16x1(dst, dst, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniPackU1_16x1);
+    coord.y = get_global_id(1);
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+
+__kernel void non_linear_filter_u1_DISK_5x5(
+                       int func,
+    __read_only  image2d_t input,
+           vx_matrix_uchar matrix,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1) - originy);
+    vxc_uchar16  src0, src1, src2, src3, src4, temp;
+    vxc_uchar8  dst_tmp, dst, sub_val;
+    vxc_uchar16 config0 = {0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    vxc_uchar16 config1 = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    config0.s01234567 = config0.s01234567 - (uchar)originx;
+    config1.s01234567 = config1.s01234567 - (uchar)originx;
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src0, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src0, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src1, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src1, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src2, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src2, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src3, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src3, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(temp, input, coord, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src4, temp, temp, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(src4, temp, temp, config1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+
+    temp = src0 + src1 + src2 + src3 + src4;
+
+    VXC_DP4x8(dst_tmp, temp, temp, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniAddFour_4x8);
+    VXC_DP2x8(dst_tmp, dst_tmp, temp, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniAddFive_2x8);
+    VXC_DP4x8(sub_val, src0, src4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniAddDisk_4x8);
+    dst_tmp = dst_tmp - sub_val;
+    vxc_uchar8 zero = (vxc_uchar8)(0, 0, 0, 0, 0, 0, 0, 0);
+    vxc_uchar8 one  = (vxc_uchar8)(1, 1, 1, 1, 1, 1, 1, 1);
+    vxc_uchar8 thread_vec;
+    thread_vec = (uchar)thread_value;
+    dst = dst_tmp > thread_vec ? one : zero;
+    dst <<= (vxc_uchar8)(0, 1, 2, 3, 4, 5, 6, 7);
+    VXC_DP16x1(dst, dst, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniPackU1_16x1);
+    coord.y = get_global_id(1);
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+

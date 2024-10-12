@@ -1,0 +1,101 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniGaussian3x3_x0_4x8;
+_viv_uniform VXC_512Bits uniGaussian3x3_x1_4x8;
+_viv_uniform VXC_512Bits uniGaussian3x3_x2_4x8;
+_viv_uniform VXC_512Bits uniGaussian3x3_x3_4x8;
+_viv_uniform VXC_512Bits uniGaussian3x3_x4_4x8;
+_viv_uniform VXC_512Bits uniGaussian3x3_x5_4x8;
+
+#if (VX_VERSION==1)
+__kernel void gaussian_3x3
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(1), get_global_id(1));
+
+    vxc_uchar16 src0, src1, src2, src3, src4, src5;
+    vxc_uchar16 dst;
+
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord.xy, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input, coord.xy, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src4, input, coord.xy, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src5, input, coord.xy, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.zw += (int2)(1, 2);
+    VXC_Filter(dst, src0, src1, src2, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Guassian, 1));
+    VXC_WriteImage(output, coord.xy, dst, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+    coord.y += 3;
+
+    VXC_Filter(dst, src1, src2, src3, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Guassian, 1));
+    VXC_WriteImage(output, coord.xz, dst, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Filter(dst, src2, src3, src4, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Guassian, 1));
+    VXC_WriteImage(output, coord.xw, dst, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+
+    VXC_Filter(dst, src3, src4, src5, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Guassian, 1));
+    VXC_WriteImage(output, coord.xy, dst, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+}
+#else
+__kernel void gaussian_3x3
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(1), get_global_id(1));
+    int height = get_image_height(input);
+
+    vxc_uchar16 src0, src1, src2, src3, src4, src5;
+    vxc_ushort8 dst0, dst1;
+    vxc_uchar16 dst;
+
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord.xy, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input, coord.xy, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src4, input, coord.xy, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src5, input, coord.xy, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.zw += (int2)(1, 2);
+    VXC_DP4x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x0_4x8);
+    VXC_DP4x8(dst1, src0, src0, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x1_4x8);
+    VXC_DP4x8(dst0, src1, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x2_4x8);
+    VXC_DP4x8(dst1, src1, dst1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x3_4x8);
+    VXC_DP4x8(dst, src2, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniGaussian3x3_x4_4x8);
+    VXC_DP4x8(dst, src2, dst1, VXC_MODIFIER(8, 13, 0, VXC_RM_TowardZero, 1), uniGaussian3x3_x5_4x8);
+    VXC_WriteImage(output, coord.xy, dst, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+    coord.y += 3;
+
+    VXC_DP4x8(dst0, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x0_4x8);
+    VXC_DP4x8(dst1, src1, src1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x1_4x8);
+    VXC_DP4x8(dst0, src2, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x2_4x8);
+    VXC_DP4x8(dst1, src2, dst1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x3_4x8);
+    VXC_DP4x8(dst, src3, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniGaussian3x3_x4_4x8);
+    VXC_DP4x8(dst, src3, dst1, VXC_MODIFIER(8, 13, 0, VXC_RM_TowardZero, 1), uniGaussian3x3_x5_4x8);
+    VXC_WriteImage(output, coord.xz, dst, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP4x8(dst0, src2, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x0_4x8);
+    VXC_DP4x8(dst1, src2, src2, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x1_4x8);
+    VXC_DP4x8(dst0, src3, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x2_4x8);
+    VXC_DP4x8(dst1, src3, dst1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x3_4x8);
+    VXC_DP4x8(dst, src4, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniGaussian3x3_x4_4x8);
+    VXC_DP4x8(dst, src4, dst1, VXC_MODIFIER(8, 13, 0, VXC_RM_TowardZero, 1), uniGaussian3x3_x5_4x8);
+    VXC_WriteImage(output, coord.xw, dst, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP4x8(dst0, src3, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x0_4x8);
+    VXC_DP4x8(dst1, src3, src3, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x1_4x8);
+    VXC_DP4x8(dst0, src4, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x2_4x8);
+    VXC_DP4x8(dst1, src4, dst1, VXC_MODIFIER(0, 5, 0, VXC_RM_TowardZero, 0), uniGaussian3x3_x3_4x8);
+    VXC_DP4x8(dst, src5, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniGaussian3x3_x4_4x8);
+    VXC_DP4x8(dst, src5, dst1, VXC_MODIFIER(8, 13, 0, VXC_RM_TowardZero, 1), uniGaussian3x3_x5_4x8);
+    VXC_WriteImage(output, coord.xy, dst, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+}
+#endif
+

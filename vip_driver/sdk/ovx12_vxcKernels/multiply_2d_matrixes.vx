@@ -1,0 +1,248 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uni8BMac8B_16x2_b;
+_viv_uniform VXC_512Bits uniExtact8Bin_2x8;
+_viv_uniform int width_align16;
+
+__kernel void multiply_2d_matrixes_u8_mul(
+                __read_only image2d_array_t input0,
+                __read_only image2d_array_t input1,
+                __read_only image2d_array_t input2,
+                                       int  enableTensorC,
+                __write_only image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+
+    vxc_uchar32 srcB;
+    vxc_uchar16 srcA;
+    vxc_uint2 sum0, sum;
+    sum = 0;
+    do
+    {
+        VXC_ReadImage(srcB.hi, input1,  coord.zx, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(srcB.lo, input1,  coord.zx, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(srcA, input0,  coord.zy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+        coord.z += 16;
+        VXC_DP16x2_b(sum0, srcB.hi, srcB.lo, srcA, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uni8BMac8B_16x2_b);
+
+        sum.xy += sum0;
+    } while (coord.z < width_align16);
+
+    vxc_uchar2 dst;
+    VXC_DP2x8(dst, sum, sum, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 1), uniExtact8Bin_2x8);
+
+    VXC_WriteImage(output, coord.xy, dst, VXC_MODIFIER(0, 1, 0,VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits uniCmulConstAddSum_4x4;
+__kernel void multiply_2d_matrixes_u8_mad(
+                __read_only image2d_array_t input0,
+                __read_only image2d_array_t input1,
+                __read_only image2d_array_t input2,
+                                       int  enableTensorC,
+                __write_only image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+
+    vxc_uchar32 srcB;
+    vxc_uchar16 srcA;
+    vxc_uint2 sum0, sum;
+    sum = 0;
+    do
+    {
+        VXC_ReadImage(srcB.hi, input1,  coord.zx, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(srcB.lo, input1,  coord.zx, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(srcA, input0,  coord.zy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+        coord.z += 16;
+        VXC_DP16x2_b(sum0, srcB.hi, srcB.lo, srcA, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uni8BMac8B_16x2_b);
+
+        sum.xy += sum0;
+    } while (coord.z < width_align16);
+
+    vxc_uchar2 dst;
+    VXC_ReadImage(dst, input2,  coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(dst, dst, sum, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 1), uniCmulConstAddSum_4x4);
+
+    VXC_WriteImage(output, coord.xy, dst, VXC_MODIFIER(0, 1, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void multiply_2d_matrixes_s8_mul(
+                __read_only image2d_array_t input0,
+                __read_only image2d_array_t input1,
+                __read_only image2d_array_t input2,
+                                       int  enableTensorC,
+                __write_only image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+
+    vxc_char32 srcB;
+    vxc_char16 srcA;
+    vxc_int2 sum0, sum;
+    sum = 0;
+    do
+    {
+        VXC_ReadImage(srcB.hi, input1,  coord.zx, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(srcB.lo, input1,  coord.zx, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(srcA, input0,  coord.zy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+        coord.z += 16;
+        VXC_DP16x2_b(sum0, srcB.hi, srcB.lo, srcA, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uni8BMac8B_16x2_b);
+
+        sum.xy += sum0;
+    } while (coord.z < width_align16);
+
+    vxc_char2 dst;
+    VXC_DP2x8(dst, sum, sum, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 1), uniExtact8Bin_2x8);
+
+    VXC_WriteImage(output, coord.xy, dst, VXC_MODIFIER(0, 1, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void multiply_2d_matrixes_s8_mad(
+                __read_only image2d_array_t input0,
+                __read_only image2d_array_t input1,
+                __read_only image2d_array_t input2,
+                                       int  enableTensorC,
+                __write_only image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+
+    vxc_char32 srcB;
+    vxc_char16 srcA;
+    vxc_int2 sum0, sum;
+    sum = 0;
+    do
+    {
+        VXC_ReadImage(srcB.hi, input1,  coord.zx, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(srcB.lo, input1,  coord.zx, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(srcA, input0,  coord.zy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+        coord.z += 16;
+        VXC_DP16x2_b(sum0, srcB.hi, srcB.lo, srcA, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uni8BMac8B_16x2_b);
+
+        sum.xy += sum0;
+    } while (coord.z < width_align16);
+
+    vxc_char2 dst;
+    VXC_ReadImage(dst, input2,  coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(dst, dst, sum, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 1), uniCmulConstAddSum_4x4);
+
+    VXC_WriteImage(output, coord.xy, dst, VXC_MODIFIER(0, 1, 0,VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform int width_align8;
+__kernel void multiply_2d_matrixes_s16_mul(
+                __read_only image2d_array_t input0,
+                __read_only image2d_array_t input1,
+                __read_only image2d_array_t input2,
+                                       int  enableTensorC,
+                __write_only image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+
+    vxc_short16 srcB;
+    vxc_short8 srcA;
+    vxc_int2 sum0, sum;
+    sum = 0;
+    do
+    {
+        VXC_ReadImage(srcB.hi, input1,  coord.zx, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(srcB.lo, input1,  coord.zx, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(srcA, input0,  coord.zy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        coord.z += 8;
+#if (VX_VERSION==2)
+    const uint16 uni16BMac16B_8x2_b = (uint16)(
+        0x55555555, // TCfg
+        0x55550000, // ASelt
+        0x76543210, 0x76543210, // ABin
+        0x00000000, // BSelt
+        0x76543210, 0x76543210, // BBin
+        0x00000000, // AccumType, ConstantType, and PostShift
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 // Constant
+    );
+        VXC_DP8x2_b(sum0, srcB.hi, srcB.lo, srcA, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uni16BMac16B_8x2_b);
+#else
+    const uint16 uni16BMac16B_8x2 = (uint16)(
+        0x00005555, // TCfg
+        0x00000000, // ASelt
+        0x76543210, 0x00000000, // ABin
+        0x00005555, // BSelt
+        0x76543210, 0x00000000, // BBin
+        0x00000400, // AccumType, ConstantType, and PostShift
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 // Constant
+    );
+        VXC_DP8x2(sum0, srcB.hi, srcA, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uni16BMac16B_8x2);
+        VXC_DP8x2(sum0, srcB.lo, srcA, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uni16BMac16B_8x2);
+#endif
+
+        sum.xy += sum0;
+    } while (coord.z < width_align8);
+
+    sum.xy += 0x80;
+    vxc_short2 dst;
+    VXC_DP2x8(dst, sum, sum, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 1), uniExtact8Bin_2x8);
+
+    VXC_WriteImage(output, coord.xy, dst, VXC_MODIFIER(0, 1, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void multiply_2d_matrixes_s16_mad(
+                __read_only image2d_array_t input0,
+                __read_only image2d_array_t input1,
+                __read_only image2d_array_t input2,
+                                       int  enableTensorC,
+                __write_only image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+
+    vxc_short16 srcB;
+    vxc_short8 srcA;
+    vxc_int2 sum0, sum;
+    sum = 0;
+    do
+    {
+        VXC_ReadImage(srcB.hi, input1,  coord.zx, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(srcB.lo, input1,  coord.zx, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(srcA, input0,  coord.zy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        coord.z += 8;
+#if (VX_VERSION==2)
+    const uint16 uni16BMac16B_8x2_b = (uint16)(
+        0x55555555, // TCfg
+        0x55550000, // ASelt
+        0x76543210, 0x76543210, // ABin
+        0x00000000, // BSelt
+        0x76543210, 0x76543210, // BBin
+        0x00000000, // AccumType, ConstantType, and PostShift
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 // Constant
+    );
+        VXC_DP8x2_b(sum0, srcB.hi, srcB.lo, srcA, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uni16BMac16B_8x2_b);
+#else
+    const uint16 uni16BMac16B_8x2 = (uint16)(
+        0x00005555, // TCfg
+        0x00000000, // ASelt
+        0x76543210, 0x00000000, // ABin
+        0x00005555, // BSelt
+        0x76543210, 0x00000000, // BBin
+        0x00000400, // AccumType, ConstantType, and PostShift
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 // Constant
+    );
+        VXC_DP8x2(sum0, srcB.hi, srcA, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uni16BMac16B_8x2);
+        VXC_DP8x2(sum0, srcB.lo, srcA, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uni16BMac16B_8x2);
+#endif
+
+        sum.xy += sum0;
+    } while (coord.z < width_align8);
+
+    vxc_short2 dst;
+    VXC_ReadImage(dst, input2,  coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+    sum.xy += 0x80;
+    VXC_DP4x4(dst, dst, sum, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 1), uniCmulConstAddSum_4x4);
+
+    VXC_WriteImage(output, coord.xy, dst, VXC_MODIFIER(0, 1, 0,VXC_RM_TowardZero, 0));
+}
+
+

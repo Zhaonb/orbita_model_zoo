@@ -1,0 +1,66 @@
+__kernel void gpuGemm_noBias_FP32
+    (
+        image2d_array_t input,
+        image2d_array_t weight,
+        int Cycles,
+        image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(0, y, x, 0);
+    int4 coord = (int4)(0, z, 0, 0);
+    float4 sum = {0.0};
+    float4 inPixel, wPixel;
+
+    do
+    {
+        inPixel = read_imagef(input, coord_in.xzyw);
+        wPixel = read_imagef(weight, coord.xyzw);
+        sum += (inPixel * wPixel);
+        coord_in.x += 1;
+        coord.x += 1;
+    } while (coord_in.x < Cycles);
+
+    write_imagef(output, (int4)(x, y, z, 0), sum);
+}
+
+__kernel void gpuGemm_noBias_Quant8
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_array_t weights,
+                 int             cycles,
+                 float           scaleIn,
+                 float           scaleWeight,
+                 float           scaleOut,
+                 int             zpIn,
+                 int             zpWeight,
+                 int             zpOut,
+    __write_only image2d_array_t output,
+                 int             overflow_mode
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(0, y, x, 0);
+    int4 coord = (int4)(0, z, 0, 0);
+    float4 sum = {0.0}, inPixel= {0.0}, wPixel= {0.0};
+    uint4 dst = {0}, tmp;
+
+    do
+    {
+        tmp = read_imageui(input, coord_in.xzyw);
+        inPixel.x = (convert_int(tmp.x-zpIn))*scaleIn;
+        tmp = read_imageui(weights, coord.xyzw);
+        wPixel.x = (convert_int(tmp.x-zpWeight))*scaleWeight;
+        sum += (inPixel * wPixel);
+        coord_in.x += 1;
+        coord.x += 1;
+    } while (coord_in.x < cycles);
+
+    float val = floor(sum.x*scaleOut + zpOut + 0.5);
+    dst.x = overflow_mode == 0 ? (uint)((uchar)(val)) : clamp(val, 0, 255);
+    write_imageui(output, (int4)(x, y, z, 0), dst);
+}

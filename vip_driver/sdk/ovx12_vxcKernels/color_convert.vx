@@ -1,0 +1,998 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniConvRgbToRgbxA_2x8;
+_viv_uniform VXC_512Bits uniConvRgbToRgbxB_2x8;
+_viv_uniform VXC_512Bits uniConvRgbToYuv4Y_4x4;
+_viv_uniform VXC_512Bits uniConvRgbToYuv4U_4x4;
+_viv_uniform VXC_512Bits uniConvRgbToYuv4V_4x4;
+_viv_uniform VXC_512Bits uniConvRgbToNv12UV_4x4;
+
+_viv_uniform VXC_512Bits uniConvYUV4ToNV12Uv_4x4;
+_viv_uniform VXC_512Bits uniConvYUV4ToIyuvUv_4x4;
+
+_viv_uniform VXC_512Bits uniConvRgbxToRgbA_2x8;
+_viv_uniform VXC_512Bits uniConvRgbxToRgbB_2x8;
+_viv_uniform VXC_512Bits uniConvRgbxToYuv4Y_4x4;
+_viv_uniform VXC_512Bits uniConvRgbxToYuv4U_4x4;
+_viv_uniform VXC_512Bits uniConvRgbxToYuv4V_4x4;
+_viv_uniform VXC_512Bits uniConvRgbxToNv12UV_4x4;
+
+_viv_uniform VXC_512Bits uniConvYuyvToRgbA_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToRgbB_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToRgbC_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToRgbD_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToRgbE_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToRgbF_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToRgbxA_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToRgbxB_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToRgbxC_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToRgbxD_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToRgbxE_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToRgbxF_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToRgbxG_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToRgbxH_4x4;
+_viv_uniform VXC_512Bits uniConvYuyvToNv12Y_2x8;
+_viv_uniform VXC_512Bits uniConvYuyvToNv12Uv_2x8;
+_viv_uniform VXC_512Bits uniConvYuyvToNv12UvShift_2x8;
+_viv_uniform VXC_512Bits uniConvYuyvToIyuvUvShift_2x8;
+
+_viv_uniform VXC_512Bits uniConvUyvyToRgbA_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToRgbB_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToRgbC_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToRgbD_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToRgbE_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToRgbF_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToRgbxA_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToRgbxB_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToRgbxC_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToRgbxD_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToRgbxE_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToRgbxF_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToRgbxG_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToRgbxH_4x4;
+_viv_uniform VXC_512Bits uniConvUyvyToNv12UvShift_2x8;
+_viv_uniform VXC_512Bits uniConvUyvyToIyuvUvShift_2x8;
+
+_viv_uniform VXC_512Bits uniConvIyuvToRgbA_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToRgbB_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToRgbC_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToRgbD_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToRgbE_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToRgbF_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToRgbxA_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToRgbxB_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToRgbxC_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToRgbxD_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToRgbxE_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToRgbxF_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToRgbxG_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToRgbxH_4x4;
+_viv_uniform VXC_512Bits uniConvIyuvToNv12UvLo_2x8;
+_viv_uniform VXC_512Bits uniConvIyuvToNv12UvHi_2x8;
+
+_viv_uniform VXC_512Bits uniConvNv12ToRgbA_4x4;
+_viv_uniform VXC_512Bits uniConvNv12ToRgbB_4x4;
+_viv_uniform VXC_512Bits uniConvNv12ToRgbC_4x4;
+_viv_uniform VXC_512Bits uniConvNv12ToRgbD_4x4;
+_viv_uniform VXC_512Bits uniConvNv12ToRgbE_4x4;
+_viv_uniform VXC_512Bits uniConvNv12ToRgbF_4x4;
+_viv_uniform VXC_512Bits uniConvNv12ToRgbxA_4x4;
+_viv_uniform VXC_512Bits uniConvNv12ToRgbxB_4x4;
+_viv_uniform VXC_512Bits uniConvNv12ToRgbxC_4x4;
+_viv_uniform VXC_512Bits uniConvNv12ToRgbxD_4x4;
+_viv_uniform VXC_512Bits uniConvNv12ToRgbxE_4x4;
+_viv_uniform VXC_512Bits uniConvNv12ToRgbxF_4x4;
+_viv_uniform VXC_512Bits uniConvNv12ToRgbxG_4x4;
+_viv_uniform VXC_512Bits uniConvNv12ToRgbxH_4x4;
+_viv_uniform VXC_512Bits uniExtractNv12U_2x8;
+_viv_uniform VXC_512Bits uniExtractNv12V_2x8;
+
+_viv_uniform VXC_512Bits uniConvNv21ToRgbA_4x4;
+_viv_uniform VXC_512Bits uniConvNv21ToRgbB_4x4;
+_viv_uniform VXC_512Bits uniConvNv21ToRgbC_4x4;
+_viv_uniform VXC_512Bits uniConvNv21ToRgbD_4x4;
+_viv_uniform VXC_512Bits uniConvNv21ToRgbE_4x4;
+_viv_uniform VXC_512Bits uniConvNv21ToRgbF_4x4;
+_viv_uniform VXC_512Bits uniConvNv21ToRgbxA_4x4;
+_viv_uniform VXC_512Bits uniConvNv21ToRgbxB_4x4;
+_viv_uniform VXC_512Bits uniConvNv21ToRgbxC_4x4;
+_viv_uniform VXC_512Bits uniConvNv21ToRgbxD_4x4;
+_viv_uniform VXC_512Bits uniConvNv21ToRgbxE_4x4;
+_viv_uniform VXC_512Bits uniConvNv21ToRgbxF_4x4;
+_viv_uniform VXC_512Bits uniConvNv21ToRgbxG_4x4;
+_viv_uniform VXC_512Bits uniConvNv21ToRgbxH_4x4;
+
+
+__kernel void color_convert_rgb_rgbx(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord_in = (int2)(get_global_id(0) * 3, get_global_id(1));
+    int2 coord = (int2)(get_global_id(0) * 4, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0;
+    short zero = 255;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(dst0, src0, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvRgbToRgbxA_2x8);
+    VXC_DP2x8(dst0, src0, zero, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0), uniConvRgbToRgbxB_2x8);
+
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+/*  convert rgb to yuv.
+    startReg and nextReg are for this function.
+    startReg.x is for red, startReg.y is for green, startReg.z is for blue.
+    nextReg.x is for Y, nextReg.y is for U, nextReg.z is for V.
+    Y = r * 0.2126f    + g * 0.7152f    + b * 0.0722f    + 0.5f;
+    U = r * (-0.1146f) + g * (-0.3854)  + b * 0.5f       + 128.5f;
+    V = r * 0.5f       + g * (-0.4542f) + b * (-0.0458f) + 128.5f;
+*/
+// scale 4
+__kernel void color_convert_rgb_yuv4(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord_in = (int2)(get_global_id(0) * 3, get_global_id(1));
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0, dst1, dst2;
+    short tmp = 1;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4Y_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4U_4x4);
+    VXC_DP4x4(dst2, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4V_4x4);
+
+    VXC_WriteImage(output0, coord, dst0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output1, coord, dst1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output2, coord, dst2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_rgb_nv12(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord_in = (int2)(get_global_id(0) * 3, get_global_id(1));
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1;
+    vxc_uchar16 dst0, dst1, dst2, dst3, dst4;
+    short tmp = 1;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4Y_4x4);
+    VXC_DP4x4(dst1, src1, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4Y_4x4);
+    VXC_DP4x4(dst2, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4U_4x4);
+    VXC_DP4x4(dst2, src1, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4U_4x4);
+    VXC_DP4x4(dst3, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4V_4x4);
+    VXC_DP4x4(dst3, src1, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4V_4x4);
+    VXC_WriteImage(output0, coord, dst0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+    VXC_WriteImage(output0, coord, dst1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    coord.y = get_global_id(1) >> 1;
+    VXC_DP4x4(dst4, dst2, dst3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvYUV4ToNV12Uv_4x4);
+    VXC_WriteImage(output1, coord, dst4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+// 4:2:0
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 u1
+// v0 v1
+// reshape y width to uv width, main uv
+__kernel void color_convert_rgb_iyuv(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord_in = (int2)(get_global_id(0) * 3, get_global_id(1));
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1;
+    vxc_uchar16 dst0, dst1, dst2, dst3, dst4;
+    short tmp = 1;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4Y_4x4);
+    VXC_DP4x4(dst1, src1, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4Y_4x4);
+    VXC_DP4x4(dst2, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4U_4x4);
+    VXC_DP4x4(dst2, src1, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4U_4x4);
+    VXC_DP4x4(dst3, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4V_4x4);
+    VXC_DP4x4(dst3, src1, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvRgbToYuv4V_4x4);
+    VXC_WriteImage(output0, coord, dst0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+    VXC_WriteImage(output0, coord, dst1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    coord = coord >> 1;
+    VXC_DP4x4(dst4, dst2, dst3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvYUV4ToIyuvUv_4x4);
+    VXC_WriteImage(output1, coord, dst4, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output2, coord, dst4, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_rgbx_rgb(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord_in = (int2)(get_global_id(0) * 4, get_global_id(1));
+    int2 coord = (int2)(get_global_id(0) * 3, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvRgbxToRgbA_2x8);
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(8, 11, 0, VXC_RM_TowardZero, 0), uniConvRgbxToRgbB_2x8);
+
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_rgbx_yuv4(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord_in = (int2)(get_global_id(0) * 4, get_global_id(1));
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0, dst1, dst2;
+    short tmp = 1;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4Y_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4U_4x4);
+    VXC_DP4x4(dst2, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4V_4x4);
+
+    VXC_WriteImage(output0, coord, dst0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output1, coord, dst1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output2, coord, dst2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_rgbx_nv12(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord_in = (int2)(get_global_id(0) * 4, get_global_id(1));
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1;
+    vxc_uchar16 dst0, dst1, dst2, dst3, dst4;
+    short tmp = 1;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4Y_4x4);
+    VXC_DP4x4(dst1, src1, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4Y_4x4);
+    VXC_DP4x4(dst2, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4U_4x4);
+    VXC_DP4x4(dst2, src1, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4U_4x4);
+    VXC_DP4x4(dst3, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4V_4x4);
+    VXC_DP4x4(dst3, src1, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4V_4x4);
+    VXC_WriteImage(output0, coord, dst0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+    VXC_WriteImage(output0, coord, dst1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    coord.y = get_global_id(1) >> 1;
+    VXC_DP4x4(dst4, dst2, dst3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvYUV4ToNV12Uv_4x4);
+    VXC_WriteImage(output1, coord, dst4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_rgbx_iyuv(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord_in = (int2)(get_global_id(0) * 4, get_global_id(1));
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1;
+    vxc_uchar16 dst0, dst1, dst2, dst3, dst4;
+    short tmp = 1;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4Y_4x4);
+    VXC_DP4x4(dst1, src1, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4Y_4x4);
+    VXC_DP4x4(dst2, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4U_4x4);
+    VXC_DP4x4(dst2, src1, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4U_4x4);
+    VXC_DP4x4(dst3, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4V_4x4);
+    VXC_DP4x4(dst3, src1, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvRgbxToYuv4V_4x4);
+    VXC_WriteImage(output0, coord, dst0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+    VXC_WriteImage(output0, coord, dst1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    coord = coord >> 1;
+    VXC_DP4x4(dst4, dst2, dst3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvYUV4ToIyuvUv_4x4);
+    VXC_WriteImage(output1, coord, dst4, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output2, coord, dst4, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+/*  convert yuv to rgb.
+    startReg and nextReg are for this function.
+    startReg.x is for Y, startReg.y is for U, startReg.z is for V.
+    nextReg.x is for red, nextReg.y is for green, nextReg.z is for blue.
+    orignal formula:
+    Y' = Y + 0.5f;
+    U' = U - 128;
+    V' = V - 128;
+    r = Y' + 0.0000f * U' + 1.5748f * V';
+    g = Y' - 0.1873f * U' - 0.4681f * V';
+    b = Y' + 1.8556f * U' + 0.0000f * V';
+    transfer formula:
+    r = Y + 0.0000f * U + 1.5748f * V + 0.5f - 1.5748f * 128;
+    g = Y - 0.1873f * U - 0.4681f * V + 0.5f + 0.1873f * 128 + 0.4681f * 128;
+    b = Y + 1.8556f * U + 0.0000f * V + 0.5f - 1.8556f * 128;
+    ==>
+    r = Y + 1.5748f * V - 201.0744f;
+    g = Y - 0.1873f * U - 0.4681f * V + 84.3912f;
+    b = Y + 1.8556f * U - 237.0168f;
+*/
+//Bt601
+// R = Y + 1.402 * Cr
+// G = Y - 0.344 * Cb - 0.792 * Cr
+// B = Y + 1.772 * Cb
+__kernel void color_convert_yuyv_rgb(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0) * 2, get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0) * 3, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0, dst1;
+    short tmp = 1;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbA_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbB_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbC_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbD_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbE_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbF_4x4);
+
+    VXC_WriteImage(output, coord_out, dst0, VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+    coord_out.x += 12;
+    VXC_WriteImage(output, coord_out, dst1, VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_yuyv_rgbx(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0) * 2, get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0) * 4, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0, dst1;
+    short tmp = 1;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbxA_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbxB_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbxC_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(12, 15, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbxD_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbxE_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbxF_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbxG_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(12, 15, 0, VXC_RM_ToNearestEven, 1), uniConvYuyvToRgbxH_4x4);
+
+    VXC_WriteImage(output, coord_out, dst0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord_out.x += 16;
+    VXC_WriteImage(output, coord_out, dst1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+// y0 u0 y1 v0    y2 u1 y3 v1
+// y4 u2 y5 v2    y6 u3 y7 v3
+// ==>
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 v0 u1 v1
+__kernel void color_convert_yuyv_nv12(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord_in = (int2)(get_global_id(0) * 2, get_global_id(1));
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1;
+    vxc_uchar16 dst0, dst1, dst2;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvYuyvToNv12Y_2x8);
+    VXC_DP2x8(dst1, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvYuyvToNv12Y_2x8);
+    VXC_DP2x8(dst2, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvYuyvToNv12UvShift_2x8);
+
+    VXC_WriteImage(output0, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+    VXC_WriteImage(output0, coord, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.y = get_global_id(1) >> 1;
+    VXC_WriteImage(output1, coord, dst2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+// y0 u0 y1 v0    y2 u1 y3 v1
+// y4 u2 y5 v2    y6 u3 y7 v3
+// ==>
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 u1
+// v0 v1
+__kernel void color_convert_yuyv_iyuv(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord_in = (int2)(get_global_id(0) * 2, get_global_id(1));
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1;
+    vxc_uchar16 dst0, dst1, dst2;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvYuyvToNv12Y_2x8);
+    VXC_DP2x8(dst1, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvYuyvToNv12Y_2x8);
+    VXC_DP2x8(dst2, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvYuyvToIyuvUvShift_2x8);
+
+    VXC_WriteImage(output0, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+    VXC_WriteImage(output0, coord, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord = coord >> 1;
+    VXC_WriteImage(output1, coord, dst2.s0123, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output2, coord, dst2.s4567, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+//    r = Y + 1.5748f * V - 201.0744f;
+//    g = Y - 0.1873f * U - 0.4681f * V + 84.3912f;
+//    b = Y + 1.8556f * U - 237.0168f;
+__kernel void color_convert_uyvy_rgb(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0) * 2, get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0) * 3, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0, dst1;
+    short tmp = 1;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbA_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbB_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbC_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbD_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbE_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbF_4x4);
+
+    VXC_WriteImage(output, coord_out, dst0, VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+    coord_out.x += 12;
+    VXC_WriteImage(output, coord_out, dst1, VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_uyvy_rgbx(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0) * 2, get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0) * 4, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0, dst1;
+    short tmp = 1;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbxA_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbxB_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbxC_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(12, 15, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbxD_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbxE_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbxF_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbxG_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(12, 15, 0, VXC_RM_ToNearestEven, 1), uniConvUyvyToRgbxH_4x4);
+
+    VXC_WriteImage(output, coord_out, dst0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord_out.x += 16;
+    VXC_WriteImage(output, coord_out, dst1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+// y0 u0 y1 v0    y2 u1 y3 v1
+// y4 u2 y5 v2    y6 u3 y7 v3
+// ==>
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 v0 u1 v1
+__kernel void color_convert_uyvy_nv12(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord_in = (int2)(get_global_id(0) * 2, get_global_id(1));
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1;
+    vxc_uchar16 dst0, dst1, dst2;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvYuyvToNv12Uv_2x8);
+    VXC_DP2x8(dst1, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvYuyvToNv12Uv_2x8);
+    VXC_DP2x8(dst2, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvUyvyToNv12UvShift_2x8);
+
+    VXC_WriteImage(output0, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+    VXC_WriteImage(output0, coord, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.y = get_global_id(1) >> 1;
+    VXC_WriteImage(output1, coord, dst2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+// y0 u0 y1 v0    y2 u1 y3 v1
+// y4 u2 y5 v2    y6 u3 y7 v3
+// ==>
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 u1
+// v0 v1
+__kernel void color_convert_uyvy_iyuv(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord_in = (int2)(get_global_id(0) * 2, get_global_id(1));
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1;
+    vxc_uchar16 dst0, dst1, dst2;
+    VXC_ReadImage(src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(dst0, src0, src0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvYuyvToNv12Uv_2x8);
+    VXC_DP2x8(dst1, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvYuyvToNv12Uv_2x8);
+    VXC_DP2x8(dst2, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvUyvyToIyuvUvShift_2x8);
+
+    VXC_WriteImage(output0, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+    VXC_WriteImage(output0, coord, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord = coord >> 1;
+    VXC_WriteImage(output1, coord, dst2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output2, coord, dst2, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 u1
+// v0 v1
+// ==>
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 v0 u1 v1
+__kernel void color_convert_iyuv_nv12(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, src2, src3;
+    vxc_uchar16 dst;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input0, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output0, coord, src0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+    VXC_WriteImage(output0, coord, src3, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord = coord >> 1;
+    VXC_ReadImage(src1, input1, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input2, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.x = get_global_id(0);
+    VXC_DP2x8(dst, src1, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvIyuvToNv12UvLo_2x8);
+    VXC_DP2x8(dst, src1, src2, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0), uniConvIyuvToNv12UvHi_2x8);
+    VXC_WriteImage(output1, coord, dst, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_iyuv_yuv4(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src00, src01, src1, src2;
+    vxc_uchar16 dst1, dst2;
+    VXC_ReadImage(src00, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src01, input0, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    int2 coord_in = coord >> 1;
+    VXC_WriteImage(output0, coord, src00, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+    VXC_WriteImage(output0, coord, src01, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(src1, input1, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input2, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.y = get_global_id(1);
+    VXC_DP2x8(dst1, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvIyuvToNv12UvLo_2x8);
+    VXC_DP2x8(dst1, src1, src1, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0), uniConvIyuvToNv12UvHi_2x8);
+    VXC_DP2x8(dst2, src2, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvIyuvToNv12UvLo_2x8);
+    VXC_DP2x8(dst2, src2, src2, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0), uniConvIyuvToNv12UvHi_2x8);
+    VXC_WriteImage(output1, coord, dst1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output2, coord, dst2, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+    VXC_WriteImage(output1, coord, dst1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output2, coord, dst2, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+//    r = Y + 1.5748f * V - 201.0744f;
+//    g = Y + 0.1873f * U + 0.4681f * V + 84.3912f;
+//    b = Y + 1.8556f * U - 237.0168f;
+__kernel void color_convert_iyuv_rgb(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0) * 3, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0, dst1;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    int2 coord_c = coord >> 1;
+    VXC_ReadImage(src0, input1, coord_c, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(8, 11, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src0, input2, coord_c, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(12, 15, 0, VXC_RM_TowardZero, 0));
+
+    short tmp = 1;
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbA_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbB_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbC_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbD_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbE_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbF_4x4);
+
+    VXC_WriteImage(output, coord_out, dst0, VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+    coord_out.x+=12;
+    VXC_WriteImage(output, coord_out, dst1, VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_iyuv_rgbx(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0) * 4, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0, dst1;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    int2 coord_c = coord >> 1;
+    VXC_ReadImage(src0, input1, coord_c, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(8, 11, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src0, input2, coord_c, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(12, 15, 0, VXC_RM_TowardZero, 0));
+
+    short tmp = 1;
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbxA_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbxB_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbxC_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(12, 15, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbxD_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbxE_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbxF_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbxG_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(12, 15, 0, VXC_RM_ToNearestEven, 1), uniConvIyuvToRgbxH_4x4);
+
+    VXC_WriteImage(output, coord_out, dst0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord_out.x+=16;
+    VXC_WriteImage(output, coord_out, dst1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 v0 u1 v1
+__kernel void color_convert_nv12_rgb(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0) * 3, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0, dst1;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1) >> 1);
+    VXC_ReadImage(src0, input1, coord_c, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+
+    short tmp = 1;
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbA_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbB_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbC_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbD_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbE_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbF_4x4);
+
+    VXC_WriteImage(output, coord_out, dst0, VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+    coord_out.x+=12;
+    VXC_WriteImage(output, coord_out, dst1, VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_nv12_rgbx(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0) * 4, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0, dst1;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1) >> 1);
+    VXC_ReadImage(src0, input1, coord_c, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+
+    short tmp = 1;
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbxA_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbxB_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbxC_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(12, 15, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbxD_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbxE_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbxF_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbxG_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(12, 15, 0, VXC_RM_ToNearestEven, 1), uniConvNv12ToRgbxH_4x4);
+
+    VXC_WriteImage(output, coord_out, dst0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord_out.x+=16;
+    VXC_WriteImage(output, coord_out, dst1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_nv12_yuv4(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1;
+    vxc_uchar16 dst0, dst1;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1) >> 1);
+    VXC_ReadImage(src1, input1, coord_c, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output0, coord, src0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP2x8(dst0, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractNv12U_2x8);
+    VXC_DP2x8(dst1, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractNv12V_2x8);
+    VXC_WriteImage(output1, coord, dst0.s0011223344556677, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output2, coord, dst1.s0011223344556677, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_nv12_iyuv(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, src2;
+    vxc_uchar16 dst0, dst1;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input0, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output0, coord, src0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+    VXC_WriteImage(output0, coord, src2, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.y = get_global_id(1) >> 1;
+    VXC_ReadImage(src1, input1, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord.x = get_global_id(0) >> 1;
+    VXC_DP2x8(dst0, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractNv12U_2x8);
+    VXC_DP2x8(dst1, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractNv12V_2x8);
+    VXC_WriteImage(output1, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output2, coord, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_nv21_rgb(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0) * 3, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0, dst1;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1) >> 1);
+    VXC_ReadImage(src0, input1, coord_c, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+
+    short tmp = 1;
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbA_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbB_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbC_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbD_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbE_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbF_4x4);
+
+    VXC_WriteImage(output, coord_out, dst0, VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+    coord_out.x+=12;
+    VXC_WriteImage(output, coord_out, dst1, VXC_MODIFIER(0, 11, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_nv21_rgbx(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_out = (int2)(get_global_id(0) * 4, get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_uchar16 dst0, dst1;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1) >> 1);
+    VXC_ReadImage(src0, input1, coord_c, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0));
+
+    short tmp = 1;
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbxA_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbxB_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbxC_4x4);
+    VXC_DP4x4(dst0, src0, tmp, VXC_MODIFIER(12, 15, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbxD_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbxE_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(4, 7, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbxF_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(8, 11, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbxG_4x4);
+    VXC_DP4x4(dst1, src0, tmp, VXC_MODIFIER(12, 15, 0, VXC_RM_ToNearestEven, 1), uniConvNv21ToRgbxH_4x4);
+
+    VXC_WriteImage(output, coord_out, dst0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord_out.x+=16;
+    VXC_WriteImage(output, coord_out, dst1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_nv21_yuv4(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1;
+    vxc_uchar16 dst0, dst1;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1) >> 1);
+    VXC_ReadImage(src1, input1, coord_c, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output0, coord, src0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP2x8(dst0, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractNv12V_2x8);
+    VXC_DP2x8(dst1, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractNv12U_2x8);
+    VXC_WriteImage(output1, coord, dst0.s0011223344556677, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output2, coord, dst1.s0011223344556677, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void color_convert_nv21_iyuv(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0, src1, src2;
+    vxc_uchar16 dst0, dst1;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input0, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output0, coord, src0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord.y++;
+    VXC_WriteImage(output0, coord, src2, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.y = get_global_id(1) >> 1;
+    VXC_ReadImage(src1, input1, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord.x = get_global_id(0) >> 1;
+    VXC_DP2x8(dst0, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractNv12V_2x8);
+    VXC_DP2x8(dst1, src1, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniExtractNv12U_2x8);
+    VXC_WriteImage(output1, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output2, coord, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}

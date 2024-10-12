@@ -1,0 +1,38 @@
+
+__kernel void fast9corners_nonmax(
+    __read_only    image2d_t     input,
+                   float         threshold,
+                   int           do_nonmax,
+    __write_only   image2d_t     output
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int width = get_image_width(input);
+    int height = get_image_height(input);
+
+    if (x < 3 || y < 3 || x >= width - 3 || y >= height - 3)
+    {
+        write_imageui(output, (int2)(x,y), (uint4)(0,0,0,0));
+        return;
+    }
+    uint strength = read_imageui(input, (int2)(x,y)).x;
+    if (strength > 0)
+    {
+        uint src00 = read_imageui(input, (int2)(x - 1,y - 1)).x;
+        uint src01 = read_imageui(input, (int2)(x,y - 1)).x;
+        uint src02 = read_imageui(input, (int2)(x + 1,y - 1)).x;
+        uint src10 = read_imageui(input, (int2)(x - 1,y)).x;
+        uint src12 = read_imageui(input, (int2)(x + 1,y)).x;
+        uint src20 = read_imageui(input, (int2)(x - 1,y + 1)).x;
+        uint src21 = read_imageui(input, (int2)(x,y + 1)).x;
+        uint src22 = read_imageui(input, (int2)(x + 1,y + 1)).x;
+        if (strength >= src00 && strength >= src01 && strength >= src02 && strength >= src10
+           && strength > src12 && strength > src20 && strength >src21 && strength > src22)
+        {
+            write_imageui(output, (int2)(x,y), (uint4)(strength,0,0,0));
+            return;
+        }
+    }
+    write_imageui(output, (int2)(x,y), (uint4)(0,0,0,0));
+}

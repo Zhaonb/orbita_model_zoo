@@ -1,0 +1,212 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniAMulB_0_4x4;
+_viv_uniform VXC_512Bits uniAMulB_1_4x4;
+_viv_uniform VXC_512Bits uniExtact8Bin_2x8;
+_viv_uniform float outputTail;
+_viv_uniform float output_scale;
+
+#define TENSORMUL(name0, name1, name2, input_type0, copy_type0, input_type1, copy_type1, output_type, convert_type, copy_type) \
+    __kernel void vxcTensorEltwise_##name0##Mul##name1##to##name2( \
+    __read_only  image2d_array_t input0, \
+    __read_only  image2d_array_t input1, \
+    __write_only image2d_array_t output) \
+{\
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);\
+    vxc_float4 vecA, vecB, vecC, vecD;\
+    input_type0 srcA;\
+    copy_type0  src0;\
+    input_type1 srcB;\
+    copy_type1  src1;\
+    input_type0 input_ZP0;\
+    input_type1 input_ZP1;\
+    VXC_ReadImage2DArray(srcA, input0, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));\
+    _viv_asm(COPY, src0, srcA, 16); \
+    VXC_ReadImage2DArray(srcB, input1, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));\
+    _viv_asm(COPY, src1, srcB, 16); \
+    \
+    VXC_DP4x4(vecA, src0, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardInf, 0), uniAMulB_0_4x4);\
+    VXC_DP4x4(vecB, src0, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardInf, 0), uniAMulB_1_4x4);\
+    \
+    vecA = vecA * output_scale + outputTail;\
+    vecB = vecB * output_scale + outputTail;\
+    convert_type dst0, dst1;\
+    _viv_asm(CONV_RTE, dst0, vecA);\
+    _viv_asm(CONV_RTE, dst1, vecB);\
+    output_type dst2;\
+    VXC_DP2x8(dst2, dst0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniExtact8Bin_2x8);\
+    copy_type dst;\
+    _viv_asm(COPY, dst, dst2, 16); \
+    VXC_WriteImage2DArray(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));\
+}
+TENSORMUL(I8,  I8,  I8,  vxc_char16,  vxc_char16,  vxc_char16,  vxc_char16,  vxc_char16,  int4,  vxc_char16)
+TENSORMUL(I8,  I8,  F16, vxc_char16,  vxc_char16,  vxc_char16,  vxc_char16,  vxc_half8,   half4, vxc_short8)
+TENSORMUL(I8,  F16, I8,  vxc_char16,  vxc_char16,  vxc_short8,  vxc_half8,   vxc_char16,  int4,  vxc_char16)
+TENSORMUL(I8,  F16, F16, vxc_char16,  vxc_char16,  vxc_short8,  vxc_half8,   vxc_half8,   half4, vxc_short8)
+TENSORMUL(I8,  I16, I8,  vxc_char16,  vxc_char16,  vxc_short8,  vxc_short8,  vxc_char16,  int4,  vxc_char16)
+TENSORMUL(I8,  I16, I16, vxc_char16,  vxc_char16,  vxc_short8,  vxc_short8,  vxc_short8,  int4,  vxc_short8)
+TENSORMUL(I16, I16, I16, vxc_short8,  vxc_short8,  vxc_short8,  vxc_short8,  vxc_short8,  int4,  vxc_short8)
+TENSORMUL(I16, I16, F16, vxc_short8,  vxc_short8,  vxc_short8,  vxc_short8,  vxc_half8,   half4, vxc_short8)
+TENSORMUL(I16, F16, I16, vxc_short8,  vxc_short8,  vxc_short8,  vxc_half8,   vxc_short8,  int4,  vxc_short8)
+TENSORMUL(I16, F16, F16, vxc_short8,  vxc_short8,  vxc_short8,  vxc_half8,   vxc_half8,   half4, vxc_short8)
+TENSORMUL(U8,  U8,  U8,  vxc_uchar16, vxc_uchar16, vxc_uchar16, vxc_uchar16, vxc_uchar16, int4,  vxc_uchar16)
+TENSORMUL(U8,  U8,  F16, vxc_uchar16, vxc_uchar16, vxc_uchar16, vxc_uchar16, vxc_half8,   half4, vxc_short8)
+TENSORMUL(U8,  F16, U8,  vxc_uchar16, vxc_uchar16, vxc_short8,  vxc_half8,   vxc_uchar16, int4,  vxc_uchar16)
+TENSORMUL(U8,  F16, F16, vxc_uchar16, vxc_uchar16, vxc_short8,  vxc_half8,   vxc_half8,   half4, vxc_short8)
+TENSORMUL(U8,  I16, U8,  vxc_uchar16, vxc_uchar16, vxc_short8,  vxc_short8,  vxc_uchar16, int4,  vxc_uchar16)
+TENSORMUL(U8,  I16, I16, vxc_uchar16, vxc_uchar16, vxc_short8,  vxc_short8,  vxc_short8,  int4,  vxc_short8)
+TENSORMUL(F16, F16, F16, vxc_short8,  vxc_half8,   vxc_short8,  vxc_half8,   vxc_half8,   half4, vxc_short8)
+TENSORMUL(F16, F16, I8,  vxc_short8,  vxc_half8,   vxc_short8,  vxc_half8,   vxc_char16,  int4,  vxc_char16)
+TENSORMUL(F16, F16, I16, vxc_short8,  vxc_half8,   vxc_short8,  vxc_half8,   vxc_short8,  int4,  vxc_short8)
+TENSORMUL(F16, F16, U8,  vxc_short8,  vxc_half8,   vxc_short8,  vxc_half8,   vxc_uchar16, int4,  vxc_uchar16)
+
+#define TENSORMUL_2D(name0, name1, name2, input_type0, copy_type0, input_type1, copy_type1, output_type, convert_type, copy_type) \
+    __kernel void vxcTensorEltwise_##name0##Mul##name1##to##name2##_2D( \
+    __read_only  image2d_array_t input0, \
+    __read_only  image2d_array_t input1, \
+    __write_only image2d_array_t output) \
+{\
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);\
+    vxc_float4 vecA, vecB, vecC, vecD;\
+    input_type0 srcA;\
+    copy_type0  src0;\
+    input_type1 srcB;\
+    copy_type1  src1;\
+    input_type0 input_ZP0;\
+    input_type1 input_ZP1;\
+    VXC_ReadImage(srcA, input0, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));\
+    _viv_asm(COPY, src0, srcA, 16); \
+    VXC_ReadImage(srcB, input1, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));\
+    _viv_asm(COPY, src1, srcB, 16); \
+    \
+    VXC_DP4x4(vecA, src0, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardInf, 0), uniAMulB_0_4x4);\
+    VXC_DP4x4(vecB, src0, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardInf, 0), uniAMulB_1_4x4);\
+    \
+    vecA = vecA * output_scale + outputTail;\
+    vecB = vecB * output_scale + outputTail;\
+    convert_type dst0, dst1;\
+    _viv_asm(CONV_RTE, dst0, vecA);\
+    _viv_asm(CONV_RTE, dst1, vecB);\
+    output_type dst2;\
+    VXC_DP2x8(dst2, dst0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniExtact8Bin_2x8);\
+    copy_type dst;\
+    _viv_asm(COPY, dst, dst2, 16); \
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));\
+}
+TENSORMUL_2D(I8,  I8,  I8,  vxc_char16,  vxc_char16,  vxc_char16,  vxc_char16,  vxc_char16,  int4,  vxc_char16)
+TENSORMUL_2D(I8,  I8,  F16, vxc_char16,  vxc_char16,  vxc_char16,  vxc_char16,  vxc_half8,   half4, vxc_short8)
+TENSORMUL_2D(I8,  F16, I8,  vxc_char16,  vxc_char16,  vxc_short8,  vxc_half8,   vxc_char16,  int4,  vxc_char16)
+TENSORMUL_2D(I8,  F16, F16, vxc_char16,  vxc_char16,  vxc_short8,  vxc_half8,   vxc_half8,   half4, vxc_short8)
+TENSORMUL_2D(I8,  I16, I8,  vxc_char16,  vxc_char16,  vxc_short8,  vxc_short8,  vxc_char16,  int4,  vxc_char16)
+TENSORMUL_2D(I8,  I16, I16, vxc_char16,  vxc_char16,  vxc_short8,  vxc_short8,  vxc_short8,  int4,  vxc_short8)
+TENSORMUL_2D(I16, I16, I16, vxc_short8,  vxc_short8,  vxc_short8,  vxc_short8,  vxc_short8,  int4,  vxc_short8)
+TENSORMUL_2D(I16, I16, F16, vxc_short8,  vxc_short8,  vxc_short8,  vxc_short8,  vxc_half8,   half4, vxc_short8)
+TENSORMUL_2D(I16, F16, I16, vxc_short8,  vxc_short8,  vxc_short8,  vxc_half8,   vxc_short8,  int4,  vxc_short8)
+TENSORMUL_2D(I16, F16, F16, vxc_short8,  vxc_short8,  vxc_short8,  vxc_half8,   vxc_half8,   half4, vxc_short8)
+TENSORMUL_2D(U8,  U8,  U8,  vxc_uchar16, vxc_uchar16, vxc_uchar16, vxc_uchar16, vxc_uchar16, int4,  vxc_uchar16)
+TENSORMUL_2D(U8,  U8,  F16, vxc_uchar16, vxc_uchar16, vxc_uchar16, vxc_uchar16, vxc_half8,   half4, vxc_short8)
+TENSORMUL_2D(U8,  F16, U8,  vxc_uchar16, vxc_uchar16, vxc_short8,  vxc_half8,   vxc_uchar16, int4,  vxc_uchar16)
+TENSORMUL_2D(U8,  F16, F16, vxc_uchar16, vxc_uchar16, vxc_short8,  vxc_half8,   vxc_half8,   half4, vxc_short8)
+TENSORMUL_2D(U8,  I16, U8,  vxc_uchar16, vxc_uchar16, vxc_short8,  vxc_short8,  vxc_uchar16, int4,  vxc_uchar16)
+TENSORMUL_2D(U8,  I16, I16, vxc_uchar16, vxc_uchar16, vxc_short8,  vxc_short8,  vxc_short8,  int4,  vxc_short8)
+TENSORMUL_2D(F16, F16, F16, vxc_short8,  vxc_half8,   vxc_short8,  vxc_half8,   vxc_half8,   half4, vxc_short8)
+TENSORMUL_2D(F16, F16, I8,  vxc_short8,  vxc_half8,   vxc_short8,  vxc_half8,   vxc_char16,  int4,  vxc_char16)
+TENSORMUL_2D(F16, F16, I16, vxc_short8,  vxc_half8,   vxc_short8,  vxc_half8,   vxc_short8,  int4,  vxc_short8)
+TENSORMUL_2D(F16, F16, U8,  vxc_short8,  vxc_half8,   vxc_short8,  vxc_half8,   vxc_uchar16, int4,  vxc_uchar16)
+
+
+_viv_uniform VXC_512Bits uniI8MulI8Lo_2x8;
+_viv_uniform VXC_512Bits uniI8MulI8Hi_2x8;
+__kernel void vxcTensorEltwise_I8MulI8_2D(
+__read_only  image2d_array_t input0,
+__read_only  image2d_array_t input1,
+__write_only image2d_array_t output,
+global float * scale)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_char16 src0, src1;
+    vxc_char16 dst;
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input1, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP2x8(dst, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniI8MulI8Lo_2x8);
+    VXC_DP2x8(dst, src0, src1, VXC_MODIFIER(8, 15, 0, VXC_RM_ToNearestEven, 1), uniI8MulI8Hi_2x8);
+
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits uniConvBF16toF32_Part0_2x8;
+_viv_uniform VXC_512Bits uniConvBF16toF32_Part1_2x8;
+_viv_uniform VXC_512Bits uniPackedBF16_2x8;
+__kernel void vxcTensorEltwise_BF16MulBF16ToBF16_2D(
+    __read_only image2d_array_t   input0,
+    __read_only image2d_array_t   input1,
+    __write_only image2d_array_t  output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_ushort8 srcA, src;
+    vxc_ushort8 srcB;
+
+    VXC_ReadImage(srcA, input0, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(srcB, input1, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    float4 vecA0, vecA1;
+    float4 vecB0, vecB1;
+    vxc_short8 zero = (vxc_short8)(0, 0, 0, 0, 0, 0, 0, 0);
+    VXC_DP2x8(src, srcA, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+    _viv_asm(COPY, vecA0, src, 16);
+    VXC_DP2x8(src, srcA, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+    _viv_asm(COPY, vecA1, src, 16);
+
+    VXC_DP2x8(src, srcB, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+    _viv_asm(COPY, vecB0, src, 16);
+    VXC_DP2x8(src, srcB, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+    _viv_asm(COPY, vecB1, src, 16);
+
+    vecA0 = vecA0 * vecB0;
+    vecA1 = vecA1 * vecB1;
+
+    _viv_asm(COPY, srcA, vecA0, 16);
+    _viv_asm(COPY, srcB, vecA1, 16);
+    VXC_DP2x8(src, srcA, srcB, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniPackedBF16_2x8);
+
+    VXC_WriteImage(output, coord, src, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcTensorEltwise_BF16MulBF16ToBF16(
+    __read_only image2d_array_t   input0,
+    __read_only image2d_array_t   input1,
+    __write_only image2d_array_t  output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_ushort8 srcA, src;
+    vxc_ushort8 srcB;
+
+    VXC_ReadImage2DArray(srcA, input0, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(srcB, input1, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    float4 vecA0, vecA1;
+    float4 vecB0, vecB1;
+    vxc_short8 zero = (vxc_short8)(0, 0, 0, 0, 0, 0, 0, 0);
+    VXC_DP2x8(src, srcA, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+    _viv_asm(COPY, vecA0, src, 16);
+    VXC_DP2x8(src, srcA, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+    _viv_asm(COPY, vecA1, src, 16);
+
+    VXC_DP2x8(src, srcB, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+    _viv_asm(COPY, vecB0, src, 16);
+    VXC_DP2x8(src, srcB, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+    _viv_asm(COPY, vecB1, src, 16);
+
+    vecA0 = vecA0 * vecB0;
+    vecA1 = vecA1 * vecB1;
+
+    _viv_asm(COPY, srcA, vecA0, 16);
+    _viv_asm(COPY, srcB, vecA1, 16);
+    VXC_DP2x8(src, srcA, srcB, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniPackedBF16_2x8);
+
+    VXC_WriteImage2DArray(output, coord, src, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}

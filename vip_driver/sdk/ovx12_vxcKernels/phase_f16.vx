@@ -1,0 +1,46 @@
+
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniS16toFloat_lo_4x4;
+_viv_uniform VXC_512Bits uniS16toFloat_hi_4x4;
+_viv_uniform VXC_512Bits uniDataConv_2x8;
+_viv_uniform float       val_256_div_2PI;
+
+__kernel void phase_f16
+(
+    __read_only image2d_t in_image,
+    __read_only image2d_t in1_image,
+    __write_only image2d_t out_image
+)
+{
+    int2  coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_short8 src0, src1;
+    vxc_half8 v0, v1;
+
+    VXC_ReadImage(src0, in_image, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, in1_image, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, v0, src0, 16);
+    _viv_asm(COPY, v1, src1, 16);
+
+    vxc_uchar16 phase;
+
+    float4 dx_0, dx_1, dy_0, dy_1, val0, val1, add_val = 0;
+    VXC_DP4x4(dx_0, v0, v0, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniS16toFloat_lo_4x4);
+    VXC_DP4x4(dx_1, v0, v0, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniS16toFloat_hi_4x4);
+    VXC_DP4x4(dy_0, v1, v1, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniS16toFloat_lo_4x4);
+    VXC_DP4x4(dy_1, v1, v1, VXC_MODIFIER(0, 3, 0, VXC_RM_ToNearestEven, 1), uniS16toFloat_hi_4x4);
+
+    val0 = atan2(dy_0, dx_0);
+    add_val = val0 < 0 ? 256.5f : 0.5f;
+    val0 = val0 * val_256_div_2PI + add_val;
+    val1 = atan2(dy_1, dx_1);
+    add_val = val1 < 0 ? 256.5f : 0.5f;
+    val1 = val1 * val_256_div_2PI + add_val;
+    int4 result0, result1;
+    result0 = convert_int4_rte(val0);
+    result1 = convert_int4_rte(val1);
+    VXC_DP2x8(phase, result0, result1, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 0), uniDataConv_2x8);
+    VXC_WriteImage(out_image, coord, phase, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}

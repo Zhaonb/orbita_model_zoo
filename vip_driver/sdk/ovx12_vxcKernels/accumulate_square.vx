@@ -1,0 +1,22 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+__kernel void accumulate_square_U8toI16
+    (
+    __read_only  image2d_t input,
+     int                   shift,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_short8 src1, dst;
+    vxc_ushort8 tmpSrc0;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, output, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_IAccSq(dst, src1, src0, shift, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1));
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}

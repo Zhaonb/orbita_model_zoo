@@ -1,0 +1,248 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform float scale;
+_viv_uniform float tail;
+
+__kernel void gpuStridedSlice_F32toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             offsetx,
+                 int             offsety,
+                 int             offsetz,
+                 int             stridex,
+                 int             stridey,
+                 int             stridez
+    )
+{
+    int4 coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in = {0};
+    float4 tmp = {0.0};
+
+    coord_in.x = coord.x * stridex + offsetx;
+    coord_in.y = coord.y * stridey + offsety;
+    coord_in.z = coord.z * stridez + offsetz;
+    tmp = read_imagef(input, coord_in);
+    write_imagef(output, coord, tmp);
+}
+
+__kernel void gpuStridedSlice_I32toI32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             offsetx,
+                 int             offsety,
+                 int             offsetz,
+                 int             stridex,
+                 int             stridey,
+                 int             stridez
+    )
+{
+    int4 coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in = {0};
+    int4 tmp = {0.0};
+
+    coord_in.x = coord.x * stridex + offsetx;
+    coord_in.y = coord.y * stridey + offsety;
+    coord_in.z = coord.z * stridez + offsetz;
+    tmp = read_imagei(input, coord_in);
+    write_imagei(output, coord, tmp);
+}
+
+__kernel void gpuStridedSlice_U8toU8
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             offsetx,
+                 int             offsety,
+                 int             offsetz,
+                 int             stridex,
+                 int             stridey,
+                 int             stridez
+    )
+{
+    int4 coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in = {0};
+    uint4 src = {0};
+    uint4 dst = {0};
+    float4 tmp = {0.0};
+
+    coord_in.x = coord.x * stridex + offsetx;
+    coord_in.y = coord.y * stridey + offsety;
+    coord_in.z = coord.z * stridez + offsetz;
+
+    src = read_imageui(input, coord_in);
+    tmp = convert_float4(src) * scale + tail;
+    dst = convert_uint4(tmp);
+
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuStridedSlice_F32toU8
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             offsetx,
+                 int             offsety,
+                 int             offsetz,
+                 int             stridex,
+                 int             stridey,
+                 int             stridez
+    )
+{
+    int4 coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in = {0};
+    float4 src = {0.0};
+    uint4  dst = {0};
+
+    coord_in.x = coord.x * stridex + offsetx;
+    coord_in.y = coord.y * stridey + offsety;
+    coord_in.z = coord.z * stridez + offsetz;
+    src = read_imagef(input, coord_in);
+
+    dst = convert_uint4(src * scale + tail);
+
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuStridedSlice_F32toF32_4D
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             offsetx,
+                 int             offsety,
+                 int             offsetz,
+                 int             stridex,
+                 int             stridey,
+                 int             stridez,
+                 int             offsetw,
+                 int             stridew,
+                 int             depth_in,
+                 int             depth_out
+    )
+{
+    int4 coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in = {0};
+    float4 tmp = {0.0};
+
+    int4 stride4 = (int4)(stridex, stridey, stridez, stridew);
+    int4 offset4 = (int4)(offsetx, offsety, offsetz, offsetw);
+    int out_w = (int)((short)get_global_id(2) / (short)depth_out);
+    int out_z = get_global_id(2) - out_w * depth_out;
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), out_z, out_w);
+    coord_in = coord_out * stride4 + offset4;
+    coord_in.z = coord_in.w * depth_in + coord_in.z;
+    coord_in.w = 0;
+
+    tmp = read_imagef(input, coord_in);
+    write_imagef(output, coord, tmp);
+}
+
+__kernel void gpuStridedSlice_I32toI32_4D
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             offsetx,
+                 int             offsety,
+                 int             offsetz,
+                 int             stridex,
+                 int             stridey,
+                 int             stridez,
+                 int             offsetw,
+                 int             stridew,
+                 int             depth_in,
+                 int             depth_out
+    )
+{
+    int4 coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in = {0};
+    int4 tmp = {0.0};
+
+    int4 stride4 = (int4)(stridex, stridey, stridez, stridew);
+    int4 offset4 = (int4)(offsetx, offsety, offsetz, offsetw);
+    int out_w = (int)((short)get_global_id(2) / (short)depth_out);
+    int out_z = get_global_id(2) - out_w * depth_out;
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), out_z, out_w);
+    coord_in = coord_out * stride4 + offset4;
+    coord_in.z = coord_in.w * depth_in + coord_in.z;
+    coord_in.w = 0;
+
+    tmp = read_imagei(input, coord_in);
+    write_imagei(output, coord, tmp);
+}
+
+__kernel void gpuStridedSlice_U8toU8_4D
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             offsetx,
+                 int             offsety,
+                 int             offsetz,
+                 int             stridex,
+                 int             stridey,
+                 int             stridez,
+                 int             offsetw,
+                 int             stridew,
+                 int             depth_in,
+                 int             depth_out
+    )
+{
+    int4 coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in = {0};
+    uint4 src = {0};
+    uint4 dst = {0};
+    float4 tmp = {0.0};
+
+    int4 stride4 = (int4)(stridex, stridey, stridez, stridew);
+    int4 offset4 = (int4)(offsetx, offsety, offsetz, offsetw);
+    int out_w = (int)((short)get_global_id(2) / (short)depth_out);
+    int out_z = get_global_id(2) - out_w * depth_out;
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), out_z, out_w);
+    coord_in = coord_out * stride4 + offset4;
+    coord_in.z = coord_in.w * depth_in + coord_in.z;
+    coord_in.w = 0;
+
+    src = read_imageui(input, coord_in);
+    tmp = convert_float4(src) * scale + tail;
+    dst = convert_uint4(tmp);
+
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuStridedSlice_F32toU8_4D
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             offsetx,
+                 int             offsety,
+                 int             offsetz,
+                 int             stridex,
+                 int             stridey,
+                 int             stridez,
+                 int             offsetw,
+                 int             stridew,
+                 int             depth_in,
+                 int             depth_out
+    )
+{
+    int4 coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in = {0};
+    float4 src = {0.0};
+    uint4  dst = {0};
+
+    int4 stride4 = (int4)(stridex, stridey, stridez, stridew);
+    int4 offset4 = (int4)(offsetx, offsety, offsetz, offsetw);
+    int out_w = (int)((short)get_global_id(2) / (short)depth_out);
+    int out_z = get_global_id(2) - out_w * depth_out;
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), out_z, out_w);
+    coord_in = coord_out * stride4 + offset4;
+    coord_in.z = coord_in.w * depth_in + coord_in.z;
+    coord_in.w = 0;
+
+    src = read_imagef(input, coord_in);
+    dst = convert_uint4(src * scale + tail);
+
+    write_imageui(output, coord, dst);
+}

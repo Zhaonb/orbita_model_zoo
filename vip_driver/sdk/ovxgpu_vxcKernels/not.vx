@@ -1,0 +1,18 @@
+
+__kernel void not_U8toU8
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int offset = get_global_id(0);
+
+    Image in = create_image_from_image2d(input, U8_ELEMENT_SIZE);
+
+    uchar4 src = vload4(offset, in.ptr);
+    uchar4 dst = ~src;
+
+    Image out = create_image_from_image2d(output, U8_ELEMENT_SIZE);
+
+    vstore4(dst, offset, out.ptr);
+}

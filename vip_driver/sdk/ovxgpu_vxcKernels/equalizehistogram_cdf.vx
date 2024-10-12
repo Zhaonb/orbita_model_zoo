@@ -1,0 +1,55 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform int area;
+
+__kernel __attribute__((reqd_work_group_size(64, 1, 1))) void equalizehistogram_cdf(
+        __read_only  image2d_t input,
+        __read_only  image2d_t in_hist,
+        __global int* in_min,
+        __write_only image2d_t output)
+{
+    int lidx = get_local_id(0);
+
+    Image img1 = create_image_from_image2d(in_hist, 4);
+    Image img2 = create_image_from_image2d(output, 4);
+    __global uint* hist_ptr = (__global uint*)img1.ptr;
+    __global int* output_ptr = (__global int*)img2.ptr;
+
+    uint4 src0 = vload4(lidx, hist_ptr);
+
+    __local uint cdf[256];
+    __local uint cur_sum[64];
+
+    uint4 sum;
+    sum.x = src0.x;
+    sum.y = src0.y + sum.x;
+    sum.z = src0.z + sum.y;
+    sum.w = src0.w + sum.z;
+    cur_sum[lidx] = sum.w;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for(int i = 0; i < lidx; i++)
+    {
+        sum += cur_sum[i];
+    }
+    vstore4(sum, lidx, cdf);
+    barrier(CLK_LOCAL_MEM_FENCE);
+    uint cdf_min = cdf[*in_min];
+
+    int div = area - cdf_min;
+
+    if(div > 0)
+    {
+        float4 cdfx = convert_float4(sum - cdf_min);
+        float fdiv = (float)div;
+        float4 p = cdfx / fdiv;
+        int4 data = convert_int4_rtz(p * 255.0f + 0.5f);
+        vstore4(data, lidx, output_ptr);
+    }
+    else
+    {
+        int4 data = (int4)(get_global_id(0), get_global_id(0) + 1, get_global_id(0) + 2, get_global_id(0) + 3);
+        vstore4(data, lidx, output_ptr);
+    }
+}

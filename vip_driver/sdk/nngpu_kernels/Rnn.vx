@@ -1,0 +1,535 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+__kernel void gpuRnn_FP32(
+    __read_only     image2d_t input,
+    __read_only     image2d_t weight,
+    __read_only     image2d_t recurrent,
+    __read_only     image2d_t bias,
+    __read_only     image2d_t hidden,
+    __write_only    image2d_t state_out,
+    __write_only    image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int inputSize = get_image_width(input);
+    int numUnits = get_image_width(recurrent);
+    int2 coord_in = {0, y};
+    int2 coord_weight = {0, x};
+    int2 coord_hidden = {0, y};
+    int2 coord_recurrent = {x, 0};
+    int2 coord_bias = {x, 0};
+    int2 coord_out = {x, y};
+    float4 tmp, dst = {0.0};
+    float inPixel, inWeight, inState, inRecurrent, inBias, outPixel;
+
+    tmp = read_imagef(bias, coord_bias);
+    outPixel = tmp.x;
+    for(int i = 0; i < inputSize; i++)
+    {
+        tmp = read_imagef(input, coord_in);
+        inPixel = tmp.x;
+        tmp = read_imagef(weight, coord_weight);
+        inWeight = tmp.x;
+        outPixel += inPixel * inWeight;
+        coord_in.x ++;
+        coord_weight.x ++;
+    }
+
+    for(int j = 0; j < numUnits; j++)
+    {
+        tmp = read_imagef(hidden, coord_hidden);
+        inState = tmp.x;
+        tmp = read_imagef(recurrent, coord_recurrent.yx);
+        inRecurrent = tmp.x;
+        outPixel += inState * inRecurrent;
+        coord_hidden.x ++;
+        coord_recurrent.y ++;
+    }
+
+    dst.x = outPixel;
+    write_imagef(state_out, coord_out, dst);
+    write_imagef(output, coord_out, dst);
+}
+
+__kernel void gpuRnn_FP32Relu(
+    __read_only     image2d_t input,
+    __read_only     image2d_t weight,
+    __read_only     image2d_t recurrent,
+    __read_only     image2d_t bias,
+    __read_only     image2d_t hidden,
+    __write_only    image2d_t state_out,
+    __write_only    image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int inputSize = get_image_width(input);
+    int numUnits = get_image_width(recurrent);
+    int2 coord_in = {0, y};
+    int2 coord_weight = {0, x};
+    int2 coord_hidden = {0, y};
+    int2 coord_recurrent = {x, 0};
+    int2 coord_bias = {x, 0};
+    int2 coord_out = {x, y};
+    float4 tmp, dst = {0.0};
+    float inPixel, inWeight, inState, inRecurrent, inBias, outPixel;
+
+    tmp = read_imagef(bias, coord_bias);
+    outPixel = tmp.x;
+    for(int i = 0; i < inputSize; i++)
+    {
+        tmp = read_imagef(input, coord_in);
+        inPixel = tmp.x;
+        tmp = read_imagef(weight, coord_weight);
+        inWeight = tmp.x;
+        outPixel += inPixel * inWeight;
+        coord_in.x ++;
+        coord_weight.x ++;
+    }
+
+    for(int j = 0; j < numUnits; j++)
+    {
+        tmp = read_imagef(hidden, coord_hidden);
+        inState = tmp.x;
+        tmp = read_imagef(recurrent, coord_recurrent.yx);
+        inRecurrent = tmp.x;
+        outPixel += inState * inRecurrent;
+        coord_hidden.x ++;
+        coord_recurrent.y ++;
+    }
+
+    outPixel = max(0.0, outPixel);
+    dst.x = outPixel;
+    write_imagef(state_out, coord_out, dst);
+    write_imagef(output, coord_out, dst);
+}
+
+__kernel void gpuRnn_FP32Relu1(
+    __read_only     image2d_t input,
+    __read_only     image2d_t weight,
+    __read_only     image2d_t recurrent,
+    __read_only     image2d_t bias,
+    __read_only     image2d_t hidden,
+    __write_only    image2d_t state_out,
+    __write_only    image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int inputSize = get_image_width(input);
+    int numUnits = get_image_width(recurrent);
+    int2 coord_in = {0, y};
+    int2 coord_weight = {0, x};
+    int2 coord_hidden = {0, y};
+    int2 coord_recurrent = {x, 0};
+    int2 coord_bias = {x, 0};
+    int2 coord_out = {x, y};
+    float4 tmp, dst = {0.0};
+    float inPixel, inWeight, inState, inRecurrent, inBias, outPixel;
+
+    tmp = read_imagef(bias, coord_bias);
+    outPixel = tmp.x;
+    for(int i = 0; i < inputSize; i++)
+    {
+        tmp = read_imagef(input, coord_in);
+        inPixel = tmp.x;
+        tmp = read_imagef(weight, coord_weight);
+        inWeight = tmp.x;
+        outPixel += inPixel * inWeight;
+        coord_in.x ++;
+        coord_weight.x ++;
+    }
+
+    for(int j = 0; j < numUnits; j++)
+    {
+        tmp = read_imagef(hidden, coord_hidden);
+        inState = tmp.x;
+        tmp = read_imagef(recurrent, coord_recurrent.yx);
+        inRecurrent = tmp.x;
+        outPixel += inState * inRecurrent;
+        coord_hidden.x ++;
+        coord_recurrent.y ++;
+    }
+
+    outPixel = clamp(outPixel, -1.0, 1.0);
+    dst.x = outPixel;
+    write_imagef(state_out, coord_out, dst);
+    write_imagef(output, coord_out, dst);
+}
+
+__kernel void gpuRnn_FP32Relu6(
+    __read_only     image2d_t input,
+    __read_only     image2d_t weight,
+    __read_only     image2d_t recurrent,
+    __read_only     image2d_t bias,
+    __read_only     image2d_t hidden,
+    __write_only    image2d_t state_out,
+    __write_only    image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int inputSize = get_image_width(input);
+    int numUnits = get_image_width(recurrent);
+    int2 coord_in = {0, y};
+    int2 coord_weight = {0, x};
+    int2 coord_hidden = {0, y};
+    int2 coord_recurrent = {x, 0};
+    int2 coord_bias = {x, 0};
+    int2 coord_out = {x, y};
+    float4 tmp, dst = {0.0};
+    float inPixel, inWeight, inState, inRecurrent, inBias, outPixel;
+
+    tmp = read_imagef(bias, coord_bias);
+    outPixel = tmp.x;
+    for(int i = 0; i < inputSize; i++)
+    {
+        tmp = read_imagef(input, coord_in);
+        inPixel = tmp.x;
+        tmp = read_imagef(weight, coord_weight);
+        inWeight = tmp.x;
+        outPixel += inPixel * inWeight;
+        coord_in.x ++;
+        coord_weight.x ++;
+    }
+
+    for(int j = 0; j < numUnits; j++)
+    {
+        tmp = read_imagef(hidden, coord_hidden);
+        inState = tmp.x;
+        tmp = read_imagef(recurrent, coord_recurrent.yx);
+        inRecurrent = tmp.x;
+        outPixel += inState * inRecurrent;
+        coord_hidden.x ++;
+        coord_recurrent.y ++;
+    }
+
+    outPixel = clamp(outPixel, 0.0, 6.0);
+    dst.x = outPixel;
+    write_imagef(state_out, coord_out, dst);
+    write_imagef(output, coord_out, dst);
+}
+
+/*Quant8 format*/
+__kernel void gpuRnn_Quant8(
+    __read_only     image2d_t input,
+    float                     inScale,
+    uint                      inZP,
+    __read_only     image2d_t weight,
+    float                     weightScale,
+    uint                      weightZP,
+    __read_only     image2d_t recurrent,
+    float                     recurrentScale,
+    uint                      recurrentZP,
+    __read_only     image2d_t bias,
+    float                     biasScale,
+    uint                      biasZP,
+    __read_only     image2d_t hidden,
+    float                     hiddenScale,
+    uint                      hiddenZP,
+    __write_only    image2d_t state_out,
+    float                     outScale,
+    uint                      outZP,
+    __write_only    image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int inputSize = get_image_width(input);
+    int numUnits = get_image_width(recurrent);
+    int2 coord_in = {0, y};
+    int2 coord_weight = {0, x};
+    int2 coord_hidden = {0, y};
+    int2 coord_recurrent = {x, 0};
+    int2 coord_bias = {x, 0};
+    int2 coord_out = {x, y};
+    uint4 tmp, dst = {0.0};
+    float inPixel, inWeight, inState, inRecurrent, inBias, outPixel;
+
+    tmp = read_imageui(bias, coord_bias);
+    outPixel = (convert_int(tmp.x)-biasZP)*biasScale;
+    for(int i = 0; i < inputSize; i++)
+    {
+        tmp = read_imageui(input, coord_in);
+        inPixel = (convert_int(tmp.x)-inZP)*inScale;
+        tmp = read_imageui(weight, coord_weight);
+        inWeight = (convert_int(tmp.x)-weightZP)*weightScale;
+        outPixel += inPixel * inWeight;
+        coord_in.x ++;
+        coord_weight.x ++;
+    }
+
+    for(int j = 0; j < numUnits; j++)
+    {
+        tmp = read_imageui(hidden, coord_hidden);
+        inState = (convert_int(tmp.x)-hiddenZP)*hiddenScale;
+        tmp = read_imageui(recurrent, coord_recurrent.yx);
+        inRecurrent = (convert_int(tmp.x)-recurrentZP)*recurrentScale;
+        outPixel += inState * inRecurrent;
+        coord_hidden.x ++;
+        coord_recurrent.y ++;
+    }
+
+    dst.x = floor(outPixel*outScale + outZP + 0.5);
+    write_imageui(state_out, coord_out, dst);
+    write_imageui(output, coord_out, dst);
+}
+
+__kernel void gpuRnn_Quant8Relu(
+    __read_only     image2d_t input,
+    float                     inScale,
+    uint                      inZP,
+    __read_only     image2d_t weight,
+    float                     weightScale,
+    uint                      weightZP,
+    __read_only     image2d_t recurrent,
+    float                     recurrentScale,
+    uint                      recurrentZP,
+    __read_only     image2d_t bias,
+    float                     biasScale,
+    uint                      biasZP,
+    __read_only     image2d_t hidden,
+    float                     hiddenScale,
+    uint                      hiddenZP,
+    __write_only    image2d_t state_out,
+    float                     outScale,
+    uint                      outZP,
+    __write_only    image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int inputSize = get_image_width(input);
+    int numUnits = get_image_width(recurrent);
+    int2 coord_in = {0, y};
+    int2 coord_weight = {0, x};
+    int2 coord_hidden = {0, y};
+    int2 coord_recurrent = {x, 0};
+    int2 coord_bias = {x, 0};
+    int2 coord_out = {x, y};
+    uint4 tmp, dst = {0.0};
+    float inPixel, inWeight, inState, inRecurrent, inBias, outPixel;
+
+    tmp = read_imageui(bias, coord_bias);
+    outPixel = (convert_int(tmp.x)-biasZP)*biasScale;
+    for(int i = 0; i < inputSize; i++)
+    {
+        tmp = read_imageui(input, coord_in);
+        inPixel = (convert_int(tmp.x)-inZP)*inScale;
+        tmp = read_imageui(weight, coord_weight);
+        inWeight = (convert_int(tmp.x)-weightZP)*weightScale;
+        outPixel += inPixel * inWeight;
+        coord_in.x ++;
+        coord_weight.x ++;
+    }
+
+    for(int j = 0; j < numUnits; j++)
+    {
+        tmp = read_imageui(hidden, coord_hidden);
+        inState = (convert_int(tmp.x)-hiddenZP)*hiddenScale;
+        tmp = read_imageui(recurrent, coord_recurrent.yx);
+        inRecurrent = (convert_int(tmp.x)-recurrentZP)*recurrentScale;
+        outPixel += inState * inRecurrent;
+        coord_hidden.x ++;
+        coord_recurrent.y ++;
+    }
+
+    outPixel = max(0.0, outPixel);
+    dst.x = floor(outPixel*outScale + outZP + 0.5);
+    write_imageui(state_out, coord_out, dst);
+    write_imageui(output, coord_out, dst);
+}
+
+__kernel void gpuRnn_Quant8Relu1(
+    __read_only     image2d_t input,
+    float                     inScale,
+    uint                      inZP,
+    __read_only     image2d_t weight,
+    float                     weightScale,
+    uint                      weightZP,
+    __read_only     image2d_t recurrent,
+    float                     recurrentScale,
+    uint                      recurrentZP,
+    __read_only     image2d_t bias,
+    float                     biasScale,
+    uint                      biasZP,
+    __read_only     image2d_t hidden,
+    float                     hiddenScale,
+    uint                      hiddenZP,
+    __write_only    image2d_t state_out,
+    float                     outScale,
+    uint                      outZP,
+    __write_only    image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int inputSize = get_image_width(input);
+    int numUnits = get_image_width(recurrent);
+    int2 coord_in = {0, y};
+    int2 coord_weight = {0, x};
+    int2 coord_hidden = {0, y};
+    int2 coord_recurrent = {x, 0};
+    int2 coord_bias = {x, 0};
+    int2 coord_out = {x, y};
+    uint4 tmp, dst = {0.0};
+    float inPixel, inWeight, inState, inRecurrent, inBias, outPixel;
+
+    tmp = read_imageui(bias, coord_bias);
+    outPixel = (convert_int(tmp.x)-biasZP)*biasScale;
+    for(int i = 0; i < inputSize; i++)
+    {
+        tmp = read_imageui(input, coord_in);
+        inPixel = (convert_int(tmp.x)-inZP)*inScale;
+        tmp = read_imageui(weight, coord_weight);
+        inWeight = (convert_int(tmp.x)-weightZP)*weightScale;
+        outPixel += inPixel * inWeight;
+        coord_in.x ++;
+        coord_weight.x ++;
+    }
+
+    for(int j = 0; j < numUnits; j++)
+    {
+        tmp = read_imageui(hidden, coord_hidden);
+        inState = (convert_int(tmp.x)-hiddenZP)*hiddenScale;
+        tmp = read_imageui(recurrent, coord_recurrent.yx);
+        inRecurrent = (convert_int(tmp.x)-recurrentZP)*recurrentScale;
+        outPixel += inState * inRecurrent;
+        coord_hidden.x ++;
+        coord_recurrent.y ++;
+    }
+
+    outPixel = clamp(outPixel, -1.0, 1.0);
+    dst.x = floor(outPixel*outScale + outZP + 0.5);
+    write_imageui(state_out, coord_out, dst);
+    write_imageui(output, coord_out, dst);
+}
+
+__kernel void gpuRnn_Quant8Relu6(
+    __read_only     image2d_t input,
+    float                     inScale,
+    uint                      inZP,
+    __read_only     image2d_t weight,
+    float                     weightScale,
+    uint                      weightZP,
+    __read_only     image2d_t recurrent,
+    float                     recurrentScale,
+    uint                      recurrentZP,
+    __read_only     image2d_t bias,
+    float                     biasScale,
+    uint                      biasZP,
+    __read_only     image2d_t hidden,
+    float                     hiddenScale,
+    uint                      hiddenZP,
+    __write_only    image2d_t state_out,
+    float                     outScale,
+    uint                      outZP,
+    __write_only    image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int inputSize = get_image_width(input);
+    int numUnits = get_image_width(recurrent);
+    int2 coord_in = {0, y};
+    int2 coord_weight = {0, x};
+    int2 coord_hidden = {0, y};
+    int2 coord_recurrent = {x, 0};
+    int2 coord_bias = {x, 0};
+    int2 coord_out = {x, y};
+    uint4 tmp, dst = {0.0};
+    float inPixel, inWeight, inState, inRecurrent, inBias, outPixel;
+
+    tmp = read_imageui(bias, coord_bias);
+    outPixel = (convert_int(tmp.x)-biasZP)*biasScale;
+    for(int i = 0; i < inputSize; i++)
+    {
+        tmp = read_imageui(input, coord_in);
+        inPixel = (convert_int(tmp.x)-inZP)*inScale;
+        tmp = read_imageui(weight, coord_weight);
+        inWeight = (convert_int(tmp.x)-weightZP)*weightScale;
+        outPixel += inPixel * inWeight;
+        coord_in.x ++;
+        coord_weight.x ++;
+    }
+
+    for(int j = 0; j < numUnits; j++)
+    {
+        tmp = read_imageui(hidden, coord_hidden);
+        inState = (convert_int(tmp.x)-hiddenZP)*hiddenScale;
+        tmp = read_imageui(recurrent, coord_recurrent.yx);
+        inRecurrent = (convert_int(tmp.x)-recurrentZP)*recurrentScale;
+        outPixel += inState * inRecurrent;
+        coord_hidden.x ++;
+        coord_recurrent.y ++;
+    }
+
+    outPixel = clamp(outPixel, 0.0, 6.0);
+    dst.x = floor(outPixel*outScale + outZP + 0.5);
+    write_imageui(state_out, coord_out, dst);
+    write_imageui(output, coord_out, dst);
+}
+
+__kernel void gpuRnn_F32toF16
+    (
+    __read_only     image2d_t input,
+    __read_only     image2d_t weight,
+    __read_only     image2d_t recurrent,
+    __read_only     image2d_t bias,
+    __read_only     image2d_t hidden,
+    __write_only    image2d_t state_out,
+    __write_only    image2d_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int inputSize = get_image_width(input);
+    int numUnits = get_image_width(recurrent);
+    int2 coord_in = {0, y};
+    int2 coord_weight = {0, x};
+    int2 coord_hidden = {0, y};
+    int2 coord_recurrent = {x, 0};
+    int2 coord_bias = {x, 0};
+    int2 coord_out = {x, y};
+    float4 tmp;
+    float inPixel, inWeight, inState, inRecurrent, inBias, outPixel;
+
+    tmp = read_imagef(bias, coord_bias);
+    outPixel = tmp.x;
+    for(int i = 0; i < inputSize; i++)
+    {
+        tmp = read_imagef(input, coord_in);
+        inPixel = tmp.x;
+        tmp = read_imagef(weight, coord_weight);
+        inWeight = tmp.x;
+        outPixel += inPixel * inWeight;
+        coord_in.x ++;
+        coord_weight.x ++;
+    }
+
+    for(int j = 0; j < numUnits; j++)
+    {
+        tmp = read_imagef(hidden, coord_hidden);
+        inState = tmp.x;
+        tmp = read_imagef(recurrent, coord_recurrent.yx);
+        inRecurrent = tmp.x;
+        outPixel += inState * inRecurrent;
+        coord_hidden.x ++;
+        coord_recurrent.y ++;
+    }
+
+
+    half dst;
+    _viv_asm(CONV, dst, outPixel);
+    ushort result;
+    _viv_asm(COPY, result, dst, 2);
+
+    Image st_tensor = create_image_from_image2d(state_out, 2);
+    uchar *output0_data_ptr = get_image_ptr_from_coord(st_tensor, coord_out);
+    ((ushort*)output0_data_ptr)[0] = result;
+
+    Image o_tensor = create_image_from_image2d(output, 2);
+    uchar *output1_data_ptr = get_image_ptr_from_coord(o_tensor, coord_out);
+    ((ushort*)output1_data_ptr)[0] = result;
+}

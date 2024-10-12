@@ -1,0 +1,66 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform int conv_width;
+_viv_uniform int conv_height;
+_viv_uniform int conv_radius_x;
+_viv_uniform int conv_radius_y;
+_viv_uniform float wr;
+_viv_uniform float hr;
+_viv_uniform uint scale_uint;
+_viv_uniform uint bordervalue;
+_viv_uniform uint in_width;
+_viv_uniform uint in_height;
+
+__kernel void gaussian5x5_scale
+(
+    __read_only image2d_t   in_image,
+        global short*       conv_base_ptr,
+        float               scale,
+    __write_only image2d_t  out_image
+)
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    int2 coord = (int2)(pix, piy);
+    uint4 src;
+    int sum = 0;
+    float x_src;
+    float y_src;
+    float x_min;
+    float y_min;
+    int x_out;
+    int y_out;
+
+    x_src = (pix + 0.5f) * wr - 0.5f;
+    y_src = (piy + 0.5f) * hr - 0.5f;
+    x_src -= convert_float(conv_radius_x);
+    y_src -= convert_float(conv_radius_y);
+    x_min = floor(x_src);
+    y_min = floor(y_src);
+    x_out = convert_int(x_min);
+    y_out = convert_int(y_min);
+    if (x_src - x_min >= 0.5f) x_out++;
+    if (x_src - x_min >= 0.5f) y_out++;
+    x_out += conv_radius_x;
+    y_out += conv_radius_y;
+    if (x_out < conv_radius_x || y_out < conv_radius_y || x_out >= in_width - conv_radius_x || y_out >= in_height - conv_radius_y )
+    {
+        sum = 0;
+    }
+    else {
+    for (int j = -conv_radius_y; j < convert_int(conv_height) - conv_radius_y; j++)
+    {
+        for (int i = -conv_radius_x; i < convert_int(conv_width) - conv_radius_x; i++)
+        {
+            short *conv_ptr = (short*)conv_base_ptr + conv_width * (j + conv_radius_y) + (i + conv_radius_x);
+            short data = conv_ptr[0];
+            src = read_imageui(in_image, (int2)(x_out + i, y_out + j));
+            sum += data * src.x;
+        }
+    }
+    }
+    sum = sum/convert_int(scale_uint);
+    uint4 dst;
+    dst.x = clamp(sum, 0, 255);
+    write_imageui(out_image, (int2)(pix, piy), dst);
+}

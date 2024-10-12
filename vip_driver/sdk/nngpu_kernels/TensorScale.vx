@@ -1,0 +1,134 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+__kernel void gpuTensorScale_BilinearFP16
+    (
+    __read_only     image2d_array_t input,
+    float           scaleX,
+    float           scaleY,
+    __write_only    image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    float in_x = x * scaleX;
+    float in_y = y * scaleY;
+
+    int leftPos = convert_int(floor(in_x));
+    int rightPos = convert_int(ceil(in_x));
+    int topPos = convert_int(floor(in_y));
+    int bottomPos = convert_int(ceil(in_y));
+    int4 coord_00 = {leftPos, topPos, z, 0};
+    int4 coord_10 = {rightPos, topPos, z, 0};
+    int4 coord_01 = {leftPos, bottomPos, z, 0};
+    int4 coord_11 = {rightPos, bottomPos, z, 0};
+    float4 src0, src1, src2, src3;
+
+    src0 = read_imagef(input, coord_00);
+    src1 = read_imagef(input, coord_10);
+    src2 = read_imagef(input, coord_01);
+    src3 = read_imagef(input, coord_11);
+
+    float x_lerp = in_x - floor(in_x);
+    float y_lerp = in_y - floor(in_y);
+    float one_x_lerp = 1.0 - x_lerp;
+    float one_y_lerp = 1.0 - y_lerp;
+    float fxx = one_x_lerp * one_y_lerp;
+    float fxy = x_lerp * one_y_lerp;
+    float fyx = one_x_lerp * y_lerp;
+    float fyy = x_lerp * y_lerp;
+
+    float result = src0.x * fxx + src1.x * fxy + src2.x * fyx + src3.x * fyy;
+    half dst0;
+    int4 coord_out = (int4)(x, y, z, 0);
+    Tensor o_tensor = create_tensor_from_image2d_array(output, 2);
+    uchar *dst_ptr = get_tensor_ptr_from_coord(o_tensor, coord_out);
+
+    ushort dst;
+    _viv_asm(CONV, dst0, result);
+    _viv_asm(COPY, dst, dst0, 4);
+
+    ((ushort*)dst_ptr)[0] = dst;
+}
+
+__kernel void gpuTensorScale_BilinearFP32
+    (
+    __read_only     image2d_array_t input,
+    float           scaleX,
+    float           scaleY,
+    __write_only    image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    float in_x = x * scaleX;
+    float in_y = y * scaleY;
+
+    int leftPos = convert_int(floor(in_x));
+    int rightPos = convert_int(ceil(in_x));
+    int topPos = convert_int(floor(in_y));
+    int bottomPos = convert_int(ceil(in_y));
+    int4 coord_00 = {leftPos, topPos, z, 0};
+    int4 coord_10 = {rightPos, topPos, z, 0};
+    int4 coord_01 = {leftPos, bottomPos, z, 0};
+    int4 coord_11 = {rightPos, bottomPos, z, 0};
+    float4 src0, src1, src2, src3, dst = {0.0};
+
+    src0 = read_imagef(input, coord_00);
+    src1 = read_imagef(input, coord_10);
+    src2 = read_imagef(input, coord_01);
+    src3 = read_imagef(input, coord_11);
+
+    float x_lerp = in_x - floor(in_x);
+    float y_lerp = in_y - floor(in_y);
+    float one_x_lerp = 1.0 - x_lerp;
+    float one_y_lerp = 1.0 - y_lerp;
+    float fxx = one_x_lerp * one_y_lerp;
+    float fxy = x_lerp * one_y_lerp;
+    float fyx = one_x_lerp * y_lerp;
+    float fyy = x_lerp * y_lerp;
+
+    dst.x  = src0.x * fxx + src1.x * fxy + src2.x * fyx + src3.x * fyy;
+
+    write_imagef(output, (int4)(x, y, z, 0), dst);
+}
+
+__kernel void gpuTensorScale_BilinearQuant8
+    (
+    __read_only     image2d_array_t input,
+    float           scaleX,
+    float           scaleY,
+    float           scaleIn,
+    float           scaleOut,
+    int             zpIn,
+    int             zpOut,
+    __write_only    image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    float srcXFloat = x*scaleX;
+    float srcYFloat = y*scaleY;
+    int4 coord_in = {floor(srcXFloat), floor(srcYFloat), z, 0};
+    float v = srcXFloat-coord_in.x;
+    float u = srcYFloat-coord_in.y;
+    float minusv = 1.0f-v;
+    float minusu = 1.0f-u;
+    uint4 src0, src1, src2, src3, dst = {0.0};
+    float s0, s1, s2, s3, tmpOut;
+
+    src0 = read_imageui(input, coord_in);
+    s0 = (convert_int(src0.x-zpIn))*scaleIn;
+    src1 = read_imageui(input, (int4)(coord_in.x+1, coord_in.y, z, 0));
+    s1 = (convert_int(src1.x-zpIn))*scaleIn;
+    src2 = read_imageui(input, (int4)(coord_in.x, coord_in.y+1, z, 0));
+    s2 = (convert_int(src2.x-zpIn))*scaleIn;
+    src3 = read_imageui(input, (int4)(coord_in.x+1, coord_in.y+1, z, 0));
+    s3 = (convert_int(src3.x-zpIn))*scaleIn;
+    tmpOut = s0*minusv*minusu + s1*v*minusu +  s2*minusv*u + s3*u*v;
+
+    dst.x = floor(tmpOut*scaleOut + zpOut + 0.5);
+    write_imageui(output, (int4)(x, y, z, 0), dst);
+}

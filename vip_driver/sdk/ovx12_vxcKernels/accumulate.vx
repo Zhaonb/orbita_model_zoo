@@ -1,0 +1,27 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniVecU8AddShortLo_2x8;
+_viv_uniform VXC_512Bits uniVecU8AddShortHi_2x8;
+
+__kernel void accumulate_U8toI16
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0;
+    vxc_short8 src1, src2;
+    vxc_short8 dst0, dst1;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, output, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, output, coord, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(dst0, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniVecU8AddShortLo_2x8);
+    VXC_DP2x8(dst1, src0, src2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniVecU8AddShortHi_2x8);
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord.x += 8;
+    VXC_WriteImage(output, coord, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}

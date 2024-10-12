@@ -1,0 +1,81 @@
+__kernel void upsample_padding_I16toI16
+(
+    __read_only image2d_t  input,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4 src = read_imagei(input, coord);
+    int4 zero = (int4)(0);
+    int4 coord_out;
+    coord_out.xy = coord * 2;
+    coord_out.zw = coord * 2 + 1;
+
+    write_imagei(output, coord_out.xy, src);
+    write_imagei(output, coord_out.zy, zero);
+    write_imagei(output, coord_out.xw, zero);
+    write_imagei(output, coord_out.zw, zero);
+}
+
+__kernel void upsample_padding_I16toU8
+(
+    __read_only image2d_t  input,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4 src = read_imagei(input, coord);
+    uint4 zero = (uint4)(0);
+    int4 coord_out;
+    coord_out.xy = coord * 2;
+    coord_out.zw = coord * 2 + 1;
+
+    uint4 data;
+    data.x = min(max(src.x, 0), 255);
+
+    write_imageui(output, coord_out.xy, data);
+    write_imageui(output, coord_out.zy, zero);
+    write_imageui(output, coord_out.xw, zero);
+    write_imageui(output, coord_out.zw, zero);
+}
+
+__kernel void upsample_padding_U8toU8
+(
+    __read_only image2d_t  input,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src = read_imageui(input, coord);
+    uint4 zero = (uint4)(0);
+    int4 coord_out;
+    coord_out.xy = coord * 2;
+    coord_out.zw = coord * 2 + 1;
+
+    write_imageui(output, coord_out.xy, src);
+    write_imageui(output, coord_out.zy, zero);
+    write_imageui(output, coord_out.xw, zero);
+    write_imageui(output, coord_out.zw, zero);
+}
+
+__kernel void upsample_padding_U8toI16
+(
+    __read_only image2d_t  input,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src = read_imageui(input, coord);
+    int4 zero = (int4)(0);
+    int4 coord_out;
+    coord_out.xy = coord * 2;
+    coord_out.zw = coord * 2 + 1;
+
+    int4 data;
+    data.x = src.x;
+
+    write_imagei(output, coord_out.xy, data);
+    write_imagei(output, coord_out.zy, zero);
+    write_imagei(output, coord_out.xw, zero);
+    write_imagei(output, coord_out.zw, zero);
+}

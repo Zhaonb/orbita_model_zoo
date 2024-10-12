@@ -1,0 +1,59 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniConvert1stU8toI32_4x4;
+_viv_uniform VXC_512Bits uniConvert2ndU8toI32_4x4;
+_viv_uniform VXC_512Bits uniConvert3rdU8toI32_4x4;
+_viv_uniform VXC_512Bits uniConvert4thU8toI32_4x4;
+_viv_uniform VXC_512Bits uniConvertInt32toUint8_2x8;
+
+__kernel __attribute__((reqd_work_group_size(64, 1, 1))) void equalizehistogram_lut(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input_hist,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int lidx = get_local_id(0);
+
+    __local int cdf[256];
+    vxc_uchar16 val0;
+    VXC_ReadImage(val0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    Image img = create_image_from_image2d(input_hist, 4);
+    __global int* hist_ptr = (__global int*)img.ptr;
+
+    int4 data0, data1, data2, data3;
+    uint4 index0, index1, index2, index3;
+
+    vstore4(vload4(lidx, hist_ptr), lidx, cdf);
+    VXC_DP4x4(index0, val0, val0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toI32_4x4);
+    VXC_DP4x4(index1, val0, val0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndU8toI32_4x4);
+    VXC_DP4x4(index2, val0, val0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert3rdU8toI32_4x4);
+    VXC_DP4x4(index3, val0, val0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert4thU8toI32_4x4);
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    data0.x = cdf[index0.x];
+    data0.y = cdf[index0.y];
+    data0.z = cdf[index0.z];
+    data0.w = cdf[index0.w];
+
+    data1.x = cdf[index1.x];
+    data1.y = cdf[index1.y];
+    data1.z = cdf[index1.z];
+    data1.w = cdf[index1.w];
+
+    data2.x = cdf[index2.x];
+    data2.y = cdf[index2.y];
+    data2.z = cdf[index2.z];
+    data2.w = cdf[index2.w];
+
+    data3.x = cdf[index3.x];
+    data3.y = cdf[index3.y];
+    data3.z = cdf[index3.z];
+    data3.w = cdf[index3.w];
+
+    VXC_DP2x8(val0, data0, data1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvertInt32toUint8_2x8);
+    VXC_DP2x8(val0, data2, data3, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 1), uniConvertInt32toUint8_2x8);
+    VXC_WriteImage(output, coord, val0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}

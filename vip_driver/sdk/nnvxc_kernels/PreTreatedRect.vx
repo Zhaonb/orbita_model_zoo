@@ -1,0 +1,287 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+_viv_uniform VXC_512Bits uniGetRoiRectPos;
+#define EPS        (0.000002f);
+__kernel void preTreatedRect_20x16_6x6_fp16toS16(
+    __read_only image2d_array_t    rois,
+    int        width,
+    int        height,
+    float   spatial_scale,
+    __write_only image2d_array_t    output)
+{
+    short wstart_arr[6];
+    short hstart_arr[6];
+    short hLen_arr[6];
+
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_half8 rect_roi_coord;
+    vxc_float4 roi_pos_fl32;
+    vxc_int4 roi_pos;
+    float roi_width;
+    float roi_height;
+    float bin_size_h = 0, bin_size_w = 0;
+    float pooled_width = 6.0;
+    float pooled_height = 6.0;
+    int pool_width = 6;
+    int pool_height = 6;
+    half scale;
+
+    vxc_ushort8 tmp;
+    VXC_ReadImage(tmp, rois,  coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, rect_roi_coord, tmp, 16);
+    _viv_asm(CONV, scale, spatial_scale);
+
+    VXC_DP4x4(roi_pos_fl32, rect_roi_coord, scale, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetRoiRectPos);
+
+    roi_pos_fl32 += 0.5f;
+    roi_pos_fl32 = floor(roi_pos_fl32);
+
+    roi_pos        = convert_int4_rtz(roi_pos_fl32);
+
+    roi_width    = roi_pos_fl32.z - roi_pos_fl32.x + 1;
+    roi_height    = roi_pos_fl32.w - roi_pos_fl32.y + 1;
+
+    bin_size_h = roi_height / pooled_width;
+    bin_size_w = roi_width  / pooled_height;
+
+    int2 coord_out =  coord;
+
+    float x = 0;
+    for (int idx = 0; idx < pool_width; idx ++)
+    {
+        float wstart0    = x * bin_size_w;
+        float hstart0    = x * bin_size_h;
+        float wend0        = (x + 1) * bin_size_w - EPS;
+        float hend0        = (x + 1) * bin_size_h - EPS;
+
+        int wstart    = floor(wstart0) + roi_pos.x;
+        int wend    = ceil(wend0) + roi_pos.x;
+        int hstart    = floor(hstart0) + roi_pos.y;
+        int hend    = ceil(hend0) + roi_pos.y;
+
+        wstart    = max(wstart, 0);
+        wstart    = min(wstart, width);
+        wend    = max(wend, 0);
+        wend    = min(wend, width);
+        hstart    = max(hstart, 0);
+        hstart    = min(hstart, height);
+        hend    = max(hend, 0);
+        hend    = min(hend, height);
+
+        int len = wend - wstart;
+
+        wstart_arr[idx] = wstart;
+        hstart_arr[idx] = hstart;
+        hLen_arr[idx] = hend - hstart;
+
+        coord_out.x = idx;
+        if(len == 0)
+        {
+            short mask = 0x00;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+        else if(len == 1)
+        {
+            short mask = 0x01;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+        else if(len == 2)
+        {
+            short mask = 0x03;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+        else if(len == 3)
+        {
+            short mask = 0x07;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+        else if(len == 4)
+        {
+            short mask = 0x0F;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+
+        coord_out.x = 6 + idx;
+        short szx = (short)len;
+        VXC_WriteImage(output, coord_out.xy, szx, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+
+        x += 1.0;
+    }
+
+    for (int y = 0; y < pool_height; y++)
+    {
+        for (int x = 0; x < pool_width; x++)
+        {
+            vxc_short2 posXY;
+            posXY.y = hLen_arr[y];
+            short x0 =  wstart_arr[x];
+            short y0 =  hstart_arr[y];
+
+            if(posXY.y == 0)
+                posXY.x = -16;
+            else
+                posXY.x = y0 * width + x0;
+
+            posXY.y -= 1;
+
+            coord_out.x = 12 + ((y * pool_width + x) << 1);
+            VXC_WriteImage(output, coord_out.xy, posXY, VXC_MODIFIER(0, 1, 0,VXC_RM_TowardZero, 0));
+        }
+    }
+}
+//_viv_uniform VXC_512Bits uniGetRoiRectPos;
+_viv_uniform VXC_512Bits uniFp16toFp32;
+#define EPS        (0.000002f);
+__kernel void preTreatedRect_51x39_6x6_fp16toS16 (
+    __read_only image2d_array_t    rois,
+    int        width,
+    int        height,
+    float   spatial_scale,
+    __write_only image2d_array_t    output)
+{
+    short wstart_arr[6];
+    short hstart_arr[6];
+    short hLen_arr[6];
+
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_half8 rect_roi_coord;
+    vxc_float4 roi_pos_fl32;
+    vxc_int4 roi_pos;
+    float roi_width;
+    float roi_height;
+    float bin_size_h = 0, bin_size_w = 0;
+    float pooled_width = 6.0;
+    float pooled_height = 6.0;
+    int pool_width = 6;
+    int pool_height = 6;
+    half scale;
+
+    vxc_ushort8 tmp;
+    VXC_ReadImage(tmp, rois,  coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, rect_roi_coord, tmp, 16);
+    _viv_asm(CONV, scale, spatial_scale);
+
+    VXC_DP4x4(roi_pos_fl32, rect_roi_coord, scale, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniGetRoiRectPos);
+
+    roi_pos_fl32 += 0.5f;
+    roi_pos_fl32 = floor(roi_pos_fl32);
+
+    roi_pos        = convert_int4_rtz(roi_pos_fl32);
+
+    roi_width    = roi_pos_fl32.z - roi_pos_fl32.x + 1;
+    roi_height    = roi_pos_fl32.w - roi_pos_fl32.y + 1;
+
+    bin_size_h = roi_height / pooled_width;
+    bin_size_w = roi_width  / pooled_height;
+
+    int2 coord_out =  coord;
+
+    float x = 0;
+    for (int idx = 0; idx < pool_width; idx ++)
+    {
+        float wstart0    = x * bin_size_w;
+        float hstart0    = x * bin_size_h;
+        float wend0        = (x + 1) * bin_size_w - EPS;
+        float hend0        = (x + 1) * bin_size_h - EPS;
+
+        int wstart    = floor(wstart0) + roi_pos.x;
+        int wend    = ceil(wend0) + roi_pos.x;
+        int hstart    = floor(hstart0) + roi_pos.y;
+        int hend    = ceil(hend0) + roi_pos.y;
+
+        wstart    = max(wstart, 0);
+        wstart    = min(wstart, width);
+        wend    = max(wend, 0);
+        wend    = min(wend, width);
+        hstart    = max(hstart, 0);
+        hstart    = min(hstart, height);
+        hend    = max(hend, 0);
+        hend    = min(hend, height);
+
+        int len = wend - wstart;
+
+        wstart_arr[idx] = wstart;
+        hstart_arr[idx] = hstart;
+        hLen_arr[idx] = hend - hstart;
+
+        coord_out.x = idx;
+        if(len == 0)
+        {
+            short mask = 0x00;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+        else if(len == 1)
+        {
+            short mask = 0x01;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+        else if(len == 2)
+        {
+            short mask = 0x03;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+        else if(len == 3)
+        {
+            short mask = 0x07;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+        else if(len == 4)
+        {
+            short mask = 0x0F;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+        else if(len == 5)
+        {
+            short mask = 0x1F;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+        else if(len == 6)
+        {
+            short mask = 0x3F;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+        else if(len == 7)
+        {
+            short mask = 0x7F;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+        else if(len == 8)
+        {
+            short mask = 0xFF;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+        else
+        {
+            short mask = 0x1FF;
+            VXC_WriteImage(output, coord_out.xy, mask, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+        }
+
+        coord_out.x = 6 + idx;
+        short szx = (short)len;
+        VXC_WriteImage(output, coord_out.xy, szx, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+
+        x += 1.0;
+    }
+
+    for (int y = 0; y < pool_height; y++)
+    {
+        for (int x = 0; x < pool_width; x++)
+        {
+            vxc_short2 posXY;
+            posXY.y = hLen_arr[y];
+            short x0 =  wstart_arr[x];
+            short y0 =  hstart_arr[y];
+
+            if(posXY.y == 0)
+                posXY.x = -16;
+            else
+                posXY.x = y0 * width + x0;
+            posXY.y -= 1;
+            coord_out.x = 12 + ((y * pool_width + x) << 1);
+            VXC_WriteImage(output, coord_out.xy, posXY, VXC_MODIFIER(0, 1, 0,VXC_RM_TowardZero, 0));
+        }
+    }
+}

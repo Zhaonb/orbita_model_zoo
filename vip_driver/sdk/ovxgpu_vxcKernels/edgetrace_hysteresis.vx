@@ -1,0 +1,161 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int stride;
+_viv_uniform int width_plus1;
+_viv_uniform int height_sub1;
+_viv_uniform int stride_plus1;
+
+/* input width extend [1, 1], border set to 0 */
+__kernel __attribute__((reqd_work_group_size(64, 1, 1))) void edgetrace_hysteresis
+(
+    image2d_t  mcInput,
+    __global int* count,
+    image2d_t  input,
+    image2d_t  output
+)
+{
+    int lidx = get_local_id(0);
+    int2 coord;
+    int startIdx = lidx + 1;
+
+    __local int lcl_cnt[1];
+    if(lidx == 0)
+    {
+        lcl_cnt[0] = count[0];
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+    Image in0 = create_image_from_image2d(input, 4);
+    __global int* work_ptr = (__global int*)in0.ptr;
+
+    while(atom_cmpxchg(lcl_cnt, 0, 0) > 0)
+    {
+        for(coord.x = startIdx; coord.x < width_plus1; coord.x += 64)
+        {
+            /*  first row */
+            __global int* row1st_ptr = work_ptr + coord.x;
+            if(atom_cmpxchg(row1st_ptr, 255, 250) == 255)
+            {
+                atom_dec(lcl_cnt);
+
+                __global int* row0 = row1st_ptr - 1;
+                __global int* row1 = row0 + stride;
+
+                if(atom_cmpxchg(row0, 127, 255) == 127)
+                {
+                    atom_inc(lcl_cnt);
+                }
+
+                if(atom_cmpxchg(row0 + 2, 127, 255) == 127)
+                {
+                    atom_inc(lcl_cnt);
+                }
+
+                if(atom_cmpxchg(row1, 127, 255) == 127)
+                {
+                    atom_inc(lcl_cnt);
+                }
+
+                if(atom_cmpxchg(row1 + 1, 127, 255) == 127)
+                {
+                    atom_inc(lcl_cnt);
+                }
+
+                if(atom_cmpxchg(row1 + 2, 127, 255) == 127)
+                {
+                    atom_inc(lcl_cnt);
+                }
+            }
+
+            /*  middle rows */
+            for(coord.y = 1; coord.y < height_sub1; coord.y++)
+            {
+                __global int* middleRows_ptr = row1st_ptr + stride * coord.y;
+                if(atom_cmpxchg(middleRows_ptr, 255, 250) == 255)
+                {
+                    atom_dec(lcl_cnt);
+                    __global int* row0 = middleRows_ptr - stride_plus1;
+                    __global int* row1 = row0 + stride;
+                    __global int* row2 = row1 + stride;
+
+                    if(atom_cmpxchg(row0, 127, 255) == 127)
+                    {
+                        atom_inc(lcl_cnt);
+                    }
+
+                    if(atom_cmpxchg(row0 + 1, 127, 255) == 127)
+                    {
+                        atom_inc(lcl_cnt);
+                    }
+
+                    if(atom_cmpxchg(row0 + 2, 127, 255) == 127)
+                    {
+                        atom_inc(lcl_cnt);
+                    }
+
+                    if(atom_cmpxchg(row1, 127, 255) == 127)
+                    {
+                        atom_inc(lcl_cnt);
+                    }
+
+                    if(atom_cmpxchg(row1 + 2, 127, 255) == 127)
+                    {
+                        atom_inc(lcl_cnt);
+                    }
+
+                    if(atom_cmpxchg(row2, 127, 255) == 127)
+                    {
+                        atom_inc(lcl_cnt);
+                    }
+
+                    if(atom_cmpxchg(row2 + 1, 127, 255) == 127)
+                    {
+                        atom_inc(lcl_cnt);
+                    }
+
+                    if(atom_cmpxchg(row2 + 2, 127, 255) == 127)
+                    {
+                        atom_inc(lcl_cnt);
+                    }
+                }
+            }
+
+            /*  last rows */
+            __global int* lastRow_ptr = row1st_ptr + stride * coord.y;
+            if(atom_cmpxchg(lastRow_ptr, 255, 250) == 255)
+            {
+                atom_dec(lcl_cnt);
+
+                __global int* row0 = lastRow_ptr - stride_plus1;
+                __global int* row1 = row0 + stride;
+
+                if(atom_cmpxchg(row0, 127, 255) == 127)
+                {
+                    atom_inc(lcl_cnt);
+                }
+
+                if(atom_cmpxchg(row0 + 1, 127, 255) == 127)
+                {
+                    atom_inc(lcl_cnt);
+                }
+
+                if(atom_cmpxchg(row0 + 2, 127, 255) == 127)
+                {
+                    atom_inc(lcl_cnt);
+                }
+
+                if(atom_cmpxchg(row1, 127, 255) == 127)
+                {
+                    atom_inc(lcl_cnt);
+                }
+
+                if(atom_cmpxchg(row1 + 2, 127, 255) == 127)
+                {
+                    atom_inc(lcl_cnt);
+                }
+            }
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+}

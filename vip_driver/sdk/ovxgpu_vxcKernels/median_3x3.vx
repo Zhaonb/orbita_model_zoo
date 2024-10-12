@@ -1,0 +1,134 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+
+#define OP(a,b) { mid=a; a=min(a,b); b=max(mid,b);}
+
+__kernel void median_3x3_U8toU8
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) - 1, get_global_id(0) + 1);
+
+    uint4 top, med, bot;
+
+    top.x = read_imageui(input, (int2)(coord.z, coord.y - 1)).x;
+    top.y = read_imageui(input, (int2)(coord.x, coord.y - 1)).x;
+    top.z = read_imageui(input, (int2)(coord.w, coord.y - 1)).x;
+    med.x = read_imageui(input, (int2)(coord.z, coord.y + 0)).x;
+    med.y = read_imageui(input, (int2)(coord.x, coord.y + 0)).x;
+    med.z = read_imageui(input, (int2)(coord.w, coord.y + 0)).x;
+    bot.x = read_imageui(input, (int2)(coord.z, coord.y + 1)).x;
+    bot.y = read_imageui(input, (int2)(coord.x, coord.y + 1)).x;
+    bot.z = read_imageui(input, (int2)(coord.w, coord.y + 1)).x;
+
+    uint mid;
+
+    OP(top.y, top.z);
+    OP(med.y, med.z);
+    OP(bot.y, bot.z);
+    OP(top.x, top.y);
+    OP(med.x, med.y);
+    OP(bot.x, bot.y);
+    OP(top.y, top.z);
+    OP(med.y, med.z);
+    OP(bot.y, bot.z);
+    OP(top.x, med.x);
+    OP(med.z, bot.z);
+    OP(med.y, bot.y);
+    OP(med.x, bot.x);
+    OP(top.y, med.y);
+    OP(top.z, med.z);
+    OP(med.y, bot.y);
+    OP(med.y, top.z);
+    OP(bot.x, med.y);
+    OP(med.y, top.z);
+
+    write_imageui(output, coord.xy, med.yyyy);
+}
+
+__kernel void median_3x3_U1toU1
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) - 1, get_global_id(0) + 1);
+
+    uint4 top4, med4, bot4, dst;
+
+    top4.x = read_imageui(input, (int2)(coord.z, coord.y - 1)).x;
+    top4.y = read_imageui(input, (int2)(coord.x, coord.y - 1)).x;
+    top4.z = read_imageui(input, (int2)(coord.w, coord.y - 1)).x;
+
+    med4.x = read_imageui(input, (int2)(coord.z, coord.y + 0)).x;
+    med4.y = read_imageui(input, (int2)(coord.x, coord.y + 0)).x;
+    med4.z = read_imageui(input, (int2)(coord.w, coord.y + 0)).x;
+
+    bot4.x = read_imageui(input, (int2)(coord.z, coord.y + 1)).x;
+    bot4.y = read_imageui(input, (int2)(coord.x, coord.y + 1)).x;
+    bot4.z = read_imageui(input, (int2)(coord.w, coord.y + 1)).x;
+
+    dst.x = 0;
+
+    uint4 tmps;
+
+    top4.xyz &= 0xFF;
+    tmps.x = (top4.x) | (top4.y << 8) | (top4.z << 16);
+    med4.xyz &= 0xFF;
+    tmps.y = (med4.x) | (med4.y << 8) | (med4.z << 16);
+    bot4.xyz &= 0xFF;
+    tmps.z = (bot4.x) | (bot4.y << 8) | (bot4.z << 16);
+
+    uint4 bits = (uint4)(3, 3, 3, 0);
+    uint4 offset = (uint4)(7, 7, 7, 7);
+    uint4 values = viv_bitfieldExtract(tmps, offset, bits);
+
+    uint nBit = values.x | (values.y << 3) | (values.z << 6);
+    uint bit = popcount(nBit) > 4 ? 1 : 0;
+    dst.x = dst.x | bit;
+
+    offset = (uint4)(8, 8, 8, 8);
+    values = viv_bitfieldExtract(tmps, offset, bits);
+    nBit = values.x | (values.y << 3) | (values.z << 6);
+    bit = popcount(nBit) > 4 ? 0x02 : 0;
+    dst.x = dst.x | bit;
+
+    offset = (uint4)(9, 9, 9, 9);
+    values = viv_bitfieldExtract(tmps, offset, bits);
+    nBit = values.x | (values.y << 3) | (values.z << 6);
+    bit = popcount(nBit) > 4 ? 0x04 : 0;
+    dst.x = dst.x | bit;
+
+    offset = (uint4)(0xa, 0xa, 0xa, 0xa);
+    values = viv_bitfieldExtract(tmps, offset, bits);
+    nBit = values.x | (values.y << 3) | (values.z << 6);
+    bit = popcount(nBit) > 4 ? 0x08 : 0;
+    dst.x = dst.x | bit;
+
+    offset = (uint4)(0xb, 0xb, 0xb, 0xb);
+    values = viv_bitfieldExtract(tmps, offset, bits);
+    nBit = values.x | (values.y << 3) | (values.z << 6);
+    bit = popcount(nBit) > 4 ? 0x10 : 0;
+    dst.x = dst.x | bit;
+
+    offset = (uint4)(0xc, 0xc, 0xc, 0xc);
+    values = viv_bitfieldExtract(tmps, offset, bits);
+    nBit = values.x | (values.y << 3) | (values.z << 6);
+    bit = popcount(nBit) > 4 ? 0x20 : 0;
+    dst.x = dst.x | bit;
+
+    offset = (uint4)(0xd, 0xd, 0xd, 0xd);
+    values = viv_bitfieldExtract(tmps, offset, bits);
+    nBit = values.x | (values.y << 3) | (values.z << 6);
+    bit = popcount(nBit) > 4 ? 0x40 : 0;
+    dst.x = dst.x | bit;
+
+    offset = (uint4)(0xe, 0xe, 0xe, 0xe);
+    values = viv_bitfieldExtract(tmps, offset, bits);
+    nBit = values.x | (values.y << 3) | (values.z << 6);
+    bit = popcount(nBit) > 4 ? 0x80 : 0;
+    dst.x = dst.x | bit;
+
+    write_imageui(output, coord.xy, dst.xxxx);
+}

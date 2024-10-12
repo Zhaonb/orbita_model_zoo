@@ -1,0 +1,43 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+_viv_uniform int upsample_x;
+_viv_uniform int upsample_y;
+_viv_uniform int expand_val;
+_viv_uniform int input_width;
+_viv_uniform int input_height;
+
+#define TENSOREXPAND_FUN(name, dst_type, conv_type) \
+__kernel void tensorexpand_##name \
+( \
+__read_only  image2d_array_t src, \
+__write_only image2d_array_t dst \
+) \
+{ \
+    int x = get_global_id(0); \
+    int y = get_global_id(1); \
+    int z = get_global_id(2); \
+    int inx = ((short)x) / ((short)upsample_x); \
+    int iny = ((short)y) / ((short)upsample_y); \
+    int modx = ((short)x) % ((short)upsample_x); \
+    int mody = ((short)y) % ((short)upsample_y); \
+    int4 coord_out = (int4)(x, y, z, 0); \
+    dst_type pixel; \
+    int is_mod_enable = ((0 == modx) && (0 == mody)); \
+    int is_index_enable = ((inx < input_width) && (iny < input_height)); \
+     \
+    if (is_mod_enable && is_index_enable) \
+    { \
+        int4 coord_in  = (int4)(inx, iny, z, 0); \
+        VXC_ReadImage2DArray(pixel, src, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0)); \
+        VXC_WriteImage2DArray(dst, coord_out, pixel, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0)); \
+    } \
+    else \
+    { \
+        pixel.x = (conv_type)expand_val; \
+        VXC_WriteImage2DArray(dst, coord_out, pixel, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0)); \
+    } \
+}
+
+TENSOREXPAND_FUN(bit16, vxc_short8, short)
+TENSOREXPAND_FUN(bit8,  vxc_char8,  char)

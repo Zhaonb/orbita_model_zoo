@@ -1,0 +1,23 @@
+
+__kernel void accumulate_weighted_U8toU8
+    (
+    __read_only  image2d_t input,
+                 float     alpha,
+                 image2d_t output
+    )
+{
+    int offset = get_global_id(0);
+
+    Image in = create_image_from_image2d(input, U8_ELEMENT_SIZE);
+    Image accu = create_image_from_image2d(output, U8_ELEMENT_SIZE);
+
+    uchar4 src = vload4(offset, in.ptr);
+    uchar4 acc = vload4(offset, accu.ptr);
+
+    float4 v0, v1;
+    v0 = convert_float4(src);
+    v1 = convert_float4(acc);
+    uchar4 dst = convert_uchar4_sat((1 - alpha) * v1 + alpha * v0);
+
+    vstore4(dst, offset, accu.ptr);
+}

@@ -1,0 +1,300 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform int   radius;
+_viv_uniform int   border_type;
+_viv_uniform int   border_constant_value;
+_viv_uniform int   width;
+_viv_uniform int   height;
+_viv_uniform float gauss_color_coeff;
+_viv_uniform float gauss_space_coeff;
+
+#define logE (1.44269502f)
+
+float eltwise_unary_exp(float x)
+{
+    x *= logE;
+    x = exp2(x);
+    return x;
+}
+
+__constant float space_weight[16] =
+{
+    eltwise_unary_exp(gauss_space_coeff),eltwise_unary_exp(2 * gauss_space_coeff), 0, eltwise_unary_exp(4 * gauss_space_coeff),
+    eltwise_unary_exp(5 * gauss_space_coeff),0,0,eltwise_unary_exp(8 * gauss_space_coeff),eltwise_unary_exp(9 * gauss_space_coeff),
+    eltwise_unary_exp(10 * gauss_space_coeff),0,0,eltwise_unary_exp(13 * gauss_space_coeff),0,0,eltwise_unary_exp(16 * gauss_space_coeff)
+};
+
+__constant int num_of_percol_9[9] = {
+    0,2,3,3,4,3,3,2,0
+};
+__constant int num_of_percol_7[7] = {
+    0,2,2,3,2,2,0
+};
+__constant int num_of_percol_5[5] = {
+    0,1,2,1,0
+};
+
+__kernel void bilateral_filter_U8toU8
+(
+         __read_only  image2d_t input,
+         __write_only image2d_t output,
+                      int       num_dims,
+                      int       channel,
+                      int       diameter,
+                      float     sigma_space,
+                      float     sigma_color
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    float val0 = convert_float(read_imageui(input,(int2)(x,y)).x);
+    float sum = 0;
+    float wsum = 0;
+    int radius_x;
+    int radius_y;
+    int range_x;
+    int neighbor_x = 0;
+    int neighbor_y = 0;
+    float neighborVal = 0;
+    float gauss_space = 0;
+    float gauss_color = 0;
+    float w = 0;
+    int  *num_of_percol;
+    float color_diff;
+
+    if (diameter == 9) num_of_percol = num_of_percol_9;
+    else if (diameter == 7) num_of_percol = num_of_percol_7;
+    else if (diameter == 5) num_of_percol = num_of_percol_5;
+
+    for (radius_y = -radius; radius_y <= radius; radius_y++)
+    {
+        neighbor_y = y + radius_y;
+        range_x = num_of_percol[radius_y + radius];
+        for (radius_x = -range_x; radius_x <= range_x; radius_x++)
+        {
+            if (radius_y == 0 && radius_x == 0)
+            {
+                continue;
+            }
+            neighbor_x = x + radius_x;
+
+            neighbor_x = neighbor_x >= width ? (width - 1) : neighbor_x;
+            neighbor_y = neighbor_y >= height ? (height - 1) : neighbor_y;
+
+            neighborVal = convert_float(read_imageui(input,(int2)(neighbor_x,neighbor_y)).x);
+            gauss_space = space_weight[radius_y * radius_y + radius_x * radius_x - 1];
+            color_diff  = neighborVal - val0;
+            gauss_color = eltwise_unary_exp(color_diff * color_diff * gauss_color_coeff);
+            w = gauss_space * gauss_color;
+            sum =  sum + neighborVal * w;
+            wsum = wsum + w;
+        }
+    }
+    sum = sum + val0;
+    wsum = wsum + 1;
+
+    uint dst = convert_uint(floor(sum / wsum + 0.5));
+    write_imageui(output,(int2)(x,y),(uint4)(dst,0,0,0));
+}
+
+__kernel void bilateral_filter_I16toI16
+(
+         __read_only  image2d_t input,
+         __write_only image2d_t output,
+                      int       num_dims,
+                      int       channel,
+                      int       diameter,
+                      float     sigma_space,
+                      float     sigma_color
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    float val0 = convert_float(read_imagei(input,(int2)(x,y)).x);
+    float sum = 0;
+    float wsum = 0;
+    int radius_x;
+    int radius_y;
+    int range_x;
+    int neighbor_x = 0;
+    int neighbor_y = 0;
+    float neighborVal = 0;
+    float gauss_space = 0;
+    float gauss_color = 0;
+    float w = 0;
+    int *num_of_percol;
+    float color_diff;
+
+    if (diameter == 9) num_of_percol = num_of_percol_9;
+    else if (diameter == 7) num_of_percol = num_of_percol_7;
+    else if (diameter == 5) num_of_percol = num_of_percol_5;
+
+    for (radius_y = -radius; radius_y <= radius; radius_y++)
+    {
+        neighbor_y = y + radius_y;
+        range_x = num_of_percol[radius_y + radius];
+        for (radius_x = -range_x; radius_x <= range_x; radius_x++)
+        {
+            if (radius_y == 0 && radius_x == 0)
+            {
+                continue;
+            }
+
+            neighbor_x = x + radius_x;
+
+            neighbor_x = neighbor_x >= width ? (width - 1) : neighbor_x;
+            neighbor_y = neighbor_y >= height ? (height - 1) : neighbor_y;
+
+            neighborVal = convert_float(read_imagei(input,(int2)(neighbor_x,neighbor_y)).x);
+            gauss_space = space_weight[radius_y * radius_y + radius_x * radius_x - 1];
+            color_diff  = neighborVal - val0;
+            gauss_color = eltwise_unary_exp(color_diff * color_diff * gauss_color_coeff);
+            w = gauss_space * gauss_color;
+            sum =  sum + neighborVal * w;
+            wsum = wsum + w;
+        }
+    }
+    sum = sum + val0;
+    wsum = wsum + 1;
+
+    int dst = convert_int(floor(sum / wsum + 0.5));
+    write_imagei(output,(int2)(x,y),(int4)(dst,0,0,0));
+}
+
+__kernel void bilateral_filter_U8toU8_RGB
+(
+        __global unsigned char * input,
+        __global unsigned char * output,
+                          int    num_dims,
+                          int    channel,
+                          int    diameter,
+                          float  sigma_space,
+                          float  sigma_color
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int radius_x;
+    int radius_y;
+    uchar3 value0 = vload3(x + width * y,input);
+    float3 sum = (float3)(0,0,0);
+    float wsum = 0;
+    int neighbor_x = 0;
+    int neighbor_y = 0;
+    int tmpx = 0;
+    int tmpy = 0;
+    uchar3 value1;
+    float w = 0;
+    int   range_x;
+    float gauss_space = 0;
+    float gauss_color = 0;
+    float color_diff = 0;
+    int *num_of_percol;
+    if (diameter == 9) num_of_percol = num_of_percol_9;
+    else if (diameter == 7) num_of_percol = num_of_percol_7;
+    else if (diameter == 5) num_of_percol = num_of_percol_5;
+
+    for (radius_y = -radius; radius_y <= radius; radius_y++)
+    {
+        range_x = num_of_percol[radius_y + radius];
+        for (radius_x = -range_x; radius_x <= range_x; radius_x++)
+        {
+            if (radius_x == 0 && radius_y == 0)
+            {
+                continue;
+            }
+
+            neighbor_x = x + radius_x;
+            neighbor_y = y + radius_y;
+            tmpx = neighbor_x < 0 ? 0 : (neighbor_x > (width - 1) ? (width - 1) : neighbor_x);
+            tmpy = neighbor_y < 0 ? 0 : (neighbor_y > (height - 1) ? (height - 1) : neighbor_y);
+
+            value1 = vload3(tmpx + width * tmpy,input);
+
+            if ((neighbor_x < 0 || neighbor_y < 0) && border_type == 1)
+            {
+                value1 = border_constant_value;
+            }
+
+            gauss_space = space_weight[radius_y * radius_y + radius_x * radius_x - 1];
+            color_diff  = convert_float(abs(value1.x - value0.x) + abs(value1.y - value0.y) + abs(value1.z - value0.z));
+            gauss_color = eltwise_unary_exp(color_diff * color_diff * gauss_color_coeff);
+            w = gauss_space * gauss_color;
+            sum = sum + convert_float3(value1) * w;
+            wsum = wsum + w;
+        }
+    }
+    sum = sum + convert_float3(value0);
+    wsum = wsum + 1;
+
+    vstore3(convert_uchar3(floor(sum / wsum + 0.5)),x + width * y,output);
+}
+
+__kernel void bilateral_filter_I16toI16_RGB
+(
+        __global short * input,
+        __global short * output,
+                          int    num_dims,
+                          int    channel,
+                          int    diameter,
+                          float  sigma_space,
+                          float  sigma_color
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int radius_x;
+    int radius_y;
+    short3 value0 = vload3(x + width * y,input);
+    float3 sum = (float3)(0,0,0);
+    float wsum = 0;
+    int neighbor_x = 0;
+    int neighbor_y = 0;
+    int tmpx = 0;
+    int tmpy = 0;
+    short3 value1;
+    float w = 0;
+    int   range_x;
+    float gauss_space = 0;
+    float gauss_color = 0;
+    float color_diff = 0;
+    int *num_of_percol;
+    if (diameter == 9) num_of_percol = num_of_percol_9;
+    else if (diameter == 7) num_of_percol = num_of_percol_7;
+    else if (diameter == 5) num_of_percol = num_of_percol_5;
+
+    for (radius_y = -radius; radius_y <= radius; radius_y++)
+    {
+        range_x = num_of_percol[radius_y + radius];
+        for (radius_x = -range_x; radius_x <= range_x; radius_x++)
+        {
+            if (radius_x == 0 && radius_y == 0)
+            {
+                continue;
+            }
+
+            neighbor_x = x + radius_x;
+            neighbor_y = y + radius_y;
+            tmpx = neighbor_x < 0 ? 0 : (neighbor_x > (width - 3) ? (width - 3) : neighbor_x);
+            tmpy = neighbor_y < 0 ? 0 : (neighbor_y > (height - 1) ? (height - 1) : neighbor_y);
+
+            value1 = vload3(tmpx + width * tmpy,input);
+
+            if ((neighbor_x < 0 || neighbor_y < 0) && border_type == 1)
+            {
+                value1 = border_constant_value;
+            }
+
+            gauss_space = space_weight[radius_y * radius_y + radius_x * radius_x - 1];
+            color_diff  = convert_float(abs(value1.x - value0.x) + abs(value1.y - value0.y) + abs(value1.z - value0.z));
+            gauss_color = eltwise_unary_exp(color_diff * color_diff * gauss_color_coeff);
+            w = gauss_space * gauss_color;
+            sum = sum + convert_float3(value1) * w;
+            wsum = wsum + w;
+        }
+    }
+    sum = sum + convert_float3(value0);
+    wsum = wsum + 1;
+
+    vstore3(convert_short3(floor(sum / wsum + 0.5)),x + width * y,output);
+}

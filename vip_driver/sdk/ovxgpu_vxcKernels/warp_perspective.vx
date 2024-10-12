@@ -1,0 +1,49 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform float3 matrix0;
+_viv_uniform float3 matrix1;
+_viv_uniform float3 matrix2;
+
+__kernel void warp_perspective_nearest_neighbor_U8toU8
+(
+    read_only  image2d_t  input,
+    __global   uchar      *matrix,
+    read_only  int        type,
+    write_only image2d_t  output
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    float xf, yf;
+    float z = x * matrix0.z + y * matrix1.z + matrix2.z;
+    xf = (x * matrix0.x + y * matrix1.x + matrix2.x) / z;
+    yf = (x * matrix0.y + y * matrix1.y + matrix2.y) / z;
+    uint4 dst = read_imageui(input,(int2)(convert_int(xf),convert_int(yf)));
+    write_imageui(output,(int2)(x,y),dst);
+}
+
+__kernel void warp_perspective_bilinear_U8toU8
+(
+    read_only  image2d_t  input,
+    __global   uchar      *matrix,
+    read_only  int        type,
+    write_only image2d_t  output
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    float xf, yf;
+    float z = x * matrix0.z + y * matrix1.z + matrix2.z;
+    xf = (x * matrix0.x + y * matrix1.x + matrix2.x) / z;
+    yf = (x * matrix0.y + y * matrix1.y + matrix2.y) / z;
+    uint4 tl = read_imageui(input,(int2)(convert_int(floor(xf)), convert_int(floor(yf))));
+    uint4 tr = read_imageui(input,(int2)(convert_int(floor(xf)+1), convert_int(floor(yf))));
+    uint4 bl = read_imageui(input,(int2)(convert_int(floor(xf)), convert_int(floor(yf)+1)));
+    uint4 br = read_imageui(input,(int2)(convert_int(floor(xf)+1), convert_int(floor(yf)+1)));
+    float ar = xf - floor(xf);
+    float ab = yf - floor(yf);
+    float al = 1.0f - ar;
+    float at = 1.0f - ab;
+    uint dst = convert_uint(tl.x*al*at+tr.x*ar*at+bl.x*al*ab+br.x*ar*ab);
+    write_imageui(output,(int2)(x,y),(uint4)(dst,0,0,0));
+}

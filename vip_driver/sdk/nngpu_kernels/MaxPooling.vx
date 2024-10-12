@@ -1,0 +1,1591 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+__kernel void gpuMaxPool_F32toF32_pad0
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             kernel_x,
+                 int             kernel_y,
+                 int             stride_x,
+                 int             stride_y,
+                 int             pad_left,
+                 int             pad_top,
+                 float           output_scale,
+                 float           output_tail
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(x * stride_x, y * stride_y, z, z);
+    float4 dst, src;
+    int i, j;
+
+    dst = read_imagef(input, coord_in);
+    for(j = 0; j < kernel_y; j++)
+    {
+        for(i = 0; i < kernel_x;)
+        {
+            src = read_imagef(input, (int4)(coord_in.x + i, coord_in.y, coord_in.z, coord_in.z));
+            i ++;
+            dst.x = dst.x > src.x ? dst.x : src.x;
+        }
+        coord_in.y ++;
+    }
+
+    write_imagef(output, (int4)(x, y, z, z), dst.xxxx);
+}
+
+__kernel void gpuMaxPool_U32toU32_pad0
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             kernel_x,
+                 int             kernel_y,
+                 int             stride_x,
+                 int             stride_y,
+                 int             pad_left,
+                 int             pad_top,
+                 float           output_scale,
+                 float           output_tail
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(x * stride_x, y * stride_y, z, z);
+    uint4 dst, src;
+    int i, j;
+
+    dst = read_imageui(input, coord_in);
+    for(j = 0; j < kernel_y; j++)
+    {
+        for(i = 0; i < kernel_x;)
+        {
+            src = read_imageui(input, (int4)(coord_in.x + i, coord_in.y, coord_in.z, coord_in.z));
+            i ++;
+            dst.x = dst.x > src.x ? dst.x : src.x;
+        }
+        coord_in.y ++;
+    }
+
+    dst = convert_uint_rte(convert_float(dst.x) * output_scale + output_tail);
+    write_imageui(output, (int4)(x, y, z, z), dst.xxxx);
+}
+
+__kernel void gpuMaxPool_I32toI32_pad0
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             kernel_x,
+                 int             kernel_y,
+                 int             stride_x,
+                 int             stride_y,
+                 int             pad_left,
+                 int             pad_top,
+                 float           output_scale,
+                 float           output_tail
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord = (int4)(x * stride_x, y * stride_y, z, z);
+    int4 dst, src;
+    int i, j;
+
+    int4 coord_in = coord;
+    dst = read_imagei(input, coord_in);
+    for(j = 0; j < kernel_y; j++)
+    {
+        coord_in.xy = coord.y + (int2)(0, j);
+        for(i = 0; i < kernel_x;)
+        {
+            src = read_imagei(input, coord_in);
+            i ++;
+            coord_in.x ++;
+            dst.x = dst.x > src.x ? dst.x : src.x;
+        }
+    }
+
+    dst = convert_int_rte(convert_float(dst.x) * output_scale + output_tail);
+    write_imagei(output, (int4)(x, y, z, z), dst.xxxx);
+}
+
+__kernel void gpuMaxPool_F32toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             kernel_x,
+                 int             kernel_y,
+                 int             stride_x,
+                 int             stride_y,
+                 int             pad_left,
+                 int             pad_top,
+                 float           output_scale,
+                 float           output_tail
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(x * stride_x - pad_left , y * stride_y - pad_top, z, z);
+    float4 dst, src;
+    int i, j;
+
+    dst = read_imagef(input, coord_in);
+    for(j = 0; j < kernel_y; j++)
+    {
+        for(i = 0; i < kernel_x;)
+        {
+            src = read_imagef(input, (int4)(coord_in.x + i, coord_in.y, coord_in.z, coord_in.z));
+            i ++;
+            dst.x = dst.x > src.x ? dst.x : src.x;
+        }
+        coord_in.y ++;
+    }
+
+    write_imagef(output, (int4)(x, y, z, z), dst.xxxx);
+}
+
+__kernel void gpuMaxPool_U32toU32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             kernel_x,
+                 int             kernel_y,
+                 int             stride_x,
+                 int             stride_y,
+                 int             pad_left,
+                 int             pad_top,
+                 float           output_scale,
+                 float           output_tail
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(x * stride_x - pad_left , y * stride_y - pad_top, z, z);
+    uint4 dst, src;
+    int i, j;
+
+    dst = read_imageui(input, coord_in);
+    for(j = 0; j < kernel_y; j++)
+    {
+        for(i = 0; i < kernel_x;)
+        {
+            src = read_imageui(input, (int4)(coord_in.x + i, coord_in.y, coord_in.z, coord_in.z));
+            i ++;
+            dst.x = dst.x > src.x ? dst.x : src.x;
+        }
+        coord_in.y ++;
+    }
+
+    dst = convert_uint_rte(convert_float(dst.x) * output_scale + output_tail);
+    write_imageui(output, (int4)(x, y, z, z), dst.xxxx);
+}
+
+__kernel void gpuMaxPool_I32toI32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             kernel_x,
+                 int             kernel_y,
+                 int             stride_x,
+                 int             stride_y,
+                 int             pad_left,
+                 int             pad_top,
+                 float           output_scale,
+                 float           output_tail
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(x * stride_x - pad_left , y * stride_y - pad_top, z, z);
+    int4 dst, src;
+    int i, j;
+
+    dst = read_imagei(input, coord_in);
+    for(j = 0; j < kernel_y; j++)
+    {
+        for(i = 0; i < kernel_x;)
+        {
+            src = read_imagei(input, (int4)(coord_in.x + i, coord_in.y, coord_in.z, coord_in.z));
+            i ++;
+            dst.x = dst.x > src.x ? dst.x : src.x;
+        }
+        coord_in.y ++;
+    }
+
+    dst = convert_int_rte(convert_float(dst.x) * output_scale + output_tail);
+    write_imagei(output, (int4)(x, y, z, z), dst.xxxx);
+}
+
+__kernel void gpuMaxPool_U32toU32_SameFL
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             kernel_x,
+                 int             kernel_y,
+                 int             stride_x,
+                 int             stride_y,
+                 int             pad_left,
+                 int             pad_top,
+                 float           output_scale,
+                 float           output_tail
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(x * stride_x - pad_left , y * stride_y - pad_top, z, z);
+    uint4 dst, src;
+    int i, j;
+
+    dst = read_imageui(input, coord_in);
+    for(j = 0; j < kernel_y; j++)
+    {
+        for(i = 0; i < kernel_x;)
+        {
+            src = read_imageui(input, (int4)(coord_in.x + i, coord_in.y, coord_in.z, coord_in.z));
+            i ++;
+            dst.x = dst.x > src.x ? dst.x : src.x;
+        }
+        coord_in.y ++;
+    }
+
+    write_imageui(output, (int4)(x, y, z, z), dst.xxxx);
+}
+
+__kernel void gpuMaxPool_I32toI32_SameFL
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             kernel_x,
+                 int             kernel_y,
+                 int             stride_x,
+                 int             stride_y,
+                 int             pad_left,
+                 int             pad_top,
+                 float           output_scale,
+                 float           output_tail
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(x * stride_x - pad_left , y * stride_y - pad_top, z, z);
+    int4 dst, src;
+    int i, j;
+
+    dst = read_imagei(input, coord_in);
+    for(j = 0; j < kernel_y; j++)
+    {
+        for(i = 0; i < kernel_x;)
+        {
+            src = read_imagei(input, (int4)(coord_in.x + i, coord_in.y, coord_in.z, coord_in.z));
+            i ++;
+            dst.x = dst.x > src.x ? dst.x : src.x;
+        }
+        coord_in.y ++;
+    }
+
+    write_imagei(output, (int4)(x, y, z, z), dst.xxxx);
+}
+
+typedef _viv_uchar16_packed   vxc_uchar16;
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k3_s1_ALN4_2D
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_t        output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 3, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 12, coord_out.y, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+    uchar *src_ptr_line2 = src_ptr_line1 + strideX;
+
+    vxc_uchar16 src0 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src1 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src2 = vload16(0, (_viv_uchar_packed *)src_ptr_line2);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+    coord_out.zw = coord_out.xx + (int2)(1, 2);
+
+    vxc_uchar16 maxVal = max(src0, src1);
+    maxVal = max(maxVal, src2);
+    src0 = maxVal.s0123456789abcd00;
+    src1 = maxVal.s123456789abcde00;
+    src2 = maxVal.s23456789abcdef00;
+
+    maxVal = max(src0, src1);
+    maxVal = max(maxVal, src2);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.xy, dst);
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.zy, dst);
+
+    result = 0;
+    result.s048c = maxVal.s89ab;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.wy, dst);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k3_s1_ALN2_2D
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_t        output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 6, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 12, coord_out.y, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+    uchar *src_ptr_line2 = src_ptr_line1 + strideX;
+
+    vxc_uchar16 src0 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src1 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src2 = vload16(0, (_viv_uchar_packed *)src_ptr_line2);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+    coord_out.zw = coord_out.xx + (int2)(1, 2);
+
+    vxc_uchar16 maxVal = max(src0, src1);
+    maxVal = max(maxVal, src2);
+    src0 = maxVal.s0123456789abcd00;
+    src1 = maxVal.s123456789abcde00;
+    src2 = maxVal.s23456789abcdef00;
+
+    maxVal = max(src0, src1);
+    maxVal = max(maxVal, src2);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.xy, dst.xyxy);
+    write_imageui(output, coord_out.zy, dst.zwzw);
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.wy, dst.xyxy);
+    coord_out.xzw += 3;
+    write_imageui(output, coord_out.xy, dst.zwzw);
+
+    result = 0;
+    result.s048c = maxVal.s89ab;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.zy, dst.xyxy);
+    write_imageui(output, coord_out.wy, dst.zwzw);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k3_s1_2D
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_t        output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 12, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(coord_out.x, coord_out.y, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+    uchar *src_ptr_line2 = src_ptr_line1 + strideX;
+
+    vxc_uchar16 src0 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src1 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src2 = vload16(0, (_viv_uchar_packed *)src_ptr_line2);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+    coord_out.zw = coord_out.xx + (int2)(1, 2);
+
+    vxc_uchar16 maxVal = max(src0, src1);
+    maxVal = max(maxVal, src2);
+    src0 = maxVal.s0123456789abcd00;
+    src1 = maxVal.s123456789abcde00;
+    src2 = maxVal.s23456789abcdef00;
+
+    maxVal = max(src0, src1);
+    maxVal = max(maxVal, src2);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.xy, dst.xxxx);
+    write_imageui(output, coord_out.zy, dst.yyyy);
+    write_imageui(output, coord_out.wy, dst.zzzz);
+    coord_out.xzw += 3;
+    write_imageui(output, coord_out.xy, dst.wwww);
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.zy, dst.xxxx);
+    write_imageui(output, coord_out.wy, dst.yyyy);
+    coord_out.xzw += 3;
+    write_imageui(output, coord_out.xy, dst.zzzz);
+    write_imageui(output, coord_out.zy, dst.wwww);
+
+    result = 0;
+    result.s048c = maxVal.s89ab;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.wy, dst.xxxx);
+    coord_out.xzw += 3;
+    write_imageui(output, coord_out.xy, dst.yyyy);
+    write_imageui(output, coord_out.zy, dst.zzzz);
+    write_imageui(output, coord_out.wy, dst.wwww);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k3_s1_ALN4
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_array_t  output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 3, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 12, coord_out.y, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+    uchar *src_ptr_line2 = src_ptr_line1 + strideX;
+
+    vxc_uchar16 src0 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src1 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src2 = vload16(0, (_viv_uchar_packed *)src_ptr_line2);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+
+    vxc_uchar16 maxVal = max(src0, src1);
+    maxVal = max(maxVal, src2);
+    src0 = maxVal.s0123456789abcd00;
+    src1 = maxVal.s123456789abcde00;
+    src2 = maxVal.s23456789abcdef00;
+
+    maxVal = max(src0, src1);
+    maxVal = max(maxVal, src2);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s89ab;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k3_s1_ALN2
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_array_t  output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 6, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 12, coord_out.y, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+    uchar *src_ptr_line2 = src_ptr_line1 + strideX;
+
+    vxc_uchar16 src0 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src1 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src2 = vload16(0, (_viv_uchar_packed *)src_ptr_line2);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+
+    vxc_uchar16 maxVal = max(src0, src1);
+    maxVal = max(maxVal, src2);
+    src0 = maxVal.s0123456789abcd00;
+    src1 = maxVal.s123456789abcde00;
+    src2 = maxVal.s23456789abcdef00;
+
+    maxVal = max(src0, src1);
+    maxVal = max(maxVal, src2);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xyxy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zwzw);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xyxy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zwzw);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s89ab;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xyxy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zwzw);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k3_s1
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_array_t  output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 12, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(coord_out.x, coord_out.y, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+    uchar *src_ptr_line2 = src_ptr_line1 + strideX;
+
+    vxc_uchar16 src0 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src1 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src2 = vload16(0, (_viv_uchar_packed *)src_ptr_line2);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+
+    vxc_uchar16 maxVal = max(src0, src1);
+    maxVal = max(maxVal, src2);
+    src0 = maxVal.s0123456789abcd00;
+    src1 = maxVal.s123456789abcde00;
+    src2 = maxVal.s23456789abcdef00;
+
+    maxVal = max(src0, src1);
+    maxVal = max(maxVal, src2);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xxxx);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.yyyy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zzzz);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.wwww);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xxxx);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.yyyy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zzzz);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.wwww);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s89ab;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xxxx);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.yyyy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zzzz);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.wwww);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k3_s2_ALN4_2D
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_t        output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 3, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 24, coord_out.y << 1, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+    uchar *src_ptr_line2 = src_ptr_line1 + strideX;
+
+    vxc_uchar16 src00 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src01 = vload16(1, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src10 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src11 = vload16(1, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src20 = vload16(0, (_viv_uchar_packed *)src_ptr_line2);
+    vxc_uchar16 src21 = vload16(1, (_viv_uchar_packed *)src_ptr_line2);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+    coord_out.zw = coord_out.xx + (int2)(1, 2);
+
+    vxc_uchar16 maxVal;
+    vxc_uchar16 maxVal0 = max(src00, src10);
+    vxc_uchar16 maxVal1 = max(src01, src11);
+
+    maxVal0 = max(maxVal0, src20);
+    maxVal1 = max(maxVal1, src21);
+
+    src00 = (vxc_uchar16)(maxVal0.s02468ace, maxVal1.s02468ace);
+    src10 = (vxc_uchar16)(maxVal0.s13579bdf, maxVal1.s13579bdf);
+    src20 = src00.s123456789abcdef0;
+
+    maxVal = max(src00, src10);
+    maxVal = max(maxVal, src20);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.xy, dst);
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.zy, dst);
+
+    result = 0;
+    result.s048c = maxVal.s89ab;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.wy, dst);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k3_s2_ALN2_2D
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_t        output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 6, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 24, coord_out.y << 1, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+    uchar *src_ptr_line2 = src_ptr_line1 + strideX;
+
+    vxc_uchar16 src00 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src01 = vload16(1, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src10 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src11 = vload16(1, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src20 = vload16(0, (_viv_uchar_packed *)src_ptr_line2);
+    vxc_uchar16 src21 = vload16(1, (_viv_uchar_packed *)src_ptr_line2);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+    coord_out.zw = coord_out.xx + (int2)(1, 2);
+
+    vxc_uchar16 maxVal;
+    vxc_uchar16 maxVal0 = max(src00, src10);
+    vxc_uchar16 maxVal1 = max(src01, src11);
+
+    maxVal0 = max(maxVal0, src20);
+    maxVal1 = max(maxVal1, src21);
+
+    src00 = (vxc_uchar16)(maxVal0.s02468ace, maxVal1.s02468ace);
+    src10 = (vxc_uchar16)(maxVal0.s13579bdf, maxVal1.s13579bdf);
+    src20 = src00.s123456789abcdef0;
+
+    maxVal = max(src00, src10);
+    maxVal = max(maxVal, src20);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.xy, dst.xyxy);
+    write_imageui(output, coord_out.zy, dst.zwzw);
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.wy, dst.xyxy);
+    coord_out.xzw += 3;
+    write_imageui(output, coord_out.xy, dst.zwzw);
+
+    result = 0;
+    result.s048c = maxVal.s89ab;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.zy, dst.xyxy);
+    write_imageui(output, coord_out.wy, dst.zwzw);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k3_s2_2D
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_t        output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 12, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(coord_out.x << 1, coord_out.y << 1, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+    uchar *src_ptr_line2 = src_ptr_line1 + strideX;
+
+    vxc_uchar16 src00 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src01 = vload16(1, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src10 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src11 = vload16(1, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src20 = vload16(0, (_viv_uchar_packed *)src_ptr_line2);
+    vxc_uchar16 src21 = vload16(1, (_viv_uchar_packed *)src_ptr_line2);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+    coord_out.zw = coord_out.xx + (int2)(1, 2);
+
+    vxc_uchar16 maxVal;
+    vxc_uchar16 maxVal0 = max(src00, src10);
+    vxc_uchar16 maxVal1 = max(src01, src11);
+
+    maxVal0 = max(maxVal0, src20);
+    maxVal1 = max(maxVal1, src21);
+
+    src00 = (vxc_uchar16)(maxVal0.s02468ace, maxVal1.s02468ace);
+    src10 = (vxc_uchar16)(maxVal0.s13579bdf, maxVal1.s13579bdf);
+    src20 = src00.s123456789abcdef0;
+
+    maxVal = max(src00, src10);
+    maxVal = max(maxVal, src20);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.xy, dst.xxxx);
+    write_imageui(output, coord_out.zy, dst.yyyy);
+    write_imageui(output, coord_out.wy, dst.zzzz);
+    coord_out.xzw += 3;
+    write_imageui(output, coord_out.xy, dst.wwww);
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.zy, dst.xxxx);
+    write_imageui(output, coord_out.wy, dst.yyyy);
+    coord_out.xzw += 3;
+    write_imageui(output, coord_out.xy, dst.zzzz);
+    write_imageui(output, coord_out.zy, dst.wwww);
+
+    result = 0;
+    result.s048c = maxVal.s89ab;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.wy, dst.xxxx);
+    coord_out.xzw += 3;
+    write_imageui(output, coord_out.xy, dst.yyyy);
+    write_imageui(output, coord_out.zy, dst.zzzz);
+    write_imageui(output, coord_out.wy, dst.wwww);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k3_s2_ALN4
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_array_t  output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 3, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 24, coord_out.y << 1, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+    uchar *src_ptr_line2 = src_ptr_line1 + strideX;
+
+    vxc_uchar16 src00 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src01 = vload16(1, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src10 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src11 = vload16(1, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src20 = vload16(0, (_viv_uchar_packed *)src_ptr_line2);
+    vxc_uchar16 src21 = vload16(1, (_viv_uchar_packed *)src_ptr_line2);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+
+    vxc_uchar16 maxVal;
+    vxc_uchar16 maxVal0 = max(src00, src10);
+    vxc_uchar16 maxVal1 = max(src01, src11);
+
+    maxVal0 = max(maxVal0, src20);
+    maxVal1 = max(maxVal1, src21);
+
+    src00 = (vxc_uchar16)(maxVal0.s02468ace, maxVal1.s02468ace);
+    src10 = (vxc_uchar16)(maxVal0.s13579bdf, maxVal1.s13579bdf);
+    src20 = src00.s123456789abcdef0;
+
+    maxVal = max(src00, src10);
+    maxVal = max(maxVal, src20);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s89ab;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k3_s2_ALN2
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_array_t  output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 6, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 24, coord_out.y << 1, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+    uchar *src_ptr_line2 = src_ptr_line1 + strideX;
+
+    vxc_uchar16 src00 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src01 = vload16(1, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src10 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src11 = vload16(1, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src20 = vload16(0, (_viv_uchar_packed *)src_ptr_line2);
+    vxc_uchar16 src21 = vload16(1, (_viv_uchar_packed *)src_ptr_line2);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+
+    vxc_uchar16 maxVal;
+    vxc_uchar16 maxVal0 = max(src00, src10);
+    vxc_uchar16 maxVal1 = max(src01, src11);
+
+    maxVal0 = max(maxVal0, src20);
+    maxVal1 = max(maxVal1, src21);
+
+    src00 = (vxc_uchar16)(maxVal0.s02468ace, maxVal1.s02468ace);
+    src10 = (vxc_uchar16)(maxVal0.s13579bdf, maxVal1.s13579bdf);
+    src20 = src00.s123456789abcdef0;
+
+    maxVal = max(src00, src10);
+    maxVal = max(maxVal, src20);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xyxy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zwzw);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xyxy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zwzw);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s89ab;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xyxy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zwzw);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k3_s2
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_array_t  output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 12, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 24, coord_out.y << 1, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+    uchar *src_ptr_line2 = src_ptr_line1 + strideX;
+
+    vxc_uchar16 src00 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src01 = vload16(1, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src10 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src11 = vload16(1, (_viv_uchar_packed *)src_ptr_line1);
+    vxc_uchar16 src20 = vload16(0, (_viv_uchar_packed *)src_ptr_line2);
+    vxc_uchar16 src21 = vload16(1, (_viv_uchar_packed *)src_ptr_line2);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+
+    vxc_uchar16 maxVal;
+    vxc_uchar16 maxVal0 = max(src00, src10);
+    vxc_uchar16 maxVal1 = max(src01, src11);
+
+    maxVal0 = max(maxVal0, src20);
+    maxVal1 = max(maxVal1, src21);
+
+    src00 = (vxc_uchar16)(maxVal0.s02468ace, maxVal1.s02468ace);
+    src10 = (vxc_uchar16)(maxVal0.s13579bdf, maxVal1.s13579bdf);
+    src20 = src00.s123456789abcdef0;
+
+    maxVal = max(src00, src10);
+    maxVal = max(maxVal, src20);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xxxx);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.yyyy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zzzz);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.wwww);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xxxx);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.yyyy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zzzz);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.wwww);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s89ab;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xxxx);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.yyyy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zzzz);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.wwww);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k2_s2_ALN4_2D
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_t        output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 2, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 16, coord_out.y << 1, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+
+    vxc_uchar16 src0 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src1 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+    coord_out.zw = coord_out.xx + (int2)(1, 2);
+
+    vxc_uchar16 maxVal = max(src0, src1);
+
+    src0 = maxVal.s02468ace00000000;
+    src1 = maxVal.s13579bdf00000000;
+
+    maxVal = max(src0, src1);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.xy, dst);
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.zy, dst);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k2_s2_ALN2_2D
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_t        output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 4, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 16, coord_out.y << 1, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+
+    vxc_uchar16 src0 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src1 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+    coord_out.zw = coord_out.xx + (int2)(1, 2);
+
+    vxc_uchar16 maxVal = max(src0, src1);
+
+    src0 = maxVal.s02468ace00000000;
+    src1 = maxVal.s13579bdf00000000;
+
+    maxVal = max(src0, src1);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.xy, dst.xyxy);
+    write_imageui(output, coord_out.zy, dst.zwzw);
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.wy, dst.xyxy);
+    coord_out.xzw += 3;
+    write_imageui(output, coord_out.xy, dst.zwzw);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k2_s2_2D
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_t        output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 8, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 16, coord_out.y << 1, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+
+    vxc_uchar16 src0 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src1 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+    coord_out.zw = coord_out.xx + (int2)(1, 2);
+
+    vxc_uchar16 maxVal = max(src0, src1);
+
+    src0 = maxVal.s02468ace00000000;
+    src1 = maxVal.s13579bdf00000000;
+
+    maxVal = max(src0, src1);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.xy, dst.xxxx);
+    write_imageui(output, coord_out.zy, dst.yyyy);
+    write_imageui(output, coord_out.wy, dst.zzzz);
+    coord_out.xzw += 3;
+    write_imageui(output, coord_out.xy, dst.wwww);
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out.zy, dst.xxxx);
+    write_imageui(output, coord_out.wy, dst.yyyy);
+    coord_out.xzw += 3;
+    write_imageui(output, coord_out.xy, dst.zzzz);
+    write_imageui(output, coord_out.zy, dst.wwww);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k2_s2_ALN4
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_array_t  output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 2, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 16, coord_out.y << 1, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+
+    vxc_uchar16 src0 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src1 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+
+    vxc_uchar16 maxVal = max(src0, src1);
+
+    src0 = maxVal.s02468ace00000000;
+    src1 = maxVal.s13579bdf00000000;
+
+    maxVal = max(src0, src1);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k2_s2_ALN2
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_array_t  output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 4, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) * 16, coord_out.y << 1, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+
+    vxc_uchar16 src0 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src1 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+
+    vxc_uchar16 maxVal = max(src0, src1);
+
+    src0 = maxVal.s02468ace00000000;
+    src1 = maxVal.s13579bdf00000000;
+
+    maxVal = max(src0, src1);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xyxy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zwzw);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xyxy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zwzw);
+}
+
+__kernel void gpuMaxPool_NoPadSameFLQuant8_k2_s2
+    (
+    __read_only  image2d_array_t  input,
+    __write_only image2d_array_t  output,
+    int                           output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 8, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(coord_out.x << 1, coord_out.y << 1, coord_out.z, 0);
+
+    Tensor in_tensor = create_tensor_from_image2d_array(input, 1);
+    int strideX = in_tensor.stride_y;
+    uchar *src_ptr = get_tensor_ptr_from_coord(in_tensor, coord_in);
+    uchar *src_ptr_line0 = src_ptr;
+    uchar *src_ptr_line1 = src_ptr_line0 + strideX;
+
+    vxc_uchar16 src0 = vload16(0, (_viv_uchar_packed *)src_ptr_line0);
+    vxc_uchar16 src1 = vload16(0, (_viv_uchar_packed *)src_ptr_line1);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+
+    vxc_uchar16 maxVal = max(src0, src1);
+
+    src0 = maxVal.s02468ace00000000;
+    src1 = maxVal.s13579bdf00000000;
+
+    maxVal = max(src0, src1);
+
+    uint4 dst;
+    vxc_uchar16 result;
+
+    result = 0;
+    result.s048c = maxVal.s0123;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xxxx);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.yyyy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zzzz);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.wwww);
+    coord_out.x ++;
+
+    result = 0;
+    result.s048c = maxVal.s4567;
+    _viv_asm(COPY, dst, result, 16);
+    write_imageui(output, coord_out, dst.xxxx);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.yyyy);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.zzzz);
+    coord_out.x ++;
+    write_imageui(output, coord_out, dst.wwww);
+}
+
+__kernel void gpuMaxPool_NoPadFP32_k2_s2_ALN4_2D
+    (
+    __read_only  image2d_t  input,
+    __write_only image2d_t  output,
+    int                     input_height,
+    int                     output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) << 1, coord_out.y << 1, coord_out.z, 0);
+
+    coord_in.y = coord_in.z * input_height + coord_in.y;
+    coord_in.zw = coord_in.xy + (int2)(1, 1);
+
+    float4 src00 = read_imagef(input, coord_in.xy);
+    float4 src01 = read_imagef(input, coord_in.zy);
+    float4 src10 = read_imagef(input, coord_in.xw);
+    float4 src11 = read_imagef(input, coord_in.zw);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+
+    float4 maxVal00 = src00 > src10 ? src00 : src10;
+    float4 maxVal01 = src01 > src11 ? src01 : src11;
+
+    float4 src0 = (float4)(maxVal00.xz, maxVal01.xz);
+    float4 src1 = (float4)(maxVal00.yw, maxVal01.yw);
+
+    float4 dst = src0 > src1 ? src0 : src1;
+
+    write_imagef(output, coord_out.xy, dst);
+}
+
+__kernel void gpuMaxPool_NoPadFP32_k2_s2_2D
+    (
+    __read_only  image2d_t  input,
+    __write_only image2d_t  output,
+    int                     input_height,
+    int                     output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 4, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) << 1, coord_out.y << 1, coord_out.z, 0);
+
+    coord_in.y = coord_in.z * input_height + coord_in.y;
+    coord_in.zw = coord_in.xy + (int2)(1, 1);
+
+    float4 src00 = read_imagef(input, coord_in.xy);
+    float4 src01 = read_imagef(input, coord_in.zy);
+    float4 src10 = read_imagef(input, coord_in.xw);
+    float4 src11 = read_imagef(input, coord_in.zw);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+    coord_out.zw = coord_out.xx + (int2)(1, 2);
+
+    float4 maxVal00 = src00 > src10 ? src00 : src10;
+    float4 maxVal01 = src01 > src11 ? src01 : src11;
+
+    float4 src0 = (float4)(maxVal00.xz, maxVal01.xz);
+    float4 src1 = (float4)(maxVal00.yw, maxVal01.yw);
+
+    float4 dst = src0 > src1 ? src0 : src1;
+
+    write_imagef(output, coord_out.xy, dst.xxxx);
+    write_imagef(output, coord_out.zy, dst.yyyy);
+    write_imagef(output, coord_out.wy, dst.zzzz);
+    coord_out.x += 3;
+    write_imagef(output, coord_out.xy, dst.wwww);
+}
+
+__kernel void gpuMaxPool_NoPadFP32_k3_s2_ALN4_2D
+    (
+    __read_only  image2d_t  input,
+    __write_only image2d_t  output,
+    int                     input_height,
+    int                     output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) << 1, coord_out.y << 1, coord_out.z, 0);
+
+    coord_in.y = coord_in.z * input_height + coord_in.y;
+    coord_in.zw = coord_in.xx + (int2)(1, 2);
+
+    float4 src00 = read_imagef(input, coord_in.xy);
+    float4 src01 = read_imagef(input, coord_in.zy);
+    float4 src02 = read_imagef(input, coord_in.wy);
+    coord_in.y ++;
+    float4 src10 = read_imagef(input, coord_in.xy);
+    float4 src11 = read_imagef(input, coord_in.zy);
+    float4 src12 = read_imagef(input, coord_in.wy);
+    coord_in.y ++;
+    float4 src20 = read_imagef(input, coord_in.xy);
+    float4 src21 = read_imagef(input, coord_in.zy);
+    float4 src22 = read_imagef(input, coord_in.wy);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+
+    float4 maxVal00 = src00 > src10 ? src00 : src10;
+    float4 maxVal01 = src01 > src11 ? src01 : src11;
+    float4 maxVal02 = src02 > src12 ? src02 : src12;
+
+    maxVal00 = maxVal00 > src20 ? maxVal00 : src20;
+    maxVal01 = maxVal01 > src21 ? maxVal01 : src21;
+    maxVal02 = maxVal02 > src22 ? maxVal02 : src22;
+
+    float4 src0 = (float4)(maxVal00.xz, maxVal01.xz);
+    float4 src1 = (float4)(maxVal00.yw, maxVal01.yw);
+    float4 src2 = (float4)(maxVal00.z, maxVal01.xz, maxVal02.x);
+
+    float4 dst = src0 > src1 ? src0 : src1;
+    dst = dst > src2 ? dst : src2;
+
+    write_imagef(output, coord_out.xy, dst);
+}
+
+__kernel void gpuMaxPool_NoPadFP32_k3_s2_2D
+    (
+    __read_only  image2d_t  input,
+    __write_only image2d_t  output,
+    int                     input_height,
+    int                     output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 4, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0) << 1, coord_out.y << 1, coord_out.z, 0);
+
+    coord_in.y = coord_in.z * input_height + coord_in.y;
+    coord_in.zw = coord_in.xx + (int2)(1, 2);
+
+    float4 src00 = read_imagef(input, coord_in.xy);
+    float4 src01 = read_imagef(input, coord_in.zy);
+    float4 src02 = read_imagef(input, coord_in.wy);
+    coord_in.y ++;
+    float4 src10 = read_imagef(input, coord_in.xy);
+    float4 src11 = read_imagef(input, coord_in.zy);
+    float4 src12 = read_imagef(input, coord_in.wy);
+    coord_in.y ++;
+    float4 src20 = read_imagef(input, coord_in.xy);
+    float4 src21 = read_imagef(input, coord_in.zy);
+    float4 src22 = read_imagef(input, coord_in.wy);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+    coord_out.zw = coord_out.xx + (int2)(1, 2);
+
+    float4 maxVal00 = src00 > src10 ? src00 : src10;
+    float4 maxVal01 = src01 > src11 ? src01 : src11;
+    float4 maxVal02 = src02 > src12 ? src02 : src12;
+
+    maxVal00 = maxVal00 > src20 ? maxVal00 : src20;
+    maxVal01 = maxVal01 > src21 ? maxVal01 : src21;
+    maxVal02 = maxVal02 > src22 ? maxVal02 : src22;
+
+    float4 src0 = (float4)(maxVal00.xz, maxVal01.xz);
+    float4 src1 = (float4)(maxVal00.yw, maxVal01.yw);
+    float4 src2 = (float4)(maxVal00.z, maxVal01.xz, maxVal02.x);
+
+    float4 dst = src0 > src1 ? src0 : src1;
+    dst = dst > src2 ? dst : src2;
+
+    write_imagef(output, coord_out.xy, dst.xxxx);
+    write_imagef(output, coord_out.zy, dst.yyyy);
+    write_imagef(output, coord_out.wy, dst.zzzz);
+    coord_out.x += 3;
+    write_imagef(output, coord_out.xy, dst.wwww);
+}
+
+__kernel void gpuMaxPool_NoPadFP32_k3_s1_ALN4_2D
+    (
+    __read_only  image2d_t  input,
+    __write_only image2d_t  output,
+    int                     input_height,
+    int                     output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(coord_out.x, coord_out.y, coord_out.z, 0);
+
+    coord_in.y = coord_in.z * input_height + coord_in.y;
+    coord_in.zw = coord_in.xy + (int2)(1, 1);
+
+    float4 src00 = read_imagef(input, coord_in.xy);
+    float4 src01 = read_imagef(input, coord_in.zy);
+    float4 src10 = read_imagef(input, coord_in.xw);
+    float4 src11 = read_imagef(input, coord_in.zw);
+    coord_in.y += 2;
+    float4 src20 = read_imagef(input, coord_in.xy);
+    float4 src21 = read_imagef(input, coord_in.zy);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+
+    float4 maxVal00 = src00 > src10 ? src00 : src10;
+    float4 maxVal01 = src01 > src11 ? src01 : src11;
+
+    maxVal00 = maxVal00 > src20 ? maxVal00 : src20;
+    maxVal01 = maxVal01 > src21 ? maxVal01 : src21;
+
+    float4 src0 = maxVal00;
+    float4 src1 = (float4)(maxVal00.yzw, maxVal01.x);
+    float4 src2 = (float4)(maxVal00.zw, maxVal01.xy);
+
+    float4 dst = src0 > src1 ? src0 : src1;
+    dst = dst > src2 ? dst : src2;
+
+    write_imagef(output, coord_out.xy, dst);
+}
+
+__kernel void gpuMaxPool_NoPadFP32_k3_s1_2D
+    (
+    __read_only  image2d_t  input,
+    __write_only image2d_t  output,
+    int                     input_height,
+    int                     output_height
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0) * 4, get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 coord_in = (int4)(get_global_id(0), coord_out.y, coord_out.z, 0);
+
+    coord_in.y = coord_in.z * input_height + coord_in.y;
+    coord_in.zw = coord_in.xy + (int2)(1, 1);
+
+    float4 src00 = read_imagef(input, coord_in.xy);
+    float4 src01 = read_imagef(input, coord_in.zy);
+    float4 src10 = read_imagef(input, coord_in.xw);
+    float4 src11 = read_imagef(input, coord_in.zw);
+    coord_in.y += 2;
+    float4 src20 = read_imagef(input, coord_in.xy);
+    float4 src21 = read_imagef(input, coord_in.zy);
+
+    coord_out.y = coord_out.z * output_height + coord_out.y;
+    coord_out.zw = coord_out.xx + (int2)(1, 2);
+
+    float4 maxVal00 = src00 > src10 ? src00 : src10;
+    float4 maxVal01 = src01 > src11 ? src01 : src11;
+
+    maxVal00 = maxVal00 > src20 ? maxVal00 : src20;
+    maxVal01 = maxVal01 > src21 ? maxVal01 : src21;
+
+    float4 src0 = maxVal00;
+    float4 src1 = (float4)(maxVal00.yzw, maxVal01.x);
+    float4 src2 = (float4)(maxVal00.zw, maxVal01.xy);
+
+    float4 dst = src0 > src1 ? src0 : src1;
+    dst = dst > src2 ? dst : src2;
+
+    write_imagef(output, coord_out.xy, dst.xxxx);
+    write_imagef(output, coord_out.zy, dst.yyyy);
+    write_imagef(output, coord_out.wy, dst.zzzz);
+    coord_out.x += 3;
+    write_imagef(output, coord_out.xy, dst.wwww);
+}

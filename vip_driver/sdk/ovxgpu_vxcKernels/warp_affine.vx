@@ -1,0 +1,221 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform float3 matrix0;
+_viv_uniform float3 matrix1;
+_viv_uniform float2 offset;
+_viv_uniform uint border_w;
+_viv_uniform uint border_h;
+_viv_uniform uint bordervalue;
+
+__kernel void warp_affine_nearest_neighbor_U8toU8
+(
+    __read_only  image2d_t  input,
+    __global   float        *matrix,
+                 int        type,
+    __write_only image2d_t  output,
+                 int        xPos,
+                 int        yPos
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    float xf, yf;
+    uint4 dst;
+    xf = (x * matrix0.x + y * matrix0.z + matrix1.y);
+    yf = (x * matrix0.y + y * matrix1.x + matrix1.z);
+    xf = xf - offset[0];
+    yf = yf - offset[1];
+    int x_out = convert_int(xf);
+    int y_out = convert_int(yf);
+    if (xf < 0 || yf < 0 || xf >= border_w || yf >= border_h)
+    {
+        dst.x = bordervalue;
+    }
+    else
+    {
+        dst = read_imageui(input,(int2)(x_out,y_out));
+    }
+    write_imageui(output,(int2)(x,y),dst);
+}
+
+__kernel void warp_affine_bilinear_U8toU8
+(
+    __read_only  image2d_t  input,
+    __global   float        *matrix,
+                 int        type,
+    __write_only image2d_t  output,
+                 int        xPos,
+                 int        yPos
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    float xf, yf;
+    uint4 tl,tr,bl,br;
+    xf = (x * matrix0.x + y * matrix0.z + matrix1.y);
+    yf = (x * matrix0.y + y * matrix1.x + matrix1.z);
+    xf = xf - offset[0];
+    yf = yf - offset[1];
+    if (floor(xf) < 0 || floor(yf) < 0|| floor(xf) >= border_w || floor(yf) >= border_h)
+    {
+        tl.x = bordervalue;
+    }
+    else
+    {
+        tl = read_imageui(input,(int2)(convert_int(floor(xf)), convert_int(floor(yf))));
+    }
+    if (floor(xf) + 1 < 0 || floor(yf) < 0|| floor(xf) + 1 >= border_w || floor(yf) >= border_h)
+    {
+        tr.x = bordervalue;
+    }
+    else
+    {
+        tr = read_imageui(input,(int2)(convert_int(floor(xf)+1), convert_int(floor(yf))));
+    }
+    if (floor(xf) < 0 || floor(yf) + 1 < 0|| floor(xf) >= border_w || floor(yf) + 1 >= border_h)
+    {
+        bl.x = bordervalue;
+    }
+    else
+    {
+        bl = read_imageui(input,(int2)(convert_int(floor(xf)), convert_int(floor(yf)+1)));
+    }
+    if (floor(xf) + 1 < 0 || floor(yf) + 1 < 0|| floor(xf) + 1 >= border_w || floor(yf) + 1 >= border_h)
+    {
+        br.x = bordervalue;
+    }
+    else
+    {
+        br = read_imageui(input,(int2)(convert_int(floor(xf)+1), convert_int(floor(yf)+1)));
+    }
+    float ar = xf - floor(xf);
+    float ab = yf - floor(yf);
+    float al = 1.0f - ar;
+    float at = 1.0f - ab;
+    uint dst = convert_uint(tl.x*al*at+tr.x*ar*at+bl.x*al*ab+br.x*ar*ab);
+    write_imageui(output,(int2)(x,y),(uint4)(dst,0,0,0));
+}
+
+__kernel void warp_affine_nearest_neighbor_U1toU1
+(
+    __read_only  image2d_t  input,
+    __global     float      *matrix,
+                 int        type,
+    __write_only image2d_t  output,
+                 int        xPos,
+                 int        yPos
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    float xf, yf;
+    int x_in, x_pos;
+    int y_in;
+    int i;
+    uint src[8];
+    uint dst[8];
+    uint4 dst0 = (uint4)(0,0,0,0);
+    for (i = 0; i < 8; i++)
+    {
+        xf = ((x + i) * matrix0.x + y * matrix0.z + matrix1.y);
+        yf = ((x + i) * matrix0.y + y * matrix1.x + matrix1.z);
+        xf = xf - offset[0];
+        yf = yf - offset[1];
+        x_in = convert_int(xf);
+        y_in = convert_int(yf);
+        x_pos = x_in & 7 ;
+        x_in = x_in >> 3;
+        if (xf < 0 || yf < 0 || xf >= border_w || yf >= border_h)
+        {
+            dst[i] = bordervalue;
+        }
+        else
+        {
+            src[i] = read_imageui(input,(int2)(x_in,y_in)).x;
+            dst[i] = (src[i] >> (x_pos)) & 1;
+        }
+        dst0.x += exp2(i) * dst[i];
+    }
+    write_imageui(output,(int2)(x >> 3,y),dst0);
+}
+
+__kernel void warp_affine_bilinear_U1toU1
+(
+    __read_only  image2d_t  input,
+    __global   float        *matrix,
+                 int        type,
+    __write_only image2d_t  output,
+                 int        xPos,
+                 int        yPos
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    float xf, yf;
+    int x_pos;
+    int i;
+    uint tl[8];
+    uint tr[8];
+    uint bl[8];
+    uint br[8];
+    float ar;
+    float ab;
+    float al;
+    float at;
+    uint dst[8];
+    uint4 dst0 = (uint4)(0,0,0,0);
+    for (i = 0; i < 8; i++)
+    {
+        xf = ((x + i) * matrix0.x + y * matrix0.z + matrix1.y);
+        yf = ((x + i) * matrix0.y + y * matrix1.x + matrix1.z);
+        xf = xf - offset[0];
+        yf = yf - offset[1];
+        if (floor(xf) < 0 || floor(yf) < 0|| floor(xf) >= border_w || floor(yf) >= border_h)
+        {
+            tl[i] = bordervalue;
+        }
+        else
+        {
+            tl[i] = read_imageui(input,(int2)(convert_int(floor(xf)) >> 3, convert_int(floor(yf)))).x;
+            x_pos = convert_int(floor(xf)) & 7;
+            tl[i] = (tl[i] >> (x_pos)) & 1;
+        }
+        if (floor(xf) + 1 < 0 || floor(yf) < 0 || floor(xf) + 1 >= border_w || floor(yf) >= border_h)
+        {
+            tr[i] = bordervalue;
+        }
+        else
+        {
+            tr[i] = read_imageui(input,(int2)(convert_int(floor(xf) + 1) >> 3, convert_int(floor(yf)))).x;
+            x_pos = convert_int(floor(xf) + 1) & 7;
+            tr[i] = (tr[i] >> (x_pos)) & 1;
+        }
+        if (floor(xf) < 0 || floor(yf) + 1 < 0 || floor(xf) >= border_w || floor(yf) + 1 >= border_h)
+        {
+            bl[i] = bordervalue;
+        }
+        else
+        {
+            bl[i] = read_imageui(input,(int2)(convert_int(floor(xf)) >> 3, convert_int(floor(yf)+1))).x;
+            x_pos = convert_int(floor(xf)) & 7;
+            bl[i] = (bl[i] >> (x_pos)) & 1;
+        }
+        if (floor(xf) + 1 < 0 || floor(yf) + 1 < 0 || floor(xf) + 1 >= border_w || floor(yf) + 1 >= border_h)
+        {
+            br[i] = bordervalue;
+        }
+        else
+        {
+            br[i] = read_imageui(input,(int2)(convert_int(floor(xf)+1) >> 3, convert_int(floor(yf)+1))).x;
+            x_pos = convert_int(floor(xf) + 1) & 7;
+            br[i] = (br[i] >> (x_pos)) & 1;
+        }
+        ar = xf - floor(xf);
+        ab = yf - floor(yf);
+        al = 1.0f - ar;
+        at = 1.0f - ab;
+        dst[i] = convert_uint(tl[i]*al*at+tr[i]*ar*at+bl[i]*al*ab+br[i]*ar*ab+0.5);
+        dst0.x += exp2(i) * dst[i];
+    }
+    write_imageui(output,(int2)(x >> 3,y),dst0);
+}

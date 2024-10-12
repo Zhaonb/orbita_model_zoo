@@ -1,0 +1,93 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+#define WORK_GROUP_SIZE   16
+#define LAST_WORKITEM_ID  (WORK_GROUP_SIZE - 1)
+#define GROUP_STRIDE      (WORK_GROUP_SIZE * 16)
+
+_viv_uniform VXC_512Bits uniAccHor1stU8toI32_4x4;
+_viv_uniform VXC_512Bits uniAccHor2ndU8toI32_4x4;
+_viv_uniform VXC_512Bits uniAccHor3rdU8toI32_4x4;
+_viv_uniform VXC_512Bits uniAccHor4thU8toI32_4x4;
+_viv_uniform int stride;
+
+// one row per workgroup
+__kernel __attribute__((reqd_work_group_size(WORK_GROUP_SIZE, 1, 1))) void integral_image_horz
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int lidx = get_local_id(0);
+    vxc_uchar16 src0;
+
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    int4 coord_out = (int4)(get_global_id(0) + 4, get_global_id(1), get_global_id(0) + 8, get_global_id(0) + 12);
+
+    __local uint cur_sum[WORK_GROUP_SIZE];
+    __local uint last_round[1];
+    uint acc_sum = 0;
+    uint4 sum0, sum1, sum2, sum3;
+
+    VXC_DP4x4(sum0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniAccHor1stU8toI32_4x4);
+    VXC_DP4x4(sum1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniAccHor2ndU8toI32_4x4);
+    VXC_DP4x4(sum2, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniAccHor3rdU8toI32_4x4);
+    VXC_DP4x4(sum3, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniAccHor4thU8toI32_4x4);
+
+    sum1 += sum0.w;
+    sum2 += sum1.w;
+    sum3 += sum2.w;
+    cur_sum[lidx] = sum3.w;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for(int i = 0; i < lidx; i++)
+    {
+        acc_sum += cur_sum[i];
+    }
+    sum0 += acc_sum;
+    sum1 += acc_sum;
+    sum2 += acc_sum;
+    sum3 += acc_sum;
+    if(lidx == LAST_WORKITEM_ID)
+    {
+        last_round[0] = sum3.w;
+    }
+    write_imageui(output, coord, sum0);
+    write_imageui(output, coord_out.xy, sum1);
+    write_imageui(output, coord_out.zy, sum2);
+    write_imageui(output, coord_out.wy, sum3);
+
+    for(coord.x += GROUP_STRIDE; coord.x < stride; coord.x += GROUP_STRIDE)
+    {
+        VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_out.xzw += GROUP_STRIDE;
+        VXC_DP4x4(sum0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniAccHor1stU8toI32_4x4);
+        VXC_DP4x4(sum1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniAccHor2ndU8toI32_4x4);
+        VXC_DP4x4(sum2, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniAccHor3rdU8toI32_4x4);
+        VXC_DP4x4(sum3, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), uniAccHor4thU8toI32_4x4);
+        sum1 += sum0.w;
+        sum2 += sum1.w;
+        sum3 += sum2.w;
+        barrier(CLK_LOCAL_MEM_FENCE);
+        cur_sum[lidx] = sum3.w;
+        barrier(CLK_LOCAL_MEM_FENCE);
+        acc_sum = last_round[0];
+        for(int i = 0; i < lidx; i++)
+        {
+            acc_sum += cur_sum[i];
+        }
+        sum0 += acc_sum;
+        sum1 += acc_sum;
+        sum2 += acc_sum;
+        sum3 += acc_sum;
+        if(lidx == LAST_WORKITEM_ID)
+        {
+            last_round[0] = sum3.w;
+        }
+        write_imageui(output, coord, sum0);
+        write_imageui(output, coord_out.xy, sum1);
+        write_imageui(output, coord_out.zy, sum2);
+        write_imageui(output, coord_out.wy, sum3);
+    }
+}

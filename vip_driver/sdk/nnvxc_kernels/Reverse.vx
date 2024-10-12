@@ -1,0 +1,209 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int cur_axis_sz_sub1;
+_viv_uniform int cur_axis1_sz_sub1;
+_viv_uniform int cur_axis2_sz_sub1;
+_viv_uniform int cur_axis_sz_sub8;
+
+__kernel void vxcTensorReverse_axis0_16bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_short8 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord.x = cur_axis_sz_sub8 - coord.x;
+    vec0 = vec0.s76543210;
+
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcTensorReverse_axis1_16bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_short8 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord.y = cur_axis_sz_sub1 - coord.y;
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcTensorReverse_axis2_16bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_short8 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord.z = cur_axis_sz_sub1 - coord.z;
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcTensorReverse_axis01_16bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_short8 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord.x = cur_axis_sz_sub8 - coord.x;
+    coord.y = cur_axis1_sz_sub1 - coord.y;
+
+    vec0 = vec0.s76543210;
+
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcTensorReverse_axis02_16bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_short8 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord.x = cur_axis_sz_sub8 - coord.x;
+    coord.z = cur_axis1_sz_sub1 - coord.z;
+
+    vec0 = vec0.s76543210;
+
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcTensorReverse_axis12_16bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_short8 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord.y = cur_axis_sz_sub1 - coord.y;
+    coord.z = cur_axis1_sz_sub1 - coord.z;
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcTensorReverse_axis012_16bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_short8 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord.x = cur_axis_sz_sub8 - coord.x;
+    coord.y = cur_axis1_sz_sub1 - coord.y;
+    coord.z = cur_axis2_sz_sub1 - coord.z;
+
+    vec0 = vec0.s76543210;
+
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform int cur_axis_sz_sub16;
+__kernel void vxcTensorReverse_axis0_8bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_uchar16 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.x = cur_axis_sz_sub16 - coord.x;
+    vec0 = vec0.sfedcba9876543210;
+
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcTensorReverse_axis1_8bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_uchar16 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.y = cur_axis_sz_sub1 - coord.y;
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcTensorReverse_axis2_8bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_uchar16 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.z = cur_axis_sz_sub1 - coord.z;
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcTensorReverse_axis01_8bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_uchar16 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.x = cur_axis_sz_sub16 - coord.x;
+    coord.y = cur_axis1_sz_sub1 - coord.y;
+
+    vec0 = vec0.sfedcba9876543210;
+
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcTensorReverse_axis02_8bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_uchar16 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.x = cur_axis_sz_sub16 - coord.x;
+    coord.z = cur_axis1_sz_sub1 - coord.z;
+
+    vec0 = vec0.sfedcba9876543210;
+
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcTensorReverse_axis12_8bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_uchar16 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.y = cur_axis_sz_sub1 - coord.y;
+    coord.z = cur_axis1_sz_sub1 - coord.z;
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcTensorReverse_axis012_8bits(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    vxc_uchar16 vec0;
+    VXC_ReadImage2DArray(vec0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.x = cur_axis_sz_sub16 - coord.x;
+    coord.y = cur_axis1_sz_sub1 - coord.y;
+    coord.z = cur_axis2_sz_sub1 - coord.z;
+
+    vec0 = vec0.sfedcba9876543210;
+
+    VXC_WriteImage2DArray(output, coord, vec0, VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+}

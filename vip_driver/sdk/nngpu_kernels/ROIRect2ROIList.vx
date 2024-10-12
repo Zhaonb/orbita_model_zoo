@@ -1,0 +1,48 @@
+__kernel void roipooling_rect2roilist_fp32(
+    __read_only  image2d_t    rois,
+    __read_only  image2d_t    split_end,
+    __write_only image2d_t    roiList,
+                 float        spatial_scale,
+                 int          offset,
+                 int          slice,
+                 float        poolingHVInc_coef_x,
+                 float        poolingHVInc_coef_y)
+{
+    int4 coord = (int4)(offset >> 2, get_global_id(1), 0, 0);
+    float4  roi_rect;
+    uint4 roi_vec;
+    float4  poolingHVInc_coef = {poolingHVInc_coef_x, poolingHVInc_coef_y,  0.0f, 0.0f};
+    short lastFlag = 0;
+
+    roi_rect = read_imagef(rois, coord.xy);
+
+    int2 coord_out = (int2)(coord.y, 0);
+
+    do
+    {
+        uint end_pos;
+
+        end_pos = read_imageui(split_end, coord.zw).x;
+        coord.z ++;
+        if (coord.y == end_pos)
+        {
+            lastFlag = 1;
+            break;
+        }
+    } while (coord.z < slice);
+
+    roi_rect *= spatial_scale;
+    roi_rect += 0.5f;
+    roi_vec  = convert_uint4(roi_rect);
+    roi_vec.zw = roi_vec.zw - roi_vec.xy + 1;
+    roi_vec.zw = max(roi_vec.zw, 1);
+    roi_rect.zw = convert_float2(roi_vec.zw);
+    roi_rect.zw = roi_rect.zw * poolingHVInc_coef.xy;
+    roi_rect.zw = roi_rect.zw + 0.5f;
+    roi_vec.zw  = convert_uint2(roi_rect.zw);
+    roi_vec.x   = (roi_vec.x & 0xff) + ((roi_vec.y & 0xff) << 8);
+    roi_vec.y   = lastFlag;
+    write_imageui(roiList, coord_out, roi_vec);
+}
+
+

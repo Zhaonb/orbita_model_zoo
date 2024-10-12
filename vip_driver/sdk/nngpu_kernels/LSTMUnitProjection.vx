@@ -1,0 +1,124 @@
+__kernel void gpuLSTMUnitProjection_FP32NoBiasProjClip(
+    __read_only image2d_t      input,
+    __read_only image2d_t      weights,
+    float                      proj_clip,
+    __write_only image2d_t     output_state_out,
+    __write_only image2d_t     output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int input_size = get_image_width(input);
+    int4 coord_in    = (int4)(0, x, y, 0);
+    int2 coord_out   = (int2)(x, y);
+    float4 tmp, dst = {0.0};
+    float inPixel, wPixel, sum = 0.0;
+
+    do
+    {
+        tmp = read_imagef(input, coord_in.xz);
+        inPixel = tmp.x;
+        tmp = read_imagef(weights, coord_in.xy);
+        wPixel = tmp.x;
+        sum += inPixel * wPixel;
+        coord_in.x ++;
+    } while (coord_in.x < input_size);
+
+    dst.x = clamp(sum, -proj_clip, proj_clip);
+    write_imagef(output, coord_out, dst);
+    write_imagef(output_state_out, coord_out, dst);
+}
+
+__kernel void gpuLSTMUnitProjection_FP32NoBias(
+    __read_only image2d_t      input,
+    __read_only image2d_t      weights,
+    __write_only image2d_t     output_state_out,
+    __write_only image2d_t     output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int input_size = get_image_width(input);
+    int4 coord_in    = (int4)(0, x, y, 0);
+    int2 coord_out   = (int2)(x, y);
+    float4 tmp, dst = {0.0};
+    float inPixel, wPixel, sum = 0.0;
+
+    do
+    {
+        tmp = read_imagef(input, coord_in.xz);
+        inPixel = tmp.x;
+        tmp = read_imagef(weights, coord_in.xy);
+        wPixel = tmp.x;
+        sum += inPixel * wPixel;
+        coord_in.x ++;
+    } while (coord_in.x < input_size);
+
+    dst.x = sum;
+    write_imagef(output, coord_out, dst);
+    write_imagef(output_state_out, coord_out, dst);
+}
+
+__kernel void vxcLSTMUnitProjection_FP32ProjClip(
+    __read_only image2d_t      input,
+    __read_only image2d_t      weights,
+    __read_only image2d_t      bias,
+    float                      proj_clip,
+    __write_only image2d_t     output_state_out,
+    __write_only image2d_t     output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int input_size = get_image_width(input);
+    int4 coord_in    = (int4)(0, x, y, 0);
+    int2 coord_out   = (int2)(x, y);
+    float4 tmp, dst = {0.0};
+    float inPixel, wPixel, sum = 0.0;
+
+    tmp = read_imagef(bias, coord_in.yw);
+    sum = tmp.x;
+    do
+    {
+        tmp = read_imagef(input, coord_in.xz);
+        inPixel = tmp.x;
+        tmp = read_imagef(weights, coord_in.xy);
+        wPixel = tmp.x;
+        sum += inPixel * wPixel;
+        coord_in.x ++;
+
+    } while (coord_in.x < input_size);
+
+    dst.x = clamp(sum, -proj_clip, proj_clip);
+    write_imagef(output, coord_out, dst);
+    write_imagef(output_state_out, coord_out, dst);
+}
+__kernel void vxcLSTMUnitProjection_FP32(
+    __read_only image2d_t      input,
+    __read_only image2d_t      weights,
+    __read_only image2d_t      bias,
+    __write_only image2d_t     output_state_out,
+    __write_only image2d_t     output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int input_size = get_image_width(input);
+    int4 coord_in    = (int4)(0, x, y, 0);
+    int2 coord_out   = (int2)(x, y);
+    float4 tmp, dst = {0.0};
+    float inPixel, wPixel, sum = 0.0;
+
+    tmp = read_imagef(bias, coord_in.yw);
+    sum = tmp.x;
+    do
+    {
+        tmp = read_imagef(input, coord_in.xz);
+        inPixel = tmp.x;
+        tmp = read_imagef(weights, coord_in.xy);
+        wPixel = tmp.x;
+        sum += inPixel * wPixel;
+        coord_in.x ++;
+
+    } while (coord_in.x < input_size);
+
+    dst.x = sum;
+    write_imagef(output, coord_out, dst);
+    write_imagef(output_state_out, coord_out, dst);
+}

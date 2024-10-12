@@ -1,0 +1,551 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+#define gcVX_BILATERAL_FILTER_U8  0
+#define gcVX_BILATERAL_FILTER_S16 1
+
+_viv_uniform int border_value;
+_viv_uniform VXC_512Bits uniSetConstValue_4x4;
+
+void ComputeGlobalPositionsFromIndex(int index, uint * dimensions,
+         uint * stride, uint number_of_dimensions, uint * pos)
+{
+    *pos = 0;
+    uint index_leftover = index;
+    int divisor = 1;
+    for (int i = 0; i < number_of_dimensions; i++)
+    {
+        divisor = dimensions[i];
+        uint curr_dim_index = index_leftover % divisor;
+        *pos += stride[i] * curr_dim_index ;
+        index_leftover = index_leftover /divisor;
+    }
+}
+
+void vxBilateralFilter_u8
+(
+    global unsigned char*   src,
+    global unsigned int*    src_strides_ptr,
+    global unsigned int*    dims_ptr,
+           unsigned int     num_dims,
+                    int     diameter,
+                    float   sigma_space,
+                    float   sigma_color,
+    global unsigned int*    dst_strides_ptr,
+                    uint    out_size,
+    global unsigned char*   dst)
+{
+    const int pX = get_global_id(0);
+
+    float gauss_color_coeff = -0.5/(sigma_color*sigma_color);
+    float gauss_space_coeff = -0.5/(sigma_space*sigma_space);
+    uint src_pos = 0, dst_pos = 0, nei_pos = 0;
+    unsigned char *src_ptr = 0, *dst_ptr = 0, *nei_ptr = 0;
+    float sum = 0, wsum = 0, w = 0;
+    int radius = diameter/2;
+    int j;
+
+    if(radius < 1)
+    {
+        radius = 1;
+    }
+
+    if(radius > out_size)
+    {
+        radius = out_size;
+    }
+
+    if(pX >= radius && pX < (out_size-radius))
+    {
+
+        //ComputeGlobalPositionsFromIndex(pX, dims_ptr, src_strides_ptr, num_dims, &src_pos);
+        //ComputeGlobalPositionsFromIndex(pX, dims_ptr, dst_strides_ptr, num_dims, &dst_pos);
+
+        //src_ptr = src + src_pos;
+        //dst_ptr = dst + dst_pos;
+
+        src_ptr = src + pX;
+        dst_ptr = dst + pX;
+
+        for(j = -radius; j <= radius; j++)
+        {
+            float color_weight;
+            float space_weight;
+
+            //ComputeGlobalPositionsFromIndex(pX + j, dims_ptr, src_strides_ptr, num_dims, &nei_pos);
+            //nei_ptr = src + nei_pos;
+            nei_ptr = src + (pX + j);
+
+            int color_diff = *nei_ptr - *src_ptr;
+            color_weight = (float)exp(gauss_color_coeff * abs(color_diff) * abs(color_diff));
+
+            space_weight = (float)exp(gauss_space_coeff * j * j);
+
+            w = space_weight * color_weight;
+            sum += (*nei_ptr)*w;
+            wsum += w;
+        }
+
+        *dst_ptr = round(sum/wsum);
+    }
+}
+
+void vxBilateralFilter_s16
+(
+    global unsigned char*   src,
+    global unsigned int*    src_strides_ptr,
+    global unsigned int*    dims_ptr,
+           unsigned int     num_dims,
+                    int     diameter,
+                    float   sigma_space,
+                    float   sigma_color,
+    global unsigned int*    dst_strides_ptr,
+                    uint    out_size,
+    global unsigned char*   dst)
+{
+    const int pX = get_global_id(0);
+
+    float gauss_color_coeff = -0.5/(sigma_color*sigma_color);
+    float gauss_space_coeff = -0.5/(sigma_space*sigma_space);
+    uint src_pos = 0, dst_pos = 0, nei_pos = 0;
+    unsigned char *src_ptr = 0, *dst_ptr = 0, *nei_ptr = 0;
+    float sum = 0, wsum = 0, w = 0;
+    int radius = diameter/2;
+    int j;
+    short *dst_s16_ptr = 0;
+
+    if(radius < 1)
+    {
+        radius = 1;
+    }
+
+    if(radius > out_size)
+    {
+        radius = out_size;
+    }
+
+    if(pX >= radius && pX < (out_size-radius))
+    {
+        //ComputeGlobalPositionsFromIndex(pX, dims_ptr, src_strides_ptr, num_dims, &src_pos);
+        //ComputeGlobalPositionsFromIndex(pX, dims_ptr, dst_strides_ptr, num_dims, &dst_pos);
+
+        //src_ptr = src + src_pos;
+        //dst_ptr = dst + dst_pos;
+        src_ptr = src + pX * 2;
+        dst_ptr = dst + pX * 2;
+
+        for(j = -radius; j <= radius; j++)
+        {
+            float color_weight;
+            float space_weight;
+            short *nei_s16_ptr = 0, *src_s16_ptr = 0;
+
+            //ComputeGlobalPositionsFromIndex(pX + j, dims_ptr, src_strides_ptr, num_dims, &nei_pos);
+            //nei_ptr = src + nei_pos;
+            nei_ptr = src + (pX + j) * 2;
+
+            src_s16_ptr = (short *)src_ptr;
+            nei_s16_ptr = (short *)nei_ptr;
+
+            int color_diff = *nei_s16_ptr - *src_s16_ptr;
+            color_weight = (float)exp(gauss_color_coeff * abs(color_diff) * abs(color_diff));
+
+            space_weight = (float)exp(gauss_space_coeff * j * j);
+
+            w = space_weight * color_weight;
+            sum += (*nei_s16_ptr)*w;
+            wsum += w;
+        }
+
+        dst_s16_ptr = (short *)dst_ptr;
+        *dst_s16_ptr = round(sum/wsum);
+    }
+}
+
+__kernel void bilateral_filter
+(
+    global unsigned char*   src,
+    global unsigned int*    src_strides_ptr,
+    global unsigned int*    dims_ptr,
+           unsigned int     num_dims,
+                    int     diameter,
+                    float   sigma_space,
+                    float   sigma_values,
+    global unsigned int*    dst_strides_ptr,
+                    int     data_type,
+                    uint    out_size,
+    global unsigned char*   dst)
+{
+    if(data_type == gcVX_BILATERAL_FILTER_U8)
+        vxBilateralFilter_u8(src,
+                             src_strides_ptr,
+                             dims_ptr,
+                             num_dims,
+                             diameter,
+                             sigma_space,
+                             sigma_values,
+                             dst_strides_ptr,
+                             out_size,
+                             dst);
+    else
+        vxBilateralFilter_s16(src,
+                             src_strides_ptr,
+                             dims_ptr,
+                             num_dims,
+                             diameter,
+                             sigma_space,
+                             sigma_values,
+                             dst_strides_ptr,
+                             out_size,
+                             dst);
+}
+
+
+_viv_uniform int radius;
+_viv_uniform float gauss_space_coeff;
+_viv_uniform float gauss_color_coeff;
+_viv_uniform int2  imgLimit;
+
+__kernel void bilateral_filter_U8toU8
+(
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             num_dims,
+                 int             channel,
+                 int             diameter,
+                 float           sigma_space,
+                 float           sigma_color
+)
+{
+    int4 coord  = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1));
+
+    uchar src0, src1;
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    float sum = 0, wsum = 0;
+    float val0 = convert_float(src0);
+
+    for (int radius_y = -radius; radius_y <= radius; radius_y ++)
+    {
+        coord.y = coord.w + radius_y;
+        for (int radius_x = -radius; radius_x <= radius; radius_x++)
+        {
+            coord.x = coord.z + radius_x;
+
+            float r2 = radius_x * radius_x + radius_y * radius_y;
+            float r = sqrt(r2);
+            if ( r > radius)
+                continue;
+
+            VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+            float space_weight = exp2(gauss_space_coeff * r2);
+            float neighborVal = convert_float(src1);
+            float color_diff = neighborVal - val0;
+            float color_weight = exp2(gauss_color_coeff * color_diff * color_diff);
+            float w = space_weight * color_weight;
+
+            sum += neighborVal * w;
+            wsum += w;
+        }
+    }
+
+    uchar dst = convert_uchar(sum / wsum + 0.5f);
+    VXC_WriteImage(output, coord.zw, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void bilateral_filter_I16toI16
+(
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             num_dims,
+                 int             channel,
+                 int             diameter,
+                 float           sigma_space,
+                 float           sigma_color
+)
+{
+    int4 coord  = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1));
+
+    short src0, src1;
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    float sum = 0, wsum = 0;
+    float val0 = convert_float(src0);
+
+    for (int radius_y = -radius; radius_y <= radius; radius_y ++)
+    {
+        coord.y = coord.w + radius_y;
+        for (int radius_x = -radius; radius_x <= radius; radius_x++)
+        {
+            coord.x = coord.z + radius_x;
+
+            float r2 = radius_x * radius_x + radius_y * radius_y;
+            float r = sqrt(r2);
+            if ( r > radius)
+                continue;
+
+            VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+            float space_weight = exp2(gauss_space_coeff * r2);
+            float neighborVal = convert_float(src1);
+            float color_diff = neighborVal - val0;
+            float color_weight = exp2(gauss_color_coeff * color_diff * color_diff);
+            float w = space_weight * color_weight;
+
+            sum += neighborVal * w;
+            wsum += w;
+        }
+    }
+
+    sum = sum / wsum;
+    sum = sum > 0 ? sum + 0.5f : sum - 0.5f;
+    short dst = convert_short(sum);
+    VXC_WriteImage(output, coord.zw, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits uniDataToF32_0_4x4;
+_viv_uniform VXC_512Bits uniExtractInteger_2x8;
+__kernel void bilateral_filter_U8toU8_RGB
+(
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             num_dims,
+                 int             channel,
+                 int             diameter,
+                 float           sigma_space,
+                 float           sigma_color
+)
+{
+    int4 coord  = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1));
+
+    vxc_uchar16 src0, src1;
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    float4 sum = 0;
+    float  wsum = 0;
+    float4 val0;
+    VXC_DP4x4(val0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataToF32_0_4x4);
+
+    for (int radius_y = -radius; radius_y <= radius; radius_y ++)
+    {
+        coord.y = coord.w + radius_y;
+        for (int radius_x = -radius; radius_x <= radius; radius_x++)
+        {
+            coord.x = coord.z + radius_x * 3;
+
+            float r2 = radius_x * radius_x + radius_y * radius_y;
+            float r = sqrt(r2);
+            if ( r > radius)
+                continue;
+
+            VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+
+            float space_weight = exp2(gauss_space_coeff * r2);
+            float4 neighborVal;
+            VXC_DP4x4(neighborVal, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataToF32_0_4x4);
+            float color_diff = fabs(neighborVal.x - val0.x) + fabs(neighborVal.y - val0.y) + fabs(neighborVal.z - val0.z);
+            float color_weight = exp2(gauss_color_coeff * color_diff * color_diff);
+            float w = space_weight * color_weight;
+
+            sum += neighborVal * w;
+            wsum += w;
+        }
+    }
+
+    int4 tmp = convert_int4(sum / wsum + 0.5f);
+    vxc_uchar16 dst;
+    VXC_DP2x8(dst, tmp, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniExtractInteger_2x8);
+    VXC_WriteImage(output, coord.zw, dst, VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void bilateral_filter_I16toI16_RGB
+(
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             num_dims,
+                 int             channel,
+                 int             diameter,
+                 float           sigma_space,
+                 float           sigma_color
+)
+{
+    int4 coord  = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1));
+
+    vxc_short8 src0, src1;
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    float4 sum = 0;
+    float  wsum = 0;
+    float4 val0;
+    VXC_DP4x4(val0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataToF32_0_4x4);
+
+    for (int radius_y = -radius; radius_y <= radius; radius_y ++)
+    {
+        coord.y = coord.w + radius_y;
+        for (int radius_x = -radius; radius_x <= radius; radius_x++)
+        {
+            coord.x = coord.z + radius_x * 3;
+
+            float r2 = radius_x * radius_x + radius_y * radius_y;
+            float r = sqrt(r2);
+            if ( r > radius)
+                continue;
+
+            VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+
+            float space_weight = exp2(gauss_space_coeff * r2);
+            float4 neighborVal;
+            VXC_DP4x4(neighborVal, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataToF32_0_4x4);
+            float color_diff = fabs(neighborVal.x - val0.x) + fabs(neighborVal.y - val0.y) + fabs(neighborVal.z - val0.z);
+            float color_weight = exp2(gauss_color_coeff * color_diff * color_diff);
+            float w = space_weight * color_weight;
+
+            sum += neighborVal * w;
+            wsum += w;
+        }
+    }
+
+    sum = sum / wsum;
+    sum = sum > 0 ? sum + 0.5f : sum - 0.5f;
+    int4 tmp = convert_int4(sum);
+    vxc_short8 dst;
+    VXC_DP2x8(dst, tmp, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniExtractInteger_2x8);
+    VXC_WriteImage(output, coord.zw, dst, VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void bilateral_filter_U8toU8_RGB_Const
+(
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 int       num_dims,
+                 int       channel,
+                 int       diameter,
+                 float     sigma_space,
+                 float     sigma_color
+)
+{
+    int4 coord  = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1));
+
+    vxc_uchar16 src0, src1;
+
+    Image img = create_image_from_image2d(input, 1);
+    __global uchar* input_ptr = (__global uchar*)img.ptr;
+    int offset = coord.x + coord.y * img.stride_y;
+
+    VXC_Vload4(src0.s0123, input_ptr + offset, 0);
+    uchar bv = (uchar)border_value;
+
+    float4 sum = 0;
+    float  wsum = 0;
+    float4 val0;
+    VXC_DP4x4(val0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataToF32_0_4x4);
+
+    for (int radius_y = -radius; radius_y <= radius; radius_y ++)
+    {
+        coord.y = coord.w + radius_y;
+        for (int radius_x = -radius; radius_x <= radius; radius_x++)
+        {
+            coord.x = coord.z + radius_x;
+
+            float r2 = radius_x * radius_x + radius_y * radius_y;
+            float r = sqrt(r2);
+            if ( r > radius)
+                continue;
+
+            coord.xy = coord.xy < 0 ? 0 : coord.xy;
+            coord.xy = coord.xy > imgLimit.xy ? imgLimit.xy : coord.xy;
+            offset = coord.x + coord.y * img.stride_y;
+
+            VXC_Vload4(src1.s0123, input_ptr + offset, 0);
+            if(coord.x < 0 || coord.y < 0)
+            {
+                VXC_DP4x4(src1, src1, bv, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSetConstValue_4x4);
+            }
+
+            float space_weight = exp2(gauss_space_coeff * r2);
+            float4 neighborVal;
+            VXC_DP4x4(neighborVal, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataToF32_0_4x4);
+            float color_diff = fabs(neighborVal.x - val0.x) + fabs(neighborVal.y - val0.y) + fabs(neighborVal.z - val0.z);
+            float color_weight = exp2(gauss_color_coeff * color_diff * color_diff);
+            float w = space_weight * color_weight;
+
+            sum += neighborVal * w;
+            wsum += w;
+        }
+    }
+
+    int4 tmp = convert_int4(sum / wsum + 0.5f);
+    vxc_uchar16 dst;
+    VXC_DP2x8(dst, tmp, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniExtractInteger_2x8);
+    VXC_WriteImage(output, coord.zw, dst, VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void bilateral_filter_I16toI16_RGB_Const
+(
+    __read_only  image2d_t       input,
+    __write_only image2d_t       output,
+                 int             num_dims,
+                 int             channel,
+                 int             diameter,
+                 float           sigma_space,
+                 float           sigma_color
+)
+{
+    int4 coord  = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1));
+
+    vxc_short8 src0, src1;
+
+    Image img = create_image_from_image2d(input, 2);
+    __global short* input_ptr = (__global short*)get_image_ptr_from_coord(img, coord.xy);
+
+    VXC_Vload4(src0.s0123, input_ptr, 0);
+    short bv = (short)border_value;
+
+    float4 sum = 0;
+    float  wsum = 0;
+    float4 val0;
+    VXC_DP4x4(val0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataToF32_0_4x4);
+
+    for (int radius_y = -radius; radius_y <= radius; radius_y ++)
+    {
+        coord.y = coord.w + radius_y;
+        for (int radius_x = -radius; radius_x <= radius; radius_x++)
+        {
+            coord.x = coord.z + radius_x * 3;
+
+            float r2 = radius_x * radius_x + radius_y * radius_y;
+            float r = sqrt(r2);
+            if ( r > radius)
+                continue;
+
+            coord.xy = coord.xy < 0 ? 0 : coord.xy;
+            coord.xy = coord.xy > imgLimit.xy ? imgLimit.xy : coord.xy;
+            input_ptr = (__global short*)get_image_ptr_from_coord(img, coord.xy);
+
+            VXC_Vload4(src1.s0123, input_ptr, 0);
+            if(coord.x < 0 || coord.y < 0)
+            {
+                VXC_DP4x4(src1, src1, bv, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniSetConstValue_4x4);
+            }
+
+            float space_weight = exp2(gauss_space_coeff * r2);
+            float4 neighborVal;
+            VXC_DP4x4(neighborVal, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataToF32_0_4x4);
+            float color_diff = fabs(neighborVal.x - val0.x) + fabs(neighborVal.y - val0.y) + fabs(neighborVal.z - val0.z);
+            float color_weight = exp2(gauss_color_coeff * color_diff * color_diff);
+            float w = space_weight * color_weight;
+
+            sum += neighborVal * w;
+            wsum += w;
+        }
+    }
+
+    sum = sum / wsum;
+    sum = sum > 0 ? sum + 0.5f : sum - 0.5f;
+    int4 tmp = convert_int4(sum);
+    vxc_short8 dst;
+    VXC_DP2x8(dst, tmp, tmp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniExtractInteger_2x8);
+    VXC_WriteImage(output, coord.zw, dst, VXC_MODIFIER(0, 2, 0, VXC_RM_TowardZero, 0));
+}

@@ -1,0 +1,19 @@
+
+__kernel void accumulate_U8toI16
+    (
+    __read_only  image2d_t input,
+                 image2d_t output
+    )
+{
+    int offset = get_global_id(0);
+
+    Image in = create_image_from_image2d(input, U8_ELEMENT_SIZE);
+    Image accu = create_image_from_image2d(output, I16_ELEMENT_SIZE);
+
+    uchar4 src = vload4(offset, in.ptr);
+    short4 acc = vload4(offset, (short*)accu.ptr);
+
+    short4 dst = add_sat(convert_short4(src), acc);
+
+    vstore4(dst, offset, (short*)accu.ptr);
+}

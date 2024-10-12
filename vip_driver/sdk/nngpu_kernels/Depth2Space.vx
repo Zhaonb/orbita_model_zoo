@@ -1,0 +1,120 @@
+__kernel void gpuDepth2Space_F32toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_size
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int outDepth = get_image_array_size(output);
+    short short_blockSize = convert_short(block_size);
+    int inx = convert_int(convert_short(x)/short_blockSize);
+    int iny = convert_int(convert_short(y)/short_blockSize);
+    int inz = ((x - inx * block_size) + (y - iny * block_size) * block_size) * outDepth + z;
+    float4 tmp = {0.0};
+
+    tmp = read_imagef(input, (int4)(inx, iny, inz, 0));
+    write_imagef(output, (int4)(x, y, z, 0), tmp);
+}
+
+__kernel void gpuDepth2Space_F32toF32_Block2
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_size
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int outDepth = get_image_array_size(output);
+    int inx = x >> 1;
+    int iny = y >> 1;
+    int inz = ((x - inx * 2) + ((y - iny * 2) * 2)) * outDepth + z;
+    float4 tmp = {0.0};
+
+    tmp = read_imagef(input, (int4)(inx, iny, inz, 0));
+    write_imagef(output, (int4)(x, y, z, 0), tmp);
+}
+
+__kernel void gpuDepth2Space_U8toU8
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_size
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int outDepth = get_image_array_size(output);
+    short short_blockSize = convert_short(block_size);
+    int inx = convert_int(convert_short(x)/short_blockSize);
+    int iny = convert_int(convert_short(y)/short_blockSize);
+    int inz = ((x - inx * block_size) + (y - iny * block_size) * block_size) * outDepth + z;
+
+    uint4 dst = read_imageui(input, (int4)(inx, iny, inz, 0));
+    write_imageui(output, (int4)(x, y, z, 0), dst);
+}
+
+
+__kernel void gpuDepth2Space_U8toU8_Block2
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_size
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int outDepth = get_image_array_size(output);
+    int inx = x >> 1;
+    int iny = y >> 1;
+    int inz = ((x - inx * 2) + ((y - iny * 2) * 2)) * outDepth + z;
+
+    uint4 dst = read_imageui(input, (int4)(inx, iny, inz, 0));
+    write_imageui(output, (int4)(x, y, z, 0), dst);
+}
+
+__kernel void gpuDepth2Space_I32toI32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_size
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int outDepth = get_image_array_size(output);
+    short short_blockSize = convert_short(block_size);
+    int inx = convert_int(convert_short(x)/short_blockSize);
+    int iny = convert_int(convert_short(y)/short_blockSize);
+    int inz = ((x - inx * block_size) + (y - iny * block_size) * block_size) * outDepth + z;
+
+    int4 dst = read_imagei(input, (int4)(inx, iny, inz, 0));
+    write_imagei(output, (int4)(x, y, z, 0), dst.xxxx);
+}
+
+
+__kernel void gpuDepth2Space_I32toI32_Block2
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_size
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int outDepth = get_image_array_size(output);
+    int inx = x >> 1;
+    int iny = y >> 1;
+    int inz = ((x - inx * 2) + ((y - iny * 2) * 2)) * outDepth + z;
+
+    int4 dst = read_imagei(input, (int4)(inx, iny, inz, 0));
+    write_imagei(output, (int4)(x, y, z, 0), dst.xxxx);
+}

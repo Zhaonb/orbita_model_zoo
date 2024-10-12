@@ -1,0 +1,916 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+_viv_uniform int inputSize_aln8;
+_viv_uniform int Cycles;
+_viv_uniform VXC_512Bits uniMulAcc;
+_viv_uniform int overflow_mode;
+
+__kernel void gemm_noBias_F16_F16toF16
+    (
+    image2d_array_t input,
+    image2d_array_t weight,
+    int activation,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+
+    vxc_short8 v0, v1, v2, v3, v4, v5, v6, v7;
+    vxc_half8 i0, i1, i2, i3;
+    vxc_half8 w0, w1, w2, w3;
+    float4 sum = 0;
+    float dst = 0;
+    do{
+        VXC_ReadImage(v0, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i0, v0, 16);
+        VXC_ReadImage(v1, weight, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w0, v1, 16);
+        VXC_ReadImage(v2, input,  coord_in.xz, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i1, v2, 16);
+        VXC_ReadImage(v3, weight, coord_in.xy, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w1, v3, 16);
+        VXC_ReadImage(v4, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i2, v4, 16);
+        VXC_ReadImage(v5, weight, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w2, v5, 16);
+        VXC_ReadImage(v6, input,  coord_in.xz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i3, v6, 16);
+        VXC_ReadImage(v7, weight, coord_in.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w3, v7, 16);
+
+        coord_in.x += 32;
+        VXC_DP16x1(sum, i0, w0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAcc);
+        VXC_DP16x1(sum, i1, w1, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAcc);
+        VXC_DP16x1(sum, i2, w2, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAcc);
+        VXC_DP16x1(sum, i3, w3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAcc);
+
+        float4 tmp = {1, 1, 1, 1};
+        dst = dst + dot(sum, tmp);
+    } while (coord_in.x < Cycles);
+
+    if(activation)
+        dst = dst > 0 ? dst : 0;
+
+    vxc_half v;
+    _viv_asm(CONV, v, dst);
+    _viv_asm(COPY, v0, v, 16);
+    VXC_WriteImage(output, coord_in.zy, v0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    return;
+}
+_viv_uniform float in_scale;
+_viv_uniform int Cycles_int8;
+_viv_uniform VXC_512Bits uniMulAcc_Int8;
+_viv_uniform int Cycles_uint8;
+_viv_uniform VXC_512Bits uniAccQ1MulQ2_16x1;
+_viv_uniform VXC_512Bits uniAccQaMulZb_16x2;
+_viv_uniform float uint8Scale;
+_viv_uniform float outputZP;
+_viv_uniform float nZp0dotZp1;
+__kernel void gemm_noBias_U8_U8toU8
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+
+    vxc_uchar16 v0, v1, v2, v3, v4, v5, v6, v7;
+    float4 sum = 0;
+    float dst = 0;
+    do
+    {
+        VXC_ReadImage(v0, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v1, weights, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v2, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v3, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        VXC_ReadImage(v4, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v5, weights, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v6, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v7, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+
+        float4 tmp = {1.0f, 1.0f, 1.0f, 1.0f};
+        VXC_DP16x1(sum, v0, v1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        VXC_DP16x2(sum, v0, v1, VXC_MODIFIER(1, 2, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        VXC_DP16x1(sum, v2, v3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        dst = dst + dot(sum, tmp);
+        VXC_DP16x2(sum, v2, v3, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        VXC_DP16x2(sum, v4, v5, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        dst = dst + dot(sum, tmp);
+        VXC_DP16x1(sum, v4, v5, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        VXC_DP16x1(sum, v6, v7, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        VXC_DP16x2(sum, v6, v7, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        dst = dst + dot(sum, tmp) + nZp0dotZp1;
+    } while (coord_in.x < Cycles_uint8);
+
+    dst = dst * uint8Scale + outputZP;
+    unsigned char val = overflow_mode? convert_uchar_sat_rte(dst) : (unsigned char)dst;
+    VXC_WriteImage(output, coord_in.zy, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+__kernel void gemm_noBias_U8_U8toF16
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+
+    vxc_uchar16 v0, v1, v2, v3, v4, v5, v6, v7;
+    float4 sum = 0;
+    float dst = 0;
+    do
+    {
+        VXC_ReadImage(v0, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v1, weights, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v2, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v3, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        VXC_ReadImage(v4, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v5, weights, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v6, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v7, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+
+        float4 tmp = {1.0f, 1.0f, 1.0f, 1.0f};
+        VXC_DP16x1(sum, v0, v1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        VXC_DP16x2(sum, v0, v1, VXC_MODIFIER(1, 2, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        VXC_DP16x1(sum, v2, v3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        dst = dst + dot(sum, tmp);
+        VXC_DP16x2(sum, v2, v3, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        VXC_DP16x2(sum, v4, v5, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        dst = dst + dot(sum, tmp);
+        VXC_DP16x1(sum, v4, v5, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        VXC_DP16x1(sum, v6, v7, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        VXC_DP16x2(sum, v6, v7, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        dst = dst + dot(sum, tmp) + nZp0dotZp1;
+    } while (coord_in.x < Cycles_uint8);
+
+    dst = dst * uint8Scale + outputZP;
+    half temp;
+    _viv_asm(CONV, temp, dst);
+    short val;
+    _viv_asm(COPY, val, temp, 2);
+    VXC_WriteImage(output, coord_in.zy, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void gemm_noBias_I8_I8toI8
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+
+    vxc_char16 v0, v1, v2, v3, v4, v5, v6, v7;
+    float4 sum = 0;
+    float dst = 0;
+    do
+    {
+        VXC_ReadImage(v0, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v1, weights, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v2, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v3, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        VXC_ReadImage(v4, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v5, weights, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v6, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v7, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+
+        VXC_DP16x1(sum, v0, v1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+        VXC_DP16x1(sum, v2, v3, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+        VXC_DP16x1(sum, v4, v5, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+        VXC_DP16x1(sum, v6, v7, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+
+        float4 tmp = {1, 1, 1, 1};
+        dst = dst + dot(sum, tmp);
+    } while (coord_in.x < Cycles_int8);
+
+    if(dRelu)
+        dst = dst > 0 ? dst : 0;
+
+    dst = in_scale * dst;
+    char val = overflow_mode ? convert_char_sat_rte(dst) : (char)dst;
+
+    VXC_WriteImage(output, coord_in.zy, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+
+__kernel void gemm_noBias_I8_I8toF16
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+
+    vxc_char16 v0, v1, v2, v3, v4, v5, v6, v7;
+    float4 sum = 0;
+    float dst = 0;
+    do
+    {
+        VXC_ReadImage(v0, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v1, weights, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v2, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v3, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        VXC_ReadImage(v4, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v5, weights, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v6, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v7, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+
+        VXC_DP16x1(sum, v0, v1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+        VXC_DP16x1(sum, v2, v3, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+        VXC_DP16x1(sum, v4, v5, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+        VXC_DP16x1(sum, v6, v7, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+
+        float4 tmp = {1, 1, 1, 1};
+        dst = dst + dot(sum, tmp);
+    } while (coord_in.x < Cycles_int8);
+
+    if(dRelu)
+        dst = dst > 0 ? dst : 0;
+
+    dst = in_scale * dst;
+    half temp;
+    _viv_asm(CONV, temp, dst);
+    short val;
+    _viv_asm(COPY, val, temp, 2);
+
+    VXC_WriteImage(output, coord_in.zy, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void gemm_noBias_Tensor_F16_F16toF16
+    (
+    image2d_array_t input,
+    image2d_array_t weight,
+    int activation,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+    int4 coord    = (int4)(16, get_global_id(2), 0, 0);
+
+    vxc_short8 v0, v1, v2, v3, v4, v5, v6, v7;
+    vxc_half8 i0, i1, i2, i3;
+    vxc_half8 w0, w1, w2, w3;
+    float4 sum = 0;
+    float dst = 0;
+    do{
+        VXC_ReadImage2DArray(v0, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i0, v0, 16);
+        VXC_ReadImage(v1, weight, coord.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w0, v1, 16);
+        VXC_ReadImage2DArray(v2, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i1, v2, 16);
+        VXC_ReadImage(v3, weight, coord.xy, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w1, v3, 16);
+        VXC_ReadImage2DArray(v4, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i2, v4, 16);
+        VXC_ReadImage(v5, weight, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w2, v5, 16);
+        VXC_ReadImage2DArray(v6, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, i3, v6, 16);
+        VXC_ReadImage(v7, weight, coord.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, w3, v7, 16);
+
+        coord_in.x += 32;
+        coord.x += 32;
+        VXC_DP16x1(sum, i0, w0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAcc);
+        VXC_DP16x1(sum, i1, w1, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAcc);
+        VXC_DP16x1(sum, i2, w2, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAcc);
+        VXC_DP16x1(sum, i3, w3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAcc);
+
+        float4 tmp = {1, 1, 1, 1};
+        dst = dst + dot(sum, tmp);
+    } while (coord_in.x < Cycles);
+
+    if(activation)
+        dst = dst > 0 ? dst : 0;
+
+    vxc_half v;
+    _viv_asm(CONV, v, dst);
+    _viv_asm(COPY, v0, v, 16);
+    coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    VXC_WriteImage2DArray(output, coord, v0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    return;
+}
+
+__kernel void gemm_noBias_Tensor_U8_U8toU8
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+    int4 coord    = (int4)(16, get_global_id(2), 0, 0);
+
+    vxc_uchar16 v0, v1, v2, v3, v4, v5, v6, v7;
+    float4 sum = 0;
+    int temp = 0;
+    float dst = 0;
+    do
+    {
+        VXC_ReadImage2DArray(v0, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v1, weights, coord.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v2, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v3, weights, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        coord.x += 32;
+        VXC_ReadImage2DArray(v4, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v5, weights, coord.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v6, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v7, weights, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        coord.x += 32;
+
+        float4 tmp = {1.0f, 1.0f, 1.0f, 1.0f};
+        VXC_DP16x1(sum, v0, v1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        VXC_DP16x2(sum, v0, v1, VXC_MODIFIER(1, 2, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        VXC_DP16x1(sum, v2, v3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        dst = dst + dot(sum, tmp);
+        VXC_DP16x2(sum, v2, v3, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        VXC_DP16x2(sum, v4, v5, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        dst = dst + dot(sum, tmp);
+        VXC_DP16x1(sum, v4, v5, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        VXC_DP16x1(sum, v6, v7, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        VXC_DP16x2(sum, v6, v7, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        dst = dst + dot(sum, tmp) + nZp0dotZp1;
+    } while (coord_in.x < Cycles_uint8);
+
+    dst = dst * uint8Scale + outputZP;
+    unsigned char val = overflow_mode ? convert_uchar_sat_rte(dst) : (unsigned char)dst;
+
+    coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    VXC_WriteImage2DArray(output, coord, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void gemm_noBias_Tensor_U8_U8toF16
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+    int4 coord    = (int4)(16, get_global_id(2), 0, 0);
+
+    vxc_uchar16 v0, v1, v2, v3, v4, v5, v6, v7;
+    float4 sum = 0;
+    int temp = 0;
+    float dst = 0;
+    do
+    {
+        VXC_ReadImage2DArray(v0, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v1, weights, coord.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v2, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v3, weights, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        coord.x += 32;
+        VXC_ReadImage2DArray(v4, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v5, weights, coord.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v6, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v7, weights, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        coord.x += 32;
+
+        float4 tmp = {1.0f, 1.0f, 1.0f, 1.0f};
+        VXC_DP16x1(sum, v0, v1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        VXC_DP16x2(sum, v0, v1, VXC_MODIFIER(1, 2, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        VXC_DP16x1(sum, v2, v3, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        dst = dst + dot(sum, tmp);
+        VXC_DP16x2(sum, v2, v3, VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        VXC_DP16x2(sum, v4, v5, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        dst = dst + dot(sum, tmp);
+        VXC_DP16x1(sum, v4, v5, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        VXC_DP16x1(sum, v6, v7, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniAccQ1MulQ2_16x1);
+        VXC_DP16x2(sum, v6, v7, VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniAccQaMulZb_16x2);
+        dst = dst + dot(sum, tmp) + nZp0dotZp1;
+    } while (coord_in.x < Cycles_uint8);
+
+    dst = dst * uint8Scale + outputZP;
+    half temp_data;
+    _viv_asm(CONV, temp_data, dst);
+    short val;
+    _viv_asm(COPY, val, temp_data, 2);
+
+    coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    VXC_WriteImage2DArray(output, coord, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void gemm_noBias_Tensor_I8_I8toI8
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+    int4 coord    = (int4)(16, get_global_id(2), 0, 0);
+
+    vxc_char16 v0, v1, v2, v3, v4, v5, v6, v7;
+    float4 sum = 0;
+    float dst = 0;
+    do
+    {
+        VXC_ReadImage2DArray(v0, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v1, weights, coord.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v2, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v3, weights, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        coord.x += 32;
+        VXC_ReadImage2DArray(v4, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v5, weights, coord.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v6, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v7, weights, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        coord.x += 32;
+
+        VXC_DP16x1(sum, v0, v1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+        VXC_DP16x1(sum, v2, v3, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+        VXC_DP16x1(sum, v4, v5, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+        VXC_DP16x1(sum, v6, v7, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+
+        float4 tmp = {1, 1, 1, 1};
+        dst = dst + dot(sum, tmp);
+    } while (coord_in.x < Cycles_int8);
+
+    if(dRelu)
+        dst = dst > 0 ? dst : 0;
+
+    dst = in_scale * dst;
+    char val = overflow_mode ? convert_char_sat_rte(dst) : (char)dst;
+
+    coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    VXC_WriteImage2DArray(output, coord, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void gemm_noBias_Tensor_I8_I8toF16
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+    int4 coord    = (int4)(16, get_global_id(2), 0, 0);
+
+    vxc_char16 v0, v1, v2, v3, v4, v5, v6, v7;
+    float4 sum = 0;
+    float dst = 0;
+    do
+    {
+        VXC_ReadImage2DArray(v0, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v1, weights, coord.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v2, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v3, weights, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        coord.x += 32;
+        VXC_ReadImage2DArray(v4, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v5, weights, coord.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v6, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v7, weights, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        coord.x += 32;
+
+        VXC_DP16x1(sum, v0, v1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+        VXC_DP16x1(sum, v2, v3, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+        VXC_DP16x1(sum, v4, v5, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+        VXC_DP16x1(sum, v6, v7, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int8);
+
+        float4 tmp = {1, 1, 1, 1};
+        dst = dst + dot(sum, tmp);
+    } while (coord_in.x < Cycles_int8);
+
+    if(dRelu)
+        dst = dst > 0 ? dst : 0;
+
+    dst = in_scale * dst;
+    half temp;
+    _viv_asm(CONV, temp, dst);
+    short val;
+    _viv_asm(COPY, val, temp, 2);
+
+    coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    VXC_WriteImage2DArray(output, coord, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform int inputSize_algin32;
+_viv_uniform VXC_512Bits uniMulAcc_Int16;
+__kernel void gemm_noBias_I16_I16toI16
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+
+    vxc_short8 v0, v1, v2, v3, v4, v5, v6, v7;
+    float4 sum = 0;
+    int temp = 0;
+    float dst = 0;
+    do
+    {
+        VXC_ReadImage(v0, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v1, weights, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v2, input,  coord_in.xz, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v3, weights, coord_in.xy, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v4, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v5, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v6, input,  coord_in.xz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v7, weights, coord_in.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+
+        VXC_DP16x1(sum, v0, v1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+        VXC_DP16x1(sum, v2, v3, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+        VXC_DP16x1(sum, v4, v5, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+        VXC_DP16x1(sum, v6, v7, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+
+        float4 tmp = {1, 1, 1, 1};
+        dst = dst + dot(sum, tmp);
+    } while (coord_in.x < inputSize_algin32);
+
+    if(dRelu)
+        dst = dst > 0 ? dst : 0;
+
+    dst = in_scale * dst;
+    short val = overflow_mode ? convert_short_sat_rte(dst) : (short)dst;
+
+    VXC_WriteImage(output, coord_in.zy, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void gemm_noBias_I16_I16toF16
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+
+    vxc_short8 v0, v1, v2, v3, v4, v5, v6, v7;
+    float4 sum = 0;
+    int temp = 0;
+    float dst = 0;
+    do
+    {
+        VXC_ReadImage(v0, input,  coord_in.xz, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v1, weights, coord_in.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v2, input,  coord_in.xz, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v3, weights, coord_in.xy, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v4, input,  coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v5, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v6, input,  coord_in.xz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v7, weights, coord_in.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+
+        VXC_DP16x1(sum, v0, v1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+        VXC_DP16x1(sum, v2, v3, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+        VXC_DP16x1(sum, v4, v5, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+        VXC_DP16x1(sum, v6, v7, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+
+        float4 tmp = {1, 1, 1, 1};
+        dst = dst + dot(sum, tmp);
+    } while (coord_in.x < inputSize_algin32);
+
+    if(dRelu)
+        dst = dst > 0 ? dst : 0;
+
+    dst = in_scale * dst;
+    half temp_data;
+    _viv_asm(CONV, temp_data, dst);
+    short val;
+    _viv_asm(COPY, val, temp_data, 2);
+
+    VXC_WriteImage(output, coord_in.zy, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+
+__kernel void gemm_noBias_Tensor_I16_I16toI16
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+    int4 coord    = (int4)(16, get_global_id(2), 0, 0);
+
+    vxc_short8 v0, v1, v2, v3, v4, v5, v6, v7;
+    float4 sum = 0;
+    int temp = 0;
+    float dst = 0;
+    do
+    {
+        VXC_ReadImage2DArray(v0, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v1, weights, coord.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v2, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v3, weights, coord.xy, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v4, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v5, weights, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v6, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v7, weights, coord.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        coord.x += 32;
+
+        VXC_DP16x1(sum, v0, v1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+        VXC_DP16x1(sum, v2, v3, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+        VXC_DP16x1(sum, v4, v5, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+        VXC_DP16x1(sum, v6, v7, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+
+        float4 tmp = {1, 1, 1, 1};
+        dst = dst + dot(sum, tmp);
+    } while (coord_in.x < inputSize_algin32);
+
+    if(dRelu)
+        dst = dst > 0 ? dst : 0;
+
+    dst = in_scale * dst;
+    short val = overflow_mode ? convert_short_sat_rte(dst) : (short)dst;
+
+    coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    VXC_WriteImage2DArray(output, coord, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void gemm_noBias_Tensor_I16_I16toF16
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+    int4 coord    = (int4)(16, get_global_id(2), 0, 0);
+
+    vxc_short8 v0, v1, v2, v3, v4, v5, v6, v7;
+    float4 sum = 0;
+    int temp = 0;
+    float dst = 0;
+    do
+    {
+        VXC_ReadImage2DArray(v0, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v1, weights, coord.xy, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v2, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v3, weights, coord.xy, VXC_5BITOFFSET_XY(-8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v4, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v5, weights, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage2DArray(v6, input,  coord_in.xzyw, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(v7, weights, coord.xy, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 32;
+        coord.x += 32;
+
+        VXC_DP16x1(sum, v0, v1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+        VXC_DP16x1(sum, v2, v3, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+        VXC_DP16x1(sum, v4, v5, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+        VXC_DP16x1(sum, v6, v7, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniMulAcc_Int16);
+
+        float4 tmp = {1, 1, 1, 1};
+        dst = dst + dot(sum, tmp);
+    } while (coord_in.x < inputSize_algin32);
+
+    if(dRelu)
+        dst = dst > 0 ? dst : 0;
+
+    dst = in_scale * dst;
+    half temp_data;
+    _viv_asm(CONV, temp_data, dst);
+    short val;
+    _viv_asm(COPY, val, temp_data, 2);
+
+    coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    VXC_WriteImage2DArray(output, coord, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits uniConvBF16toF32_Part0_2x8;
+_viv_uniform VXC_512Bits uniConvBF16toF32_Part1_2x8;
+__kernel void gemm_noBias_BF16_BF16toBF16
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(0, get_global_id(1), get_global_id(0), 0);
+
+    vxc_ushort8 src0, src1, src2, src3;
+    vxc_short8 wData;
+    float4 dst = (float4)(0, 0, 0, 0);
+
+    vxc_short8 zero = (vxc_short8)(0, 0, 0, 0, 0, 0, 0, 0);
+    do
+    {
+        VXC_ReadImage(wData, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(src0, input, coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(src1, input, coord_in.xz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(src2, input, coord_in.xz, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(src3, input, coord_in.xz, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 8;
+
+        float4 w0, w1, c0, c1;
+        vxc_ushort8 w0i, w1i, c0i, c1i;
+
+        VXC_DP2x8(w0i, wData, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+        _viv_asm(COPY, w0, w0i, 16);
+        VXC_DP2x8(w1i, wData, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+        _viv_asm(COPY, w1, w1i, 16);
+        VXC_DP2x8(c0i, src0, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+        _viv_asm(COPY, c0, c0i, 16);
+        VXC_DP2x8(c1i, src0, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+        _viv_asm(COPY, c1, c1i, 16);
+
+        dst.x = dst.x + dot(w0, c0);
+        dst.x = dst.x + dot(w1, c1);
+
+        VXC_DP2x8(c0i, src1, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+        _viv_asm(COPY, c0, c0i, 16);
+        VXC_DP2x8(c1i, src1, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+        _viv_asm(COPY, c1, c1i, 16);
+
+        dst.y = dst.y + dot(w0, c0);
+        dst.y = dst.y + dot(w1, c1);
+
+        VXC_DP2x8(c0i, src2, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+        _viv_asm(COPY, c0, c0i, 16);
+        VXC_DP2x8(c1i, src2, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+        _viv_asm(COPY, c1, c1i, 16);
+
+        dst.z = dst.z + dot(w0, c0);
+        dst.z = dst.z + dot(w1, c1);
+
+        VXC_DP2x8(c0i, src3, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+        _viv_asm(COPY, c0, c0i, 16);
+        VXC_DP2x8(c1i, src3, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+        _viv_asm(COPY, c1, c1i, 16);
+
+        dst.w = dst.w + dot(w0, c0);
+        dst.w = dst.w + dot(w1, c1);
+    } while (coord_in.x < inputSize_aln8);
+
+#ifdef ENABLE_RELUN
+    if(dRelu)
+        dst = dst > 0 ? dst : 0;
+#endif
+    vxc_ushort8 result;
+
+    _viv_asm(COPY, result, dst, 16);
+
+    VXC_WriteImage(output, coord_in.zy, result.s1357, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+
+__kernel void gemm_noBias_Tensor_BF16_BF16toBF16
+    (
+    image2d_array_t input,
+    image2d_array_t weights,
+    int dRelu,
+    image2d_array_t output
+    )
+{
+    int4 coord_in    = (int4)(0, get_global_id(1), get_global_id(0), 0);
+    int4 coord    = (int4)(0, get_global_id(2), 0, 0);
+
+    vxc_ushort8 src0, src1, src2, src3;
+
+    vxc_short8 wData;
+    float4 dst = (float4)(0, 0, 0, 0);
+
+    vxc_short8 zero = (vxc_short8)(0, 0, 0, 0, 0, 0, 0, 0);
+    do
+    {
+        VXC_ReadImage(wData, weights, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        VXC_ReadImage2DArray(src0, input, coord_in.xzyw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        coord_in.x += 8;
+        coord.x += 8;
+
+        float4 w0, w1, c0, c1;
+        vxc_ushort8 w0i, w1i, c0i, c1i;
+
+        VXC_DP2x8(w0i, wData, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+        _viv_asm(COPY, w0, w0i, 16);
+        VXC_DP2x8(w1i, wData, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+        _viv_asm(COPY, w1, w1i, 16);
+        VXC_DP2x8(c0i, src0, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+        _viv_asm(COPY, c0, c0i, 16);
+        VXC_DP2x8(c1i, src0, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+        _viv_asm(COPY, c1, c1i, 16);
+
+        dst.x = dst.x + dot(w0, c0);
+        dst.x = dst.x + dot(w1, c1);
+    } while (coord_in.x < inputSize_aln8);
+
+#ifdef ENABLE_RELUN
+    if(dRelu)
+        dst = dst > 0 ? dst : 0;
+#endif
+
+    vxc_ushort8 result;
+
+    _viv_asm(COPY, result, dst, 16);
+
+    coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    VXC_WriteImage2DArray(output, coord, result.s1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+
+_viv_uniform int inputSize_aln16;
+_viv_uniform VXC_512Bits uniAccU8subZpMulU8_32x1_b;
+_viv_uniform int packedInputZP;
+__kernel void gemm_noBias_U8toU8_PER_CHANNEL
+    (
+    __read_only image2d_array_t input,
+    __read_only image2d_array_t weights,
+    int dRelu,
+    __write_only image2d_array_t output,
+    __read_only image2d_t scales
+    )
+{
+    int4 coord_in = (int4)(0, get_global_id(1), get_global_id(0), 0);
+
+    vxc_uchar32 src;
+    vxc_char16 wData;
+    float4 sum = 0;
+    int temp = 0;
+    float4 dst = 0;
+
+    _viv_asm(COPY, src.lo, packedInputZP, 4);
+    do
+    {
+        VXC_ReadImage(wData, weights, coord_in.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(src.hi, input, coord_in.xz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 16;
+
+        VXC_DP32x1_b(sum, src.hi, src.lo, wData, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccU8subZpMulU8_32x1_b);
+        dst.x = dst.x + sum.x;
+    } while (coord_in.x < inputSize_aln16);
+
+    float4 scale = read_imagef(scales, coord_in.yw);
+
+    dst = dst * scale + outputZP;
+    unsigned char val = convert_uchar_sat_rte(dst.x);
+
+    VXC_WriteImage(output, coord_in.zy, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void gemm_noBias_Tensor_U8toU8_PER_CHANNEL
+    (
+    __read_only image2d_array_t input,
+    __read_only image2d_array_t weights,
+    int dRelu,
+    __write_only image2d_array_t output,
+    __read_only image2d_t scales
+    )
+{
+    int4 coord_in    = (int4)(16, get_global_id(1), get_global_id(0), 0);
+    int4 coord    = (int4)(16, get_global_id(2), 0, 0);
+
+    vxc_uchar32 src;
+    vxc_char16 wData;
+    float4 sum = 0;
+    int temp = 0;
+    float4 dst = 0;
+
+    _viv_asm(COPY, src.lo, packedInputZP, 4);
+    do
+    {
+        VXC_ReadImage2DArray(src.hi, input, coord_in.xzyw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_ReadImage(wData, weights, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        coord_in.x += 16;
+        coord.x += 16;
+
+        VXC_DP32x1_b(sum, src.hi, src.lo, wData, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccU8subZpMulU8_32x1_b);
+        dst.x = dst.x + sum.x;
+    } while (coord_in.x < inputSize_aln16);
+    coord    = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    float4 scale = read_imagef(scales, coord.zw);
+
+    dst = dst * scale + outputZP;
+    unsigned char val = convert_uchar_sat_rte(dst.x);
+
+    VXC_WriteImage2DArray(output, coord, val, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}

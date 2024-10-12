@@ -1,0 +1,2581 @@
+float sigmoid(float x, float scale)
+{
+    x *= -scale;
+    x = 1 + exp2(x);
+    return 1 / x;
+}
+
+float tangentH(float x, float scale)
+{
+    x *= -scale;
+    x = 1 + exp2(x);
+    x = 1 / x;
+    return 2 * x - 1;
+}
+
+float relu(float x)
+{
+    x = max(x, 0);
+    return x;
+}
+
+float relu6(float x)
+{
+    x = max(x, 0);
+    x = min(x, 6.0f);
+    return x;
+}
+
+/* using tanh as activation function */
+__kernel void gpuLSTMUnit_non_peephole_non_CIFG_tanh(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   logE,
+    float                   twoLogE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = data_o_t * tangentH(data_c_t, twoLogE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_non_peephole_tanh(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   logE,
+    float                   twoLogE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = data_o_t * tangentH(data_c_t, twoLogE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_non_CIFG_tanh(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2input_weight,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   logE,
+    float                   twoLogE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2i, w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2input_weight, coord.xz);
+    w_c2i = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_i_t = sigmoid((data_i_t + data_c_in * w_c2i), logE);
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * tangentH(data_c_t, twoLogE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_tanh(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   logE,
+    float                   twoLogE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * tangentH(data_c_t, twoLogE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+/*cell clip is not 0.0*/
+__kernel void gpuLSTMUnit_non_peephole_non_CIFG_tanh_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   cellclip,
+    float                   logE,
+    float                   twoLogE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = data_o_t * tangentH(data_c_t, twoLogE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_non_peephole_tanh_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   cellclip,
+    float                   logE,
+    float                   twoLogE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = data_o_t * tangentH(data_c_t, twoLogE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_non_CIFG_tanh_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __read_only  image2d_t  cell2input_weight,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    __write_only image2d_t  output,
+    float                   cellclip,
+    float                   logE,
+    float                   twoLogE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2i, w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2input_weight, coord.xz);
+    w_c2i = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_i_t = sigmoid((data_i_t + data_c_in * w_c2i), logE);
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * tangentH(data_c_t, twoLogE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_tanh_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    __write_only image2d_t  output,
+    float                   cellclip,
+    float                   logE,
+    float                   twoLogE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = tangentH(data_g_t, twoLogE);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * tangentH(data_c_t, twoLogE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+/* using sigmoid as activation function */
+__kernel void gpuLSTMUnit_non_peephole_non_CIFG_sigmoid(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = sigmoid(data_g_t, logE);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = data_o_t * sigmoid(data_c_t, logE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_non_peephole_sigmoid(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = sigmoid(data_g_t, logE);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = data_o_t * sigmoid(data_c_t, logE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_non_CIFG_sigmoid(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2input_weight,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2i, w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2input_weight, coord.xz);
+    w_c2i = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_i_t = sigmoid((data_i_t + data_c_in * w_c2i), logE);
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = sigmoid(data_g_t, logE);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * sigmoid(data_c_t, logE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_sigmoid(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = sigmoid(data_g_t, logE);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * sigmoid(data_c_t, logE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+/*cell clip is not 0.0*/
+__kernel void gpuLSTMUnit_non_peephole_non_CIFG_sigmoid_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   cellclip,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = sigmoid(data_g_t, logE);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = data_o_t * sigmoid(data_c_t, logE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_non_peephole_sigmoid_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   cellclip,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = sigmoid(data_g_t, logE);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = data_o_t * sigmoid(data_c_t, logE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_non_CIFG_sigmoid_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2input_weight,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   cellclip,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2i, w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2input_weight, coord.xz);
+    w_c2i = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_i_t = sigmoid((data_i_t + data_c_in * w_c2i), logE);
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = sigmoid(data_g_t, logE);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * sigmoid(data_c_t, logE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_sigmoid_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   cellclip,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = sigmoid(data_g_t, logE);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * sigmoid(data_c_t, logE);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+/* using relu as activation function */
+__kernel void gpuLSTMUnit_non_peephole_non_CIFG_relu(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = relu(data_g_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = data_o_t * relu(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_non_peephole_relu(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = relu(data_g_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = data_o_t * relu(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+
+__kernel void gpuLSTMUnit_peephole_non_CIFG_relu(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2input_weight,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2i, w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2input_weight, coord.xz);
+    w_c2i = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_i_t = sigmoid((data_i_t + data_c_in * w_c2i), logE);
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = relu(data_g_t);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * relu(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_relu(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = relu(data_g_t);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * relu(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+/*cell clip is not 0.0*/
+__kernel void gpuLSTMUnit_non_peephole_non_CIFG_relu_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   cellclip,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = relu(data_g_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = data_o_t * relu(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_non_peephole_relu_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   cellclip,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = relu(data_g_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = data_o_t * relu(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_non_CIFG_relu_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2input_weight,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   cellclip,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2i, w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2input_weight, coord.xz);
+    w_c2i = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_i_t = sigmoid((data_i_t + data_c_in * w_c2i), logE);
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = relu(data_g_t);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * relu(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_relu_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   cellclip,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = relu(data_g_t);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * relu(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+/* using relu6 as activation function */
+__kernel void gpuLSTMUnit_non_peephole_non_CIFG_relu6(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = relu6(data_g_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = data_o_t * relu6(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_non_peephole_relu6(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = relu6(data_g_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = data_o_t * relu6(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+
+__kernel void gpuLSTMUnit_peephole_non_CIFG_relu6(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2input_weight,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2i, w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2input_weight, coord.xz);
+    w_c2i = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_i_t = sigmoid((data_i_t + data_c_in * w_c2i), logE);
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = relu6(data_g_t);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * relu6(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_relu6(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = relu6(data_g_t);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * relu6(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+/*cell clip is not 0.0*/
+__kernel void gpuLSTMUnit_non_peephole_non_CIFG_relu6_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   cellclip,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_i_t = sigmoid(data_i_t, logE);
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = relu6(data_g_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = data_o_t * relu6(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_non_peephole_relu6_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    float                   cellclip,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+
+    data_f_t = sigmoid(data_f_t, logE);
+    data_g_t = relu6(data_g_t);
+    data_o_t = sigmoid(data_o_t, logE);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = data_o_t * relu6(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_non_CIFG_relu6_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2input_weight,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   cellclip,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2i, w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_i_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_i_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2input_weight, coord.xz);
+    w_c2i = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_i_t = sigmoid((data_i_t + data_c_in * w_c2i), logE);
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = relu6(data_g_t);
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * relu6(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}
+
+__kernel void gpuLSTMUnit_peephole_relu6_cellclip(
+    __read_only  image2d_t  input,
+    __read_only  image2d_t  w_h,
+    __read_only  image2d_t  h_state,
+    __read_only  image2d_t  c_state,
+    __write_only image2d_t  c_state_out,
+    __write_only image2d_t  h_state_out,
+    __write_only image2d_t  output,
+    __read_only  image2d_t  cell2forget_weight,
+    __read_only  image2d_t  cell2output_weight,
+    float                   cellclip,
+    float                   logE
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int4 coord = (int4)(x, y, 0, 0);
+    int num_units = get_image_width(c_state);
+    int output_num = get_image_width(output);
+    float4 tmp, dst = {0.0};
+    float data_i_t, data_f_t, data_g_t, data_o_t, data_h_in, data_c_in, data_c_t, whPixel;
+    float w_c2f, w_c2o;
+
+    tmp = read_imagef(input, coord.xy);
+    data_f_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_g_t = tmp.x;
+    coord.x += num_units;
+    tmp = read_imagef(input, coord.xy);
+    data_o_t = tmp.x;
+
+    coord = (int4)(0, x, y, 0);
+    do
+    {
+        tmp = read_imagef(h_state, coord.xz);
+        data_h_in = tmp.x;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_f_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_g_t += data_h_in * whPixel;
+        coord.y += num_units;
+
+        tmp = read_imagef(w_h, coord.xy);
+        whPixel = tmp.x;
+        data_o_t += data_h_in * whPixel;
+
+        coord.x ++;
+        coord.y = x;
+    }while(coord.x < output_num);
+
+    coord = (int4)(x, y, 0, 0);
+    tmp = read_imagef(c_state, coord.xy);
+    data_c_in = tmp.x;
+    tmp = read_imagef(cell2forget_weight, coord.xz);
+    w_c2f = tmp.x;
+    tmp = read_imagef(cell2output_weight, coord.xz);
+    w_c2o = tmp.x;
+
+    data_f_t = sigmoid((data_f_t + data_c_in * w_c2f), logE);
+    data_g_t = relu6(data_g_t);
+    data_i_t = 1.0 - data_f_t;
+    data_c_t = data_c_in * data_f_t + data_i_t * data_g_t;
+    data_c_t = clamp(data_c_t, -cellclip, cellclip);
+    data_o_t = sigmoid((data_o_t + data_c_t * w_c2o), logE) * relu6(data_c_t);
+
+    dst.x = data_c_t;
+    write_imagef(c_state_out, coord.xy, dst);
+
+    dst.x = data_o_t;
+    write_imagef(h_state_out, coord.xy, dst);
+    write_imagef(output, coord.xy, dst);
+}

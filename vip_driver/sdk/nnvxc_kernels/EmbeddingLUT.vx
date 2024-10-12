@@ -1,0 +1,239 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits UniFP16toFP32Lo4_dp4x4;
+
+_viv_uniform VXC_512Bits uniU8MulAndPostShift0_Lo_2x8;
+_viv_uniform VXC_512Bits uniU8MulAndPostShift0_Hi_2x8;
+_viv_uniform int2 multAndoutZP0;
+_viv_uniform int value_rows;
+
+__kernel void vxcEmbeddingLUT_U8toU8_nofl(
+    image2d_t input,
+    image2d_t value,
+    image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), 0, get_global_id(1), 0);
+
+    vxc_uchar16 inputVal;
+    vxc_int4 index = read_imagei(input, coord.zw);
+    coord.y = index.s0;
+    if(coord.y >= 0 && coord.y < value_rows)
+    {
+        VXC_ReadImage(inputVal, value, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output, coord.xz, inputVal, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcEmbeddingLUT_U8toU8(
+    image2d_t input,
+    image2d_t value,
+    image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), 0, get_global_id(1), 0);
+
+    vxc_uchar16 inputVal, outputVal;
+    vxc_int4 index = read_imagei(input, coord.zw);
+    vxc_ushort8 mp0;
+    _viv_asm(COPY, mp0, multAndoutZP0, 16);
+
+    coord.y = index.s0;
+    if(coord.y >= 0 && coord.y < value_rows)
+    {
+        VXC_ReadImage(inputVal, value, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(outputVal, inputVal, mp0, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1),\
+                uniU8MulAndPostShift0_Lo_2x8);
+        VXC_DP2x8(outputVal, inputVal, mp0, VXC_MODIFIER(8, 15, 0, VXC_RM_ToNearestEven, 1),\
+                uniU8MulAndPostShift0_Hi_2x8);
+        VXC_WriteImage(output, coord.xz, outputVal, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcEmbeddingLUT_F16toF16(
+    image2d_t input,
+    image2d_t value,
+    image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), 0, get_global_id(1), 0);
+
+    vxc_short8 inputVal;
+    vxc_int4 index = read_imagei(input, coord.zw);
+    coord.y = index.s0;
+    if(coord.y >= 0 && coord.y < value_rows)
+    {
+        VXC_ReadImage(inputVal, value, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output, coord.xz, inputVal, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcEmbeddingLUT_F16F16toF16(
+    image2d_t input,
+    image2d_t value,
+    image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), 0, get_global_id(1), 0);
+
+    vxc_short8 inputVal, src0;
+    vxc_half8 src1;
+    float4 index_f32;
+    int4 index;
+    VXC_ReadImage(src0, input, coord.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, src1, src0, 16);
+    VXC_DP4x4(index_f32, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0),\
+        UniFP16toFP32Lo4_dp4x4);
+    index = convert_int4_rte(index_f32);
+    coord.y = index.s0;
+    if(coord.y >= 0 && coord.y < value_rows)
+    {
+        VXC_ReadImage(inputVal, value, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage(output, coord.xz, inputVal, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcEmbeddingLUT_U8toI8(
+    image2d_t input,
+    image2d_t value,
+    image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), 0, get_global_id(1), 0);
+
+    vxc_uchar16 inputVal;
+    vxc_char16 outputVal;
+    vxc_int4 index = read_imagei(input, coord.zw);
+    vxc_ushort8 mp0;
+    _viv_asm(COPY, mp0, multAndoutZP0, 16);
+
+    coord.y = index.s0;
+    if(coord.y >= 0 && coord.y < value_rows)
+    {
+        VXC_ReadImage(inputVal, value, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(outputVal, inputVal, mp0, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1),\
+                uniU8MulAndPostShift0_Lo_2x8);
+        VXC_DP2x8(outputVal, inputVal, mp0, VXC_MODIFIER(8, 15, 0, VXC_RM_ToNearestEven, 1),\
+                uniU8MulAndPostShift0_Hi_2x8);
+        VXC_WriteImage(output, coord.xz, outputVal, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcEmbeddingLUT_U8toU8_nofl_3D(
+    image2d_t input,
+    image2d_array_t value,
+    image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in = coord;
+
+    vxc_uchar16 inputVal;
+    vxc_int4 index = read_imagei(input, coord.zw);
+    coord_in.z = index.s0;
+    if(coord_in.z >= 0 && coord_in.z < value_rows)
+    {
+        VXC_ReadImage2DArray(inputVal, value, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage2DArray(output, coord, inputVal, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcEmbeddingLUT_U8toU8_3D(
+    image2d_t input,
+    image2d_array_t value,
+    image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in = coord;
+
+    vxc_uchar16 inputVal, outputVal;
+    vxc_int4 index = read_imagei(input, coord.zw);
+    vxc_ushort8 mp0;
+    _viv_asm(COPY, mp0, multAndoutZP0, 16);
+
+    coord_in.z = index.s0;
+    if(coord_in.z >= 0 && coord_in.z < value_rows)
+    {
+        VXC_ReadImage2DArray(inputVal, value, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(outputVal, inputVal, mp0, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1),\
+                uniU8MulAndPostShift0_Lo_2x8);
+        VXC_DP2x8(outputVal, inputVal, mp0, VXC_MODIFIER(8, 15, 0, VXC_RM_ToNearestEven, 1),\
+                uniU8MulAndPostShift0_Hi_2x8);
+        VXC_WriteImage2DArray(output, coord, outputVal, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcEmbeddingLUT_F16toF16_3D(
+    image2d_t input,
+    image2d_array_t value,
+    image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in = coord;
+
+    vxc_short8 inputVal;
+    vxc_int4 index = read_imagei(input, coord.zw);
+    coord_in.z = index.s0;
+    if(coord_in.z >= 0 && coord_in.z < value_rows)
+    {
+        VXC_ReadImage2DArray(inputVal, value, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage2DArray(output, coord, inputVal, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcEmbeddingLUT_F16F16toF16_3D(
+    image2d_t input,
+    image2d_array_t value,
+    image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in = coord;
+
+    vxc_short8 inputVal, src0;
+    vxc_half8 src1;
+    float4 index_f32;
+    int4 index;
+    VXC_ReadImage(src0, input, coord.zw, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, src1, src0, 16);
+    VXC_DP4x4(index_f32, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0),\
+        UniFP16toFP32Lo4_dp4x4);
+    index = convert_int4_rte(index_f32);
+    coord_in.z = index.s0;
+    if(coord_in.z >= 0 && coord_in.z < value_rows)
+    {
+        VXC_ReadImage2DArray(inputVal, value, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_WriteImage2DArray(output, coord, inputVal, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcEmbeddingLUT_U8toI8_3D(
+    image2d_t input,
+    image2d_array_t value,
+    image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in = coord;
+
+    vxc_uchar16 inputVal;
+    vxc_char16 outputVal;
+    vxc_int4 index = read_imagei(input, coord.zw);
+    vxc_ushort8 mp0;
+    _viv_asm(COPY, mp0, multAndoutZP0, 16);
+
+    coord_in.z = index.s0;
+    if(coord_in.z >= 0 && coord_in.z < value_rows)
+    {
+        VXC_ReadImage2DArray(inputVal, value, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_DP2x8(outputVal, inputVal, mp0, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1),\
+                uniU8MulAndPostShift0_Lo_2x8);
+        VXC_DP2x8(outputVal, inputVal, mp0, VXC_MODIFIER(8, 15, 0, VXC_RM_ToNearestEven, 1),\
+                uniU8MulAndPostShift0_Hi_2x8);
+        VXC_WriteImage2DArray(output, coord, outputVal, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    }
+}

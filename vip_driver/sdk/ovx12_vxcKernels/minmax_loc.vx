@@ -1,0 +1,303 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniConvert1stU8toInt32_4x4;
+_viv_uniform int size_min;
+_viv_uniform int size_max;
+
+__kernel void getlocation_minmaxArray_u8(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData,
+        __write_only  image2d_t minImg,
+        __write_only  image2d_t maxImg,
+        global int2* minPos, global int2* maxPos,
+        global int* minCnt, global int* maxCnt)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int tmpMin = minData[0];
+    int tmpMax = maxData[0];
+    vxc_uchar16 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int data;
+    VXC_DP4x4(data, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    if(tmpMin == data)
+    {
+        int old = atom_inc(minCnt);
+        if(old < size_min)
+        {
+            minPos[old] = coord;
+        }
+    }
+
+    if(tmpMax == data)
+    {
+        int old = atom_inc(maxCnt);
+        if(old < size_max)
+        {
+            maxPos[old] = coord;
+        }
+    }
+}
+
+__kernel void getlocation_minmaxCnt_u8(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData,
+        __write_only  image2d_t minImg,
+        __write_only  image2d_t maxImg,
+        global int2* minPos, global int2* maxPos,
+        global int* minCnt, global int* maxCnt)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int tmpMin = minData[0];
+    int tmpMax = maxData[0];
+    vxc_uchar16 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int data;
+    VXC_DP4x4(data, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    if(tmpMin == data)
+    {
+        atom_inc(minCnt);
+    }
+
+    if(tmpMax == data)
+    {
+        atom_inc(maxCnt);
+    }
+}
+
+__kernel void getlocation_minArray_u8(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData,
+        __write_only  image2d_t minImg,
+        __write_only  image2d_t maxImg,
+        global int2* minPos, global int2* maxPos,
+        global int* minCnt, global int* maxCnt)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int tmpMin = minData[0];
+    vxc_uchar16 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int data;
+    VXC_DP4x4(data, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    if(tmpMin == data)
+    {
+        int old = atom_inc(minCnt);
+        if(old < size_min)
+        {
+            minPos[old] = coord;
+        }
+    }
+}
+
+__kernel void getlocation_minCnt_u8(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData,
+        __write_only  image2d_t minImg,
+        __write_only  image2d_t maxImg,
+        global int2* minPos, global int2* maxPos,
+        global int* minCnt, global int* maxCnt)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int tmpMin = minData[0];
+    vxc_uchar16 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int data;
+    VXC_DP4x4(data, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    if(tmpMin == data)
+    {
+        atom_inc(minCnt);
+    }
+}
+
+__kernel void getlocation_maxArray_u8(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData,
+        __write_only  image2d_t minImg,
+        __write_only  image2d_t maxImg,
+        global int2* minPos, global int2* maxPos,
+        global int* minCnt, global int* maxCnt)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int tmpMax = maxData[0];
+    vxc_uchar16 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int data;
+    VXC_DP4x4(data, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    if(tmpMax == data)
+    {
+        int old = atom_inc(maxCnt);
+        if(old < size_max)
+        {
+            maxPos[old] = coord;
+        }
+    }
+}
+
+__kernel void getlocation_maxCnt_u8(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData,
+        __write_only  image2d_t minImg,
+        __write_only  image2d_t maxImg,
+        global int2* minPos, global int2* maxPos,
+        global int* minCnt, global int* maxCnt)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int tmpMax = maxData[0];
+    vxc_uchar16 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int data;
+    VXC_DP4x4(data, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    if(tmpMax == data)
+    {
+        atom_inc(maxCnt);
+    }
+}
+
+__kernel void getlocation_minmaxArray_i16(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData,
+        __write_only  image2d_t minImg,
+        __write_only  image2d_t maxImg,
+        global int2* minPos, global int2* maxPos,
+        global int* minCnt, global int* maxCnt)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int tmpMin = minData[0];
+    int tmpMax = maxData[0];
+    vxc_short8 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int data;
+    VXC_DP4x4(data, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    if(tmpMin == data)
+    {
+        int old = atom_inc(minCnt);
+        if(old < size_min)
+        {
+            minPos[old] = coord;
+        }
+    }
+
+    if(tmpMax == data)
+    {
+        int old = atom_inc(maxCnt);
+        if(old < size_max)
+        {
+            maxPos[old] = coord;
+        }
+    }
+}
+
+__kernel void getlocation_minmaxCnt_i16(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData,
+        __write_only  image2d_t minImg,
+        __write_only  image2d_t maxImg,
+        global int2* minPos, global int2* maxPos,
+        global int* minCnt, global int* maxCnt)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int tmpMin = minData[0];
+    int tmpMax = maxData[0];
+    vxc_short8 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int data;
+    VXC_DP4x4(data, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    if(tmpMin == data)
+    {
+        atom_inc(minCnt);
+    }
+
+    if(tmpMax == data)
+    {
+        atom_inc(maxCnt);
+    }
+}
+
+__kernel void getlocation_minArray_i16(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData,
+        __write_only  image2d_t minImg,
+        __write_only  image2d_t maxImg,
+        global int2* minPos, global int2* maxPos,
+        global int* minCnt, global int* maxCnt)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int tmpMin = minData[0];
+    vxc_short8 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int data;
+    VXC_DP4x4(data, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    if(tmpMin == data)
+    {
+        int old = atom_inc(minCnt);
+        if(old < size_min)
+        {
+            minPos[old] = coord;
+        }
+    }
+}
+
+__kernel void getlocation_minCnt_i16(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData,
+        __write_only  image2d_t minImg,
+        __write_only  image2d_t maxImg,
+        global int2* minPos, global int2* maxPos,
+        global int* minCnt, global int* maxCnt)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int tmpMin = minData[0];
+    vxc_short8 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int data;
+    VXC_DP4x4(data, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    if(tmpMin == data)
+    {
+        atom_inc(minCnt);
+    }
+}
+
+__kernel void getlocation_maxArray_i16(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData,
+        __write_only  image2d_t minImg,
+        __write_only  image2d_t maxImg,
+        global int2* minPos, global int2* maxPos,
+        global int* minCnt, global int* maxCnt)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int tmpMax = maxData[0];
+    vxc_short8 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int data;
+    VXC_DP4x4(data, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    if(tmpMax == data)
+    {
+        int old = atom_inc(maxCnt);
+        if(old < size_max)
+        {
+            maxPos[old] = coord;
+        }
+    }
+}
+
+__kernel void getlocation_maxCnt_i16(
+        __read_only  image2d_t input,
+        global int* minData, global int* maxData,
+        __write_only  image2d_t minImg,
+        __write_only  image2d_t maxImg,
+        global int2* minPos, global int2* maxPos,
+        global int* minCnt, global int* maxCnt)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int tmpMax = maxData[0];
+    vxc_short8 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    int data;
+    VXC_DP4x4(data, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniConvert1stU8toInt32_4x4);
+    if(tmpMax == data)
+    {
+        atom_inc(maxCnt);
+    }
+}

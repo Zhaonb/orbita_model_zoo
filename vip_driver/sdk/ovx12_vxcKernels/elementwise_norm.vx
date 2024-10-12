@@ -1,0 +1,64 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniAddInt16_2x8;
+_viv_uniform VXC_512Bits uniConvert1stI16toF32_4x4;
+_viv_uniform VXC_512Bits uniConvert2ndI16toF32_4x4;
+_viv_uniform VXC_512Bits uniConvertInt32toUint8_2x8;
+
+__kernel void elementwise_norm_l1
+(
+    __read_only image2d_t  input_x,
+    __read_only image2d_t  input_y,
+    __global int* norm_type,
+    __write_only image2d_t output
+)
+{
+
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_short8 src0, src1;
+    vxc_ushort8 result, tmp0, tmp1;
+
+    VXC_ReadImage(src0, input_x, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input_y, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    tmp0 = abs(src0);
+    tmp1 = abs(src1);
+
+    VXC_DP2x8(result, tmp0, tmp1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniAddInt16_2x8);
+
+    VXC_WriteImage(output, coord, result, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void elementwise_norm_l2
+(
+    __read_only image2d_t  input_x,
+    __read_only image2d_t  input_y,
+    __global int* norm_type,
+    __write_only image2d_t output
+)
+{
+
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_short8 src0, src1;
+    vxc_ushort8 result;
+
+    VXC_ReadImage(src0, input_x, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input_y, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    float4 data0, data1, data2, data3;
+
+    VXC_DP4x4(data0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stI16toF32_4x4);
+    VXC_DP4x4(data1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndI16toF32_4x4);
+    VXC_DP4x4(data2, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stI16toF32_4x4);
+    VXC_DP4x4(data3, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndI16toF32_4x4);
+
+    float4 result0 = hypot(data0, data2);
+    float4 result1 = hypot(data1, data3);
+    int4 dst0 = convert_int4_rte(result0);
+    int4 dst1 = convert_int4_rte(result1);
+    VXC_DP2x8(result, dst0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvertInt32toUint8_2x8);
+
+    VXC_WriteImage(output, coord, result, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}

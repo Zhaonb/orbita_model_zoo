@@ -1,0 +1,248 @@
+/**************Float to Float****************************/
+__kernel void gpuLinear_F32toF32_4x
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           a_scale,
+                 float           b_offset
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    float4 src;
+    src = read_imagef(input, coord);
+
+    float4 dst = src * a_scale + b_offset;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuLinear_F32toF32_4s
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           a_scale,
+                 float           b_offset
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    float4 src;
+    src = read_imagef(input, coord);
+
+    float4 dst = src * a_scale + b_offset;
+    coord.x *= 4;
+    write_imagef(output, coord, dst.xxxx);
+    coord.x++;
+    write_imagef(output, coord, dst.yyyy);
+    coord.x++;
+    write_imagef(output, coord, dst.zzzz);
+    coord.x++;
+    write_imagef(output, coord, dst.wwww);
+}
+
+__kernel void gpuLinear_F32toF32_2D_4x
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     a_scale,
+                 float     b_offset
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    float4 src;
+    src = read_imagef(input, coord);
+
+    float4 dst = src * a_scale + b_offset;
+
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuLinear_F32toF32_2D_4s
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     a_scale,
+                 float     b_offset
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    float4 src;
+    src = read_imagef(input, coord);
+
+    float4 dst = src * a_scale + b_offset;
+    coord.x *= 4;
+    write_imagef(output, coord, dst.xxxx);
+    coord.x++;
+    write_imagef(output, coord, dst.yyyy);
+    coord.x++;
+    write_imagef(output, coord, dst.zzzz);
+    coord.x++;
+    write_imagef(output, coord, dst.wwww);
+}
+
+__kernel void gpuLinear_U32toU32_4x
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           a_scale,
+                 float           b_offset
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    uint4 src;
+    src = read_imageui(input, coord);
+    float4 dst0 = convert_float4(src);
+    dst0 = dst0 * a_scale + b_offset;
+    uint4 dst = convert_uint4(dst0);
+
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuLinear_U32toU32_4s
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           a_scale,
+                 float           b_offset
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    uint4 src;
+    src = read_imageui(input, coord);
+    float4 dst0 = convert_float4(src);
+    dst0 = dst0 * a_scale + b_offset;
+    uint4 dst = convert_uint4(dst0);
+    coord.x *= 4;
+    write_imageui(output, coord, dst.xxxx);
+    coord.x++;
+    write_imageui(output, coord, dst.yyyy);
+    coord.x++;
+    write_imageui(output, coord, dst.zzzz);
+    coord.x++;
+    write_imageui(output, coord, dst.wwww);
+}
+
+__kernel void gpuLinear_U32toU32_2D_4x
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     a_scale,
+                 float     b_offset
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src;
+    src = read_imageui(input, coord);
+    float4 dst0 = convert_float4(src);
+    dst0 = dst0 * a_scale + b_offset;
+    uint4 dst = convert_uint4(dst0);
+
+    write_imageui(output, coord, dst);
+}
+
+__kernel void gpuLinear_U32toU32_2D_4s
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     a_scale,
+                 float     b_offset
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src;
+    src = read_imageui(input, coord);
+    float4 dst0 = convert_float4(src);
+    dst0 = dst0 * a_scale + b_offset;
+    uint4 dst = convert_uint4(dst0);
+    coord.x *= 4;
+    write_imageui(output, coord, dst.xxxx);
+    coord.x++;
+    write_imageui(output, coord, dst.yyyy);
+    coord.x++;
+    write_imageui(output, coord, dst.zzzz);
+    coord.x++;
+    write_imageui(output, coord, dst.wwww);
+}
+
+__kernel void gpuLinear_I32toI32_4x
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           a_scale,
+                 float           b_offset
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 src;
+    src = read_imagei(input, coord);
+    float4 dst0 = convert_float4(src);
+    dst0 = dst0 * a_scale + b_offset;
+    int4 dst = convert_int4(dst0);
+
+    write_imagei(output, coord, dst);
+}
+
+__kernel void gpuLinear_I32toI32_4s
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 float           a_scale,
+                 float           b_offset
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+    int4 src;
+    src = read_imagei(input, coord);
+    float4 dst0 = convert_float4(src);
+    dst0 = dst0 * a_scale + b_offset;
+    int4 dst = convert_int4(dst0);
+    coord.x *= 4;
+    write_imagei(output, coord, dst.xxxx);
+    coord.x++;
+    write_imagei(output, coord, dst.yyyy);
+    coord.x++;
+    write_imagei(output, coord, dst.zzzz);
+    coord.x++;
+    write_imagei(output, coord, dst.wwww);
+}
+
+__kernel void gpuLinear_I32toI32_2D_4x
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     a_scale,
+                 float     b_offset
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4 src;
+    src = read_imagei(input, coord);
+    float4 dst0 = convert_float4(src);
+    dst0 = dst0 * a_scale + b_offset;
+    int4 dst = convert_int4(dst0);
+
+    write_imagei(output, coord, dst);
+}
+
+__kernel void gpuLinear_I32toI32_2D_4s
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     a_scale,
+                 float     b_offset
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4 src;
+    src = read_imagei(input, coord);
+    float4 dst0 = convert_float4(src);
+    dst0 = dst0 * a_scale + b_offset;
+    int4 dst = convert_int4(dst0);
+    coord.x *= 4;
+    write_imagei(output, coord, dst.xxxx);
+    coord.x++;
+    write_imagei(output, coord, dst.yyyy);
+    coord.x++;
+    write_imagei(output, coord, dst.zzzz);
+    coord.x++;
+    write_imagei(output, coord, dst.wwww);
+}

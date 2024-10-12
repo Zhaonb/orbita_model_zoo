@@ -1,0 +1,148 @@
+__kernel void gpuNormalization_AcrossMapsFP32(
+    __read_only  image2d_array_t   input,
+    int               radius,
+    float             bias,
+    float             alpha,
+    float             beta,
+    __write_only image2d_array_t   output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(x, y, 0, 0);
+    int4 coord = (int4)(x, y, z, 0);
+    int depth = get_image_array_size(input);
+    float4 tmp = {0.0}, dst = {0.0};
+    int start = max(z-radius, 0);
+    int end = min(z+radius+1, depth);
+    float sqrSum = 0.0, divider;
+
+    for(coord_in.z = start; coord_in.z < end; coord_in.z += 1)
+    {
+       tmp = read_imagef(input, coord_in);
+       sqrSum += tmp.x * tmp.x;
+    }
+
+    tmp = read_imagef(input, coord);
+    divider = exp2(beta * log2(bias+alpha*sqrSum));
+    dst.x = tmp.x/divider;
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuNormalization_AcrossMapsQuant8(
+    __read_only  image2d_array_t   input,
+    int               radius,
+    float             bias,
+    float             alpha,
+    float             beta,
+    float             scaleIn,
+    float             scaleOut,
+    int               zpIn,
+    int               zpOut,
+    __write_only image2d_array_t   output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(x, y, 0, 0);
+    int4 coord = (int4)(x, y, z, 0);
+    int depth = get_image_array_size(input);
+    uint4 tmp = {0.0}, dst = {0.0};
+    int start = max(z-radius, 0);
+    int end = min(z+radius+1, depth);
+    float sqrSum = 0.0, divider, inPixel;
+
+    for(coord_in.z = start; coord_in.z < end; coord_in.z += 1)
+    {
+       tmp = read_imageui(input, coord_in);
+       inPixel = (convert_int(tmp.x-zpIn))*scaleIn;
+       sqrSum += inPixel * inPixel;
+    }
+
+    tmp = read_imageui(input, coord);
+    inPixel = (convert_int(tmp.x-zpIn))*scaleIn;
+    divider = exp2(beta * log2(bias+alpha*sqrSum));
+    dst.x = floor(inPixel/divider*scaleOut + zpOut + 0.5);
+    write_imageui(output, coord, dst);
+}
+
+/*Not verified yet*/
+__kernel void gpuNormalization_SameMapsFP32(
+    __read_only  image2d_array_t   input,
+    int               radius,
+    float             alpha,
+    float             beta,
+    __write_only image2d_array_t   output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(0, 0, z, 0);
+    int4 coord = (int4)(x, y, z, 0);
+    int width = get_image_width(input);
+    int height = get_image_height(input);
+    float4 tmp = {0.0}, dst = {0.0};
+    int half_radius = (radius>>1);
+    int startW = max(x-half_radius, 0);
+    int endW = min(x+half_radius, width);
+    int startH = max(y-half_radius, 0);
+    int endH = min(y+half_radius, height);
+    float sqrSum = 0.0, divider;
+
+    for(coord_in.y = startH; coord_in.y <= endH; coord_in.y += 1)
+    {
+        for(coord_in.x = startW; coord_in.x <= endW; coord_in.x += 1)
+        {
+           tmp = read_imagef(input, coord_in);
+           sqrSum += tmp.x * tmp.x;
+        }
+    }
+
+    tmp = read_imagef(input, coord);
+    divider = exp2(beta * log2(1+alpha*sqrSum));
+    dst.x = tmp.x/divider;
+    write_imagef(output, coord, dst);
+}
+
+__kernel void gpuNormalization_SameMapsQuant8(
+    __read_only  image2d_array_t   input,
+    int               radius,
+    float             alpha,
+    float             beta,
+    float             scaleIn,
+    float             scaleOut,
+    int               zpIn,
+    int               zpOut,
+    __write_only image2d_array_t   output)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_in = (int4)(0, 0, z, 0);
+    int4 coord = (int4)(x, y, z, 0);
+    int width = get_image_width(input);
+    int height = get_image_height(input);
+    uint4 tmp = {0.0}, dst = {0.0};
+    int half_radius = (radius>>1);
+    int startW = max(x-half_radius, 0);
+    int endW = min(x+half_radius, width);
+    int startH = max(y-half_radius, 0);
+    int endH = min(y+half_radius, height);
+    float sqrSum = 0.0, divider, inPixel;
+
+    for(coord_in.y = startH; coord_in.y <= endH; coord_in.y += 1)
+    {
+        for(coord_in.x = startW; coord_in.x <= endW; coord_in.x += 1)
+        {
+           tmp = read_imageui(input, coord_in);
+           inPixel = (convert_int(tmp.x-zpIn))*scaleIn;
+           sqrSum += inPixel * inPixel;
+        }
+    }
+
+    tmp = read_imageui(input, coord);
+    inPixel = (convert_int(tmp.x-zpIn))*scaleIn;
+    divider = exp2(beta * log2(1+alpha*sqrSum));
+    dst.x = floor(inPixel/divider*scaleOut + zpOut + 0.5);
+    write_imageui(output, coord, dst);
+}

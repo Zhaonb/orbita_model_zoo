@@ -1,0 +1,444 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniAcc8U8_8x2;
+_viv_uniform VXC_512Bits uniAccNU8_8x2;
+_viv_uniform float inputScale;
+_viv_uniform int input_ZP;
+_viv_uniform float uint8qScale_out;
+_viv_uniform float output_ZP;
+_viv_uniform int2 stride;
+_viv_uniform int2 padding;
+_viv_uniform int2 kernelsize;
+_viv_uniform int  x_len_8x;
+_viv_uniform int  x_len_remain;
+_viv_uniform int  enable_uint8_format;
+_viv_uniform int  enable_int8_format;
+_viv_uniform float genericAvgScale;
+_viv_uniform VXC_512Bits uniAcc8Data_8x2;
+_viv_uniform VXC_512Bits uniAccNData_8x2;
+_viv_uniform int input_height;
+_viv_uniform int input_width;
+_viv_uniform VXC_512Bits uni8BAdd_SubNZP_16x1;
+_viv_uniform VXC_512Bits uni8BAdd_Sub8ZP_16x1;
+
+
+__kernel void vxcTFPooling_generic_fp16
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       mask,
+                 int             height,
+    __write_only image2d_array_t output
+    )
+{
+    float2 sum = 0;
+    int4 coord_out =  (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in  =  (int4)(coord_out.x *stride.x - padding.x, coord_out.y * stride.y - padding.y, coord_out.z, 0);
+
+    float4 filter = read_imagef(mask, coord_out.xy);
+
+    if (x_len_remain == 0)
+    {
+        for (int y = 0; y < kernelsize.y; y++)
+        {
+            for (int x = 0; x < kernelsize.x; x += 8)
+            {
+                float2 sum0 = 0;
+                vxc_short8 pixel;
+                vxc_half8  vec;
+                VXC_ReadImage2DArray(pixel, input, coord_in, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, vec, pixel, 16);
+                coord_in.x += 8;
+                VXC_DP8x2(sum0, vec, vec, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAcc8Data_8x2);
+                sum += sum0;
+            }
+            coord_in.x -= kernelsize.x;
+            coord_in.y ++;
+        }
+    }
+    else
+    {
+        for (int y = 0; y < kernelsize.y; y++)
+        {
+            vxc_short8 pixel;
+            vxc_half8  vec;
+            float2 sum0;
+            for (int x = 0; x < x_len_8x; x += 8)
+            {
+                VXC_ReadImage2DArray(pixel, input, coord_in, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                _viv_asm(COPY, vec, pixel, 16);
+                coord_in.x += 8;
+                VXC_DP8x2(sum0, vec, vec, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAcc8Data_8x2);
+                sum += sum0;
+            }
+            VXC_ReadImage2DArray(pixel, input, coord_in, 0, VXC_MODIFIER(0, 6, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, vec, pixel, 16);
+            VXC_DP8x2(sum0, vec, vec, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniAccNData_8x2);
+            sum += sum0;
+            coord_in.x -= x_len_8x;
+            coord_in.y ++;
+        }
+    }
+    sum.x = sum.x * filter.x;
+    if (enable_int8_format == 1)
+    {
+        sum.x = sum.x * genericAvgScale + output_ZP;
+        char dst = convert_char_rte(sum.x);
+        VXC_WriteImage2DArray(output, coord_out, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        half tmp;
+        vxc_short8 dst;
+        _viv_asm(CONV, tmp, sum.x);
+        _viv_asm(COPY, dst, tmp, 2);
+        VXC_WriteImage2DArray(output, coord_out, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcTFPooling_generic_uint8
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       mask,
+                 int             height,
+    __write_only image2d_array_t output
+    )
+{
+    float2 sum = 0;
+
+    int4 coord_out =  (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in  =  (int4)(coord_out.x *stride.x - padding.x, coord_out.y * stride.y - padding.y, coord_out.z, 0);
+
+    float4 filter = read_imagef(mask, coord_out.xy);
+
+    vxc_uchar16 inputZP;
+    _viv_asm(COPY, inputZP, input_ZP, 16);
+
+    if (x_len_remain == 0)
+    {
+        for (int y = 0; y < kernelsize.y; y++)
+        {
+            for (int x = 0; x < kernelsize.x; )
+            {
+                float2 sum0 = 0;
+                vxc_uchar16 vec;
+                VXC_ReadImage2DArray(vec, input, coord_in, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                coord_in.x += 8;
+                x += 8;
+                VXC_DP16x1(sum0, vec, inputZP, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uni8BAdd_Sub8ZP_16x1);
+                sum += sum0;
+            }
+            coord_in.x -= kernelsize.x;
+            coord_in.y ++;
+        }
+    }
+    else
+    {
+        for (int y = 0; y < kernelsize.y; y++)
+        {
+            vxc_uchar16 vec;
+            float2 sum0;
+            for (int x = 0; x < x_len_8x;)
+            {
+                VXC_ReadImage2DArray(vec, input, coord_in, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+                coord_in.x += 8;
+                x += 8;
+
+                VXC_DP16x1(sum0, vec, inputZP, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uni8BAdd_Sub8ZP_16x1);
+                sum += sum0;
+            }
+            VXC_ReadImage2DArray(vec, input, coord_in, 0, VXC_MODIFIER(0, 6, 0, VXC_RM_TowardZero, 0));
+            VXC_DP16x1(sum0, vec, inputZP, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uni8BAdd_SubNZP_16x1);
+            sum += sum0;
+
+            coord_in.x -= x_len_8x;
+            coord_in.y ++;
+        }
+    }
+
+    sum.x = sum.x * filter.x + output_ZP;
+    if (enable_uint8_format)
+    {
+        unsigned char dst = convert_uchar_sat(sum);
+        VXC_WriteImage2DArray(output, coord_out, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        half tmp;
+        vxc_short8 dst;
+        _viv_asm(CONV, tmp, sum);
+        _viv_asm(COPY, dst, tmp, 2);
+        VXC_WriteImage2DArray(output, coord_out, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+}
+
+#define TFAVGPOOLING_QINT(src0_type_name, read_type, dst_type, convert_func) \
+__kernel void vxcTFPooling_generic_##src0_type_name \
+    ( \
+    __read_only  image2d_array_t input, \
+    __read_only  image2d_t       mask, \
+                 int             height, \
+    __write_only image2d_array_t output \
+    ) \
+{ \
+    float2 sum = 0; \
+    int4 coord_out =  (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    int4 coord_in  =  (int4)(coord_out.x *stride.x - padding.x, coord_out.y * stride.y - padding.y, coord_out.z, 0); \
+    float4 filter = read_imagef(mask, coord_out.xy); \
+ \
+    vxc_uchar16 inputZP; \
+    _viv_asm(COPY, inputZP, input_ZP, 16); \
+    int8 input_desc; \
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc)); \
+    int baseAddr_in = (int)coord_in.z * input_desc.s4 + input_desc.s0; \
+    _viv_asm(MOV, coord_in.w, baseAddr_in); \
+ \
+    if (x_len_remain == 0) \
+    { \
+        for (int y = 0; y < kernelsize.y; y++) \
+        { \
+            for (int x = 0; x < kernelsize.x; ) \
+            { \
+                float2 sum0 = 0; \
+                read_type vec; \
+                VXC_OP4(img_load_3d, vec, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), \
+                            VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+                coord_in.x += 8; \
+                x += 8; \
+                VXC_DP16x1(sum0, vec, inputZP, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uni8BAdd_Sub8ZP_16x1); \
+                sum += sum0; \
+            } \
+            coord_in.x -= kernelsize.x; \
+            coord_in.y ++; \
+        } \
+    } \
+    else \
+    { \
+        for (int y = 0; y < kernelsize.y; y++) \
+        { \
+            read_type vec; \
+            float2 sum0; \
+            for (int x = 0; x < x_len_8x;) \
+            { \
+                VXC_OP4(img_load_3d, vec, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), \
+                            VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+                coord_in.x += 8; \
+                x += 8; \
+                VXC_DP16x1(sum0, vec, inputZP, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uni8BAdd_Sub8ZP_16x1); \
+                sum += sum0; \
+            } \
+            VXC_OP4(img_load_3d, vec, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), \
+                            VXC_MODIFIER(0, 6, 0, VXC_RM_TowardZero, 0)); \
+            VXC_DP16x1(sum0, vec, inputZP, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uni8BAdd_SubNZP_16x1); \
+            sum += sum0; \
+ \
+            coord_in.x -= x_len_8x; \
+            coord_in.y ++; \
+        } \
+    } \
+    sum.x = sum.x * filter.x + output_ZP; \
+    dst_type dst = convert_func(sum); \
+    VXC_WriteImage2DArray(output, coord_out, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0)); \
+}
+TFAVGPOOLING_QINT(int8, vxc_char16, char, convert_char_sat)
+TFAVGPOOLING_QINT(int16, vxc_short8, short, convert_short_sat)
+
+_viv_uniform VXC_512Bits uniConvBF16toF32_Part0_2x8;
+_viv_uniform VXC_512Bits uniConvBF16toF32_Part1_2x8;
+_viv_uniform VXC_512Bits uniConvBF16toF32_Rem_Part0_2x8;
+_viv_uniform VXC_512Bits uniConvBF16toF32_Rem_Part1_2x8;
+
+__kernel void vxcTFPooling_generic_BF16
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_array_t mask,
+    int height,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_out  =  (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in   =  (int4)(coord_out.x *stride.x - padding.x, coord_out.y * stride.y - padding.y, coord_out.z, 0);
+    int2 coord_end  =  (int2)(input_width, input_height);
+    float sum = 0;
+    vxc_short8 zero = (vxc_short8)(0, 0, 0, 0, 0, 0, 0, 0);
+    int  start_x = coord_in.x > 0 ? coord_in.x : 0;
+    int  start_y = coord_in.y > 0 ? coord_in.y : 0;
+    int2 end     = (int2)(coord_in.x + kernelsize.x, coord_in.y + kernelsize.y);
+    int  cont = 0;
+    end  = end > coord_end ? coord_end : end;
+    cont = (end.x - start_x) * (end.y - start_y);
+
+    for (int y = 0; y < kernelsize.y; y++)
+    {
+        float4 vecA;
+        float4 vecB;
+        vxc_ushort8  src1;
+        vxc_short8 pixel;
+        float4 sum0;
+        float4 ones = (float4)(1.0, 1.0, 1.0, 1.0);
+        for (int x = 0; x < x_len_8x; x += 8)
+        {
+            VXC_ReadImage2DArray(pixel, input, coord_in, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_DP2x8(src1, pixel, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+            _viv_asm(COPY, vecA, src1, 16);
+            VXC_DP2x8(src1, pixel, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+            _viv_asm(COPY, vecB, src1, 16);
+            coord_in.x += 8;
+            sum0 = vecA + vecB;
+            sum += dot(sum0, ones);
+        }
+        if (x_len_remain)
+        {
+            VXC_ReadImage2DArray(pixel, input, coord_in, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_DP2x8(src1, pixel, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Rem_Part0_2x8);
+            _viv_asm(COPY, vecA, src1, 16);
+            VXC_DP2x8(src1, pixel, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Rem_Part1_2x8);
+            _viv_asm(COPY, vecB, src1, 16);
+            sum0 = vecA + vecB;
+            sum += dot(sum0, ones);
+        }
+        coord_in.x -= x_len_8x;
+        coord_in.y ++;
+    }
+
+    sum = sum / cont;
+    vxc_short8 dst;
+    sum *= genericAvgScale;
+    _viv_asm(COPY, dst, sum, 4);
+    dst.s0 = dst.s1;
+    VXC_WriteImage2DArray(output, coord_out, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+}
+
+_viv_uniform VXC_512Bits uni8BAdd_SubNZP_k3s1_4x8;
+_viv_uniform VXC_512Bits uniConvert16BtoFloat4_lo_4x4;
+_viv_uniform VXC_512Bits uniConvert16BtoFloat4_hi_4x4;
+_viv_uniform VXC_512Bits uniExtact8Bit_2x8;
+
+__kernel void vxcTFPooling_K3S1_U8toU8
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       mask,
+                 int             height,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0) - padding.x, get_global_id(1) - padding.y, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+
+    vxc_uchar16 lineA, lineB, lineC, lineD;
+    vxc_short8  sumA,  sumB,  sumC, sumD;
+    VXC_ReadImage2DArray(lineA, input,  coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 9, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(lineB, input,  coord_in, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 9, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(lineC, input,  coord_in, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 9, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(lineD, input,  coord_in, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 9, 0, VXC_RM_TowardZero, 0));
+
+    int4 coord_filter =  (int4)(get_global_id(0), get_global_id(0) + 4, get_global_id(1), get_global_id(1) + 1);
+
+    vxc_uchar16 inputZP;
+    _viv_asm(COPY, inputZP, input_ZP, 16);
+    VXC_DP4x8(sumA, lineA, inputZP, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uni8BAdd_SubNZP_k3s1_4x8);
+    VXC_DP4x8(sumB, lineB, inputZP, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uni8BAdd_SubNZP_k3s1_4x8);
+    VXC_DP4x8(sumC, lineC, inputZP, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uni8BAdd_SubNZP_k3s1_4x8);
+    coord_out.y --;
+
+    float4 dst0, dst1;
+    do
+    {
+        float4 filter0;
+        float4 filter1;
+
+        filter0 = read_imagef(mask, coord_filter.xz);
+        filter1 = read_imagef(mask, coord_filter.yz);
+
+        sumA = sumA + sumB;
+        sumA = sumA + sumC;
+
+        VXC_DP4x4(dst0, sumA, sumA, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert16BtoFloat4_lo_4x4);
+        VXC_DP4x4(dst1, sumA, sumA, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert16BtoFloat4_hi_4x4);
+
+        dst0 = dst0 * filter0 + output_ZP;
+        dst1 = dst1 * filter1 + output_ZP;
+
+        vxc_int4 data0, data1;
+        data0  = convert_int4(dst0);
+        data1  = convert_int4(dst1);
+
+        VXC_DP2x8(lineA, data0, data1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniExtact8Bit_2x8);
+        coord_out.y ++;
+        VXC_WriteImage2DArray(output, coord_out, lineA, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        VXC_DP4x8(sumD, lineD, inputZP, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uni8BAdd_SubNZP_k3s1_4x8);
+
+        VXC_ReadImage2DArray(lineA, input,  coord_in, VXC_5BITOFFSET_XY(0, 4), VXC_MODIFIER(0, 9, 0, VXC_RM_TowardZero, 0));
+
+        filter0 = read_imagef(mask, coord_filter.xw);
+        filter1 = read_imagef(mask, coord_filter.yw);
+        sumB = sumB + sumC;
+        sumB = sumB + sumD;
+
+        VXC_DP4x4(dst0, sumB, sumB, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert16BtoFloat4_lo_4x4);
+        VXC_DP4x4(dst1, sumB, sumB, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert16BtoFloat4_hi_4x4);
+
+        dst0 = dst0 * filter0 + output_ZP;
+        dst1 = dst1 * filter1 + output_ZP;
+
+        data0  = convert_int4(dst0);
+        data1  = convert_int4(dst1);
+
+        VXC_DP2x8(lineB, data0, data1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniExtact8Bit_2x8);
+
+        coord_filter.zw += 2;
+        coord_out.y ++;
+        VXC_WriteImage2DArray(output, coord_out, lineB, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        VXC_DP4x8(sumA, lineA, inputZP, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uni8BAdd_SubNZP_k3s1_4x8);
+
+        VXC_ReadImage2DArray(lineB, input,  coord_in, VXC_5BITOFFSET_XY(0, 5), VXC_MODIFIER(0, 9, 0, VXC_RM_TowardZero, 0));
+
+        filter0 = read_imagef(mask, coord_filter.xz);
+        filter1 = read_imagef(mask, coord_filter.yz);
+        sumC = sumC + sumD;
+        sumC = sumC + sumA;
+
+        VXC_DP4x4(dst0, sumC, sumC, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert16BtoFloat4_lo_4x4);
+        VXC_DP4x4(dst1, sumC, sumC, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert16BtoFloat4_hi_4x4);
+
+        dst0 = dst0 * filter0 + output_ZP;
+        dst1 = dst1 * filter1 + output_ZP;
+
+        data0  = convert_int4(dst0);
+        data1  = convert_int4(dst1);
+
+        VXC_DP2x8(lineC, data0, data1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniExtact8Bit_2x8);
+
+        coord_out.y ++;
+        VXC_WriteImage2DArray(output, coord_out, lineC, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        VXC_DP4x8(sumB, lineB, inputZP, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uni8BAdd_SubNZP_k3s1_4x8);
+
+        VXC_ReadImage2DArray(lineC, input,  coord_in, VXC_5BITOFFSET_XY(0, 6), VXC_MODIFIER(0, 9, 0, VXC_RM_TowardZero, 0));
+
+        filter0 = read_imagef(mask, coord_filter.xw);
+        filter1 = read_imagef(mask, coord_filter.yw);
+        sumD = sumD + sumA;
+        sumD = sumD + sumB;
+
+        VXC_DP4x4(dst0, sumD, sumD, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert16BtoFloat4_lo_4x4);
+        VXC_DP4x4(dst1, sumD, sumD, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert16BtoFloat4_hi_4x4);
+
+        dst0 = dst0 * filter0 + output_ZP;
+        dst1 = dst1 * filter1 + output_ZP;
+
+        data0  = convert_int4(dst0);
+        data1  = convert_int4(dst1);
+
+        VXC_DP2x8(lineD, data0, data1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniExtact8Bit_2x8);
+
+        coord_filter.zw += 2;
+        coord_out.y ++;
+        VXC_WriteImage2DArray(output, coord_out, lineD, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        VXC_DP4x8(sumC, lineC, inputZP, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uni8BAdd_SubNZP_k3s1_4x8);
+
+        VXC_ReadImage2DArray(lineD, input,  coord_in, VXC_5BITOFFSET_XY(0, 7), VXC_MODIFIER(0, 9, 0, VXC_RM_TowardZero, 0));
+        coord_in.y += 4;
+    } while (coord_out.y < height);
+}

@@ -1,0 +1,784 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+_viv_uniform VXC_512Bits uniFp16toFp32_4x4;
+_viv_uniform float2 q_PoolWH;
+_viv_uniform int2 inputSize;
+_viv_uniform int offset;
+#define EPS        (0.000002f)
+_viv_uniform int minVal;
+_viv_uniform float output_scale;
+_viv_uniform float input_zp;
+_viv_uniform float output_zp;
+_viv_uniform float scaleROI;
+_viv_uniform float roi_tail;
+_viv_uniform int channel_count;
+
+_viv_uniform VXC_512Bits uniConvBF16toF32_Part0_2x8;
+
+__kernel void roiPooling_I8_F16toI8
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       rois,
+    __write_only image2d_array_t output,
+                 int             pool_width,
+                 int             pool_height,
+                 float           spatial_scale
+    )
+{
+    int depth = get_global_id(1);
+    int idx   = get_global_id(0);
+    float2 poolWH = (float2)(pool_width, pool_height);
+
+    int2 roiWH;
+    float2 roi_size_scale;
+    int2 coord_roi = (int2)(0, idx);
+
+    vxc_ushort8 rect_coord_u16;
+    vxc_half8 rect_coord_fp16;
+
+    if (offset == 1)
+    {
+        int batch_idx = convert_int(read_imagef(rois, coord_roi.xy).x);
+        coord_roi.x = 1;
+        depth = depth + batch_idx * channel_count;
+    }
+    VXC_ReadImage(rect_coord_u16, rois, coord_roi, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, rect_coord_fp16, rect_coord_u16, 16);
+    vxc_float4 rect_coord_f;
+    VXC_DP4x4(rect_coord_f, rect_coord_fp16, rect_coord_fp16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+    rect_coord_f = rect_coord_f.xyzw * spatial_scale;
+    vxc_int4 rect_coord = convert_int4_rte(rect_coord_f);
+
+    roiWH = rect_coord.zw - rect_coord.xy + 1;
+    roiWH = roiWH > 1 ? roiWH : 1;
+    roi_size_scale = convert_float2(roiWH) * q_PoolWH;
+    float4 pwh = (float4)(0, 0, 1, 1);
+    pwh.xy = 0;
+
+    for (int ph = 0; ph < pool_height; ph++)
+    {
+        pwh.xz = (float2)(0, 1);
+        for (int pw = 0; pw < pool_width; pw++)
+        {
+            float4 tmp = pwh;
+            tmp = tmp * roi_size_scale.xyxy;
+            tmp.xy = floor(tmp.xy);
+            int2 start = convert_int2_rtz(tmp.xy);
+            start += rect_coord.xy;
+            tmp.zw = ceil(tmp.zw - EPS);
+            int2 end = convert_int2_rtz(tmp.zw);
+            end += rect_coord.xy;
+
+            pwh.xz += 1;
+
+            int4 coord_out = (int4)(ph * pool_width + pw, get_global_id(1), idx, 0);
+            end.xy  = end.xy > 0 ? end.xy : 0;
+            start.xy = start.xy > 0 ?  start.xy : 0;
+            end.xy = min(end.xy, inputSize.xy);
+            start.xy = min(start.xy, inputSize.xy);
+            if(end.y <= start.y || end.x <= start.x)
+            {
+                char vec = 0;
+                VXC_WriteImage2DArray(output, coord_out, vec, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                continue;
+            }
+            char output_data = -128;
+
+            int h = start.y;
+            do
+            {
+                int w = start.x;
+                do
+                {
+                    int4 coord_in = (int4)(w, h, depth, 0);
+                    char vec0;
+                    VXC_ReadImage2DArray(vec0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+                    w ++;
+                    output_data = max(output_data, vec0);
+                } while (w < end.x);
+                h ++;
+            } while (h < end.y);
+
+            float temp = convert_float(output_data);
+            temp = temp - input_zp;
+            temp = temp * output_scale + output_zp;
+            output_data = convert_char_rte(temp);
+            char minData;
+            _viv_asm(COPY, minData, minVal, 4);
+            output_data = max(minData, output_data);
+            VXC_WriteImage2DArray(output, coord_out, output_data, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        }
+        pwh.yw += 1;
+    }
+}
+
+__kernel void roiPooling_I8_I8toI8
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       rois,
+    __write_only image2d_array_t output,
+                 int             pool_width,
+                 int             pool_height,
+                 float           spatial_scale
+    )
+{
+    int depth = get_global_id(1);
+    int idx   = get_global_id(0);
+    float2 poolWH = (float2)(pool_width, pool_height);
+
+    int2 roiWH;
+    float2 roi_size_scale;
+    int2 coord_roi = (int2)(0, idx);
+
+    if (offset == 1)
+    {
+        int batch_idx = convert_float(read_imagei(rois, coord_roi.xy).x) * scaleROI + roi_tail;
+        coord_roi.x = 1;
+        depth = depth + batch_idx * channel_count;
+    }
+
+    vxc_char16 rect_coord_u16;
+    VXC_ReadImage(rect_coord_u16, rois, coord_roi, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    vxc_float4 rect_coord_f;
+    VXC_DP4x4(rect_coord_f, rect_coord_u16, rect_coord_u16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+    rect_coord_f = rect_coord_f * scaleROI + roi_tail;
+    rect_coord_f = rect_coord_f.xyzw * spatial_scale;
+    vxc_int4 rect_coord = convert_int4_rte(rect_coord_f);
+
+    roiWH = rect_coord.zw - rect_coord.xy + 1;
+    roiWH = roiWH > 1 ? roiWH : 1;
+    roi_size_scale = convert_float2(roiWH) * q_PoolWH;
+    float4 pwh = (float4)(0, 0, 1, 1);
+    pwh.xy = 0;
+
+    for (int ph = 0; ph < pool_height; ph++)
+    {
+        pwh.xz = (float2)(0, 1);
+        for (int pw = 0; pw < pool_width; pw++)
+        {
+            float4 tmp = pwh;
+            tmp = tmp * roi_size_scale.xyxy;
+            tmp.xy = floor(tmp.xy);
+            int2 start = convert_int2_rtz(tmp.xy);
+            start += rect_coord.xy;
+            tmp.zw = ceil(tmp.zw - EPS);
+            int2 end = convert_int2_rtz(tmp.zw);
+            end += rect_coord.xy;
+
+            pwh.xz += 1;
+
+            int4 coord_out = (int4)(ph * pool_width + pw, get_global_id(1), idx, 0);
+            end.xy  = end.xy > 0 ? end.xy : 0;
+            start.xy = start.xy > 0 ?  start.xy : 0;
+            end.xy = min(end.xy, inputSize.xy);
+            start.xy = min(start.xy, inputSize.xy);
+            if(end.y <= start.y || end.x <= start.x)
+            {
+                char vec = 0;
+                VXC_WriteImage2DArray(output, coord_out, vec, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                continue;
+            }
+            char output_data = -128;
+
+            int h = start.y;
+            do
+            {
+                int w = start.x;
+                do
+                {
+                    int4 coord_in = (int4)(w, h, depth, 0);
+                    char vec0;
+                    VXC_ReadImage2DArray(vec0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+                    w ++;
+                    output_data = max(output_data, vec0);
+                } while (w < end.x);
+                h ++;
+            } while (h < end.y);
+            float temp = convert_float(output_data);
+            temp = temp - input_zp;
+            temp = temp * output_scale + output_zp;
+            output_data = convert_char_rte(temp);
+            char minData;
+            _viv_asm(COPY, minData, minVal, 4);
+            output_data = max(minData, output_data);
+            VXC_WriteImage2DArray(output, coord_out, output_data, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        }
+        pwh.yw += 1;
+    }
+}
+
+__kernel void roiPooling_I16_F16toI16
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       rois,
+    __write_only image2d_array_t output,
+                 int             pool_width,
+                 int             pool_height,
+                 float           spatial_scale
+    )
+{
+    int depth = get_global_id(1);
+    int idx   = get_global_id(0);
+    float2 poolWH = (float2)(pool_width, pool_height);
+
+    int2 roiWH;
+    float2 roi_size_scale;
+    int2 coord_roi = (int2)(0, idx);
+
+    if (offset == 1)
+    {
+        int batch_idx = convert_int(read_imagef(rois, coord_roi.xy).x);
+        coord_roi.x = 1;
+        depth = depth + batch_idx * channel_count;
+    }
+
+    vxc_ushort8 rect_coord_u16;
+    vxc_half8 rect_coord_fp16;
+    VXC_ReadImage(rect_coord_u16, rois, coord_roi, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, rect_coord_fp16, rect_coord_u16, 16);
+    vxc_float4 rect_coord_f;
+    VXC_DP4x4(rect_coord_f, rect_coord_fp16, rect_coord_fp16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+    rect_coord_f = rect_coord_f.xyzw * spatial_scale;
+    vxc_int4 rect_coord = convert_int4_rte(rect_coord_f);
+
+    roiWH = rect_coord.zw - rect_coord.xy + 1;
+    roiWH = roiWH > 1 ? roiWH : 1;
+    roi_size_scale = convert_float2(roiWH) * q_PoolWH;
+    float4 pwh = (float4)(0, 0, 1, 1);
+    pwh.xy = 0;
+
+    for (int ph = 0; ph < pool_height; ph++)
+    {
+        pwh.xz = (float2)(0, 1);
+        for (int pw = 0; pw < pool_width; pw++)
+        {
+            float4 tmp = pwh;
+            tmp = tmp * roi_size_scale.xyxy;
+            tmp.xy = floor(tmp.xy);
+            int2 start = convert_int2_rtz(tmp.xy);
+            start += rect_coord.xy;
+            tmp.zw = ceil(tmp.zw - EPS);
+            int2 end = convert_int2_rtz(tmp.zw);
+            end += rect_coord.xy;
+
+            pwh.xz += 1;
+
+            int4 coord_out = (int4)(ph * pool_width + pw, get_global_id(1), idx, 0);
+            end.xy  = end.xy > 0 ? end.xy : 0;
+            start.xy = start.xy > 0 ?  start.xy : 0;
+            end.xy = min(end.xy, inputSize.xy);
+            start.xy = min(start.xy, inputSize.xy);
+            if(end.y <= start.y || end.x <= start.x)
+            {
+                short vec = 0;
+                VXC_WriteImage2DArray(output, coord_out, vec, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                continue;
+            }
+            short output_data = -32768;
+
+            int h = start.y;
+            do
+            {
+                int w = start.x;
+                do
+                {
+                    int4 coord_in = (int4)(w, h, depth, 0);
+                    short vec0;
+                    VXC_ReadImage2DArray(vec0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+                    w ++;
+                    output_data = max(output_data, vec0);
+                } while (w < end.x);
+                h ++;
+            } while (h < end.y);
+            float temp = convert_float(output_data);
+            temp = temp - input_zp;
+            temp = temp * output_scale + output_zp;
+            output_data = convert_short_rte(temp);
+            short minData;
+            _viv_asm(COPY, minData, minVal, 4);
+            output_data = max(minData, output_data);
+            VXC_WriteImage2DArray(output, coord_out, output_data, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        }
+        pwh.yw += 1;
+    }
+}
+
+__kernel void roiPooling_I16_I16toI16
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       rois,
+    __write_only image2d_array_t output,
+                 int             pool_width,
+                 int             pool_height,
+                 float           spatial_scale
+    )
+{
+    int depth = get_global_id(1);
+    int idx   = get_global_id(0);
+    float2 poolWH = (float2)(pool_width, pool_height);
+
+    int2 roiWH;
+    float2 roi_size_scale;
+    int2 coord_roi = (int2)(0, idx);
+
+    if (offset == 1)
+    {
+        int batch_idx = convert_float(read_imagei(rois, coord_roi.xy).x) * scaleROI + roi_tail;
+        coord_roi.x = 1;
+        depth = depth + batch_idx * channel_count;
+    }
+
+    vxc_short8 rect_coord_I16;
+    VXC_ReadImage(rect_coord_I16, rois, coord_roi, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    vxc_float4 rect_coord_f;
+    VXC_DP4x4(rect_coord_f, rect_coord_I16, rect_coord_I16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+    rect_coord_f = rect_coord_f * scaleROI + roi_tail;
+    rect_coord_f = rect_coord_f.xyzw * spatial_scale;
+    vxc_int4 rect_coord = convert_int4_rte(rect_coord_f);
+
+    roiWH = rect_coord.zw - rect_coord.xy + 1;
+    roiWH = roiWH > 1 ? roiWH : 1;
+    roi_size_scale = convert_float2(roiWH) * q_PoolWH;
+    float4 pwh = (float4)(0, 0, 1, 1);
+    pwh.xy = 0;
+
+    for (int ph = 0; ph < pool_height; ph++)
+    {
+        pwh.xz = (float2)(0, 1);
+        for (int pw = 0; pw < pool_width; pw++)
+        {
+            float4 tmp = pwh;
+            tmp = tmp * roi_size_scale.xyxy;
+            tmp.xy = floor(tmp.xy);
+            int2 start = convert_int2_rtz(tmp.xy);
+            start += rect_coord.xy;
+            tmp.zw = ceil(tmp.zw - EPS);
+            int2 end = convert_int2_rtz(tmp.zw);
+            end += rect_coord.xy;
+
+            pwh.xz += 1;
+
+            int4 coord_out = (int4)(ph * pool_width + pw, get_global_id(1), idx, 0);
+            end.xy  = end.xy > 0 ? end.xy : 0;
+            start.xy = start.xy > 0 ?  start.xy : 0;
+            end.xy = min(end.xy, inputSize.xy);
+            start.xy = min(start.xy, inputSize.xy);
+            if(end.y <= start.y || end.x <= start.x)
+            {
+                short vec = 0;
+                VXC_WriteImage2DArray(output, coord_out, vec, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                continue;
+            }
+            short output_data = -32768;
+
+            int h = start.y;
+            do
+            {
+                int w = start.x;
+                do
+                {
+                    int4 coord_in = (int4)(w, h, depth, 0);
+                    short vec0;
+                    VXC_ReadImage2DArray(vec0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+                    w ++;
+                    output_data = max(output_data, vec0);
+                } while (w < end.x);
+                h ++;
+            } while (h < end.y);
+            float temp = convert_float(output_data);
+            temp = temp - input_zp;
+            temp = temp * output_scale + output_zp;
+            output_data = convert_short_rte(temp);
+            short minData;
+            _viv_asm(COPY, minData, minVal, 4);
+            output_data = max(minData, output_data);
+            VXC_WriteImage2DArray(output, coord_out, output_data, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        }
+        pwh.yw += 1;
+    }
+}
+
+__kernel void roiPooling_F16_F16toF16
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       rois,
+    __write_only image2d_array_t output,
+                 int             pool_width,
+                 int             pool_height,
+                 float           spatial_scale
+    )
+{
+    int depth = get_global_id(1);
+    int idx   = get_global_id(0);
+    float2 poolWH = (float2)(pool_width, pool_height);
+
+    int2 roiWH;
+    float2 roi_size_scale;
+    int2 coord_roi = (int2)(0, idx);
+
+    if (offset == 1)
+    {
+        int batch_idx = convert_int(read_imagef(rois, coord_roi.xy).x);
+        coord_roi.x = 1;
+        depth = depth + batch_idx * channel_count;
+    }
+
+    vxc_ushort8 rect_coord_u16;
+    vxc_half8 rect_coord_fp16;
+    VXC_ReadImage(rect_coord_u16, rois, coord_roi, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, rect_coord_fp16, rect_coord_u16, 16);
+    vxc_float4 rect_coord_f;
+    VXC_DP4x4(rect_coord_f, rect_coord_fp16, rect_coord_fp16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+
+    rect_coord_f = rect_coord_f.xyzw * spatial_scale;
+    vxc_int4 rect_coord = convert_int4_rte(rect_coord_f);
+
+    roiWH = rect_coord.zw - rect_coord.xy + 1;
+    roiWH = roiWH > 1 ? roiWH : 1;
+    roi_size_scale = convert_float2(roiWH) * q_PoolWH;
+    float4 pwh = (float4)(0, 0, 1, 1);
+    pwh.xy = 0;
+
+    for (int ph = 0; ph < pool_height; ph++)
+    {
+        pwh.xz = (float2)(0, 1);
+        for (int pw = 0; pw < pool_width; pw++)
+        {
+            float4 tmp = pwh;
+            tmp = tmp * roi_size_scale.xyxy;
+            tmp.xy = floor(tmp.xy);
+            int2 start = convert_int2_rtz(tmp.xy);
+            start += rect_coord.xy;
+            tmp.zw = ceil(tmp.zw - EPS);
+            int2 end = convert_int2_rtz(tmp.zw);
+            end += rect_coord.xy;
+
+            pwh.xz += 1;
+            int4 coord_out = (int4)(ph * pool_width + pw, get_global_id(1), idx, 0);
+            end.xy  = end.xy > 0 ? end.xy : 0;
+            start.xy = start.xy > 0 ?  start.xy : 0;
+            end.xy = min(end.xy, inputSize.xy);
+            start.xy = min(start.xy, inputSize.xy);
+            if(end.y <= start.y || end.x <= start.x)
+            {
+                short vec = 0;
+                VXC_WriteImage2DArray(output, coord_out, vec, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                continue;
+            }
+            vxc_short8 output_data = {0, 0, 0, 0, 0, 0, 0, 0};
+
+            int h = start.y;
+            do
+            {
+                int w = start.x;
+                do
+                {
+                    int4 coord_in = (int4)(w, h, depth, 0);
+                    vxc_short8 vec0;
+                    VXC_ReadImage2DArray(vec0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+                    w ++;
+                    output_data = max(output_data, vec0);
+                } while (w < end.x);
+                h ++;
+            } while (h < end.y);
+            VXC_WriteImage2DArray(output, coord_out, output_data, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        }
+        pwh.yw += 1;
+    }
+}
+
+__kernel void roiPooling_BF16_BF16toBF16
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       rois,
+    __write_only image2d_array_t output,
+                 int             pool_width,
+                 int             pool_height,
+                 float           spatial_scale
+    )
+{
+    int depth = get_global_id(1);
+    int idx   = get_global_id(0);
+    float2 poolWH = (float2)(pool_width, pool_height);
+
+    int2 roiWH;
+    float2 roi_size_scale;
+    int2 coord_roi = (int2)(0, idx);
+
+    vxc_ushort8 rect_coord_u16, rect_coord_pack;
+    vxc_float4 rect_coord_f;
+    vxc_short8 zero = (vxc_short8)(0, 0, 0, 0, 0, 0, 0, 0);
+
+    if (offset == 1)
+    {
+        VXC_ReadImage(rect_coord_u16, rois, coord_roi, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        coord_roi.x = 1;
+
+        VXC_DP2x8(rect_coord_pack, rect_coord_u16, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0),
+                                                        uniConvBF16toF32_Part0_2x8);
+        _viv_asm(COPY, rect_coord_f, rect_coord_pack, 16);
+
+        int batch_idx = convert_int(rect_coord_f.x);
+        depth = depth + batch_idx * channel_count;
+    }
+
+    VXC_ReadImage(rect_coord_u16, rois, coord_roi, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(rect_coord_pack, rect_coord_u16, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+    _viv_asm(COPY, rect_coord_f, rect_coord_pack, 16);
+
+    rect_coord_f = rect_coord_f.xyzw * spatial_scale;
+    vxc_int4 rect_coord = convert_int4_rte(rect_coord_f);
+
+    roiWH = rect_coord.zw - rect_coord.xy + 1;
+    roiWH = roiWH > 1 ? roiWH : 1;
+    roi_size_scale = convert_float2(roiWH) * q_PoolWH;
+    float4 pwh = (float4)(0, 0, 1, 1);
+    pwh.xy = 0;
+
+    for (int ph = 0; ph < pool_height; ph++)
+    {
+        pwh.xz = (float2)(0, 1);
+        for (int pw = 0; pw < pool_width; pw++)
+        {
+            float4 tmp = pwh;
+            tmp = tmp * roi_size_scale.xyxy;
+            tmp.xy = floor(tmp.xy);
+            int2 start = convert_int2_rtz(tmp.xy);
+            start += rect_coord.xy;
+            tmp.zw = ceil(tmp.zw - EPS);
+            int2 end = convert_int2_rtz(tmp.zw);
+            end += rect_coord.xy;
+
+            pwh.xz += 1;
+            int4 coord_out = (int4)(ph * pool_width + pw, get_global_id(1), idx, 0);
+            end.xy  = end.xy > 0 ? end.xy : 0;
+            start.xy = start.xy > 0 ?  start.xy : 0;
+            end.xy = min(end.xy, inputSize.xy);
+            start.xy = min(start.xy, inputSize.xy);
+            if(end.y <= start.y || end.x <= start.x)
+            {
+                short vec = 0;
+                VXC_WriteImage2DArray(output, coord_out, vec, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                continue;
+            }
+            vxc_short8 output_data = {0, 0, 0, 0, 0, 0, 0, 0};
+
+            int h = start.y;
+            do
+            {
+                int w = start.x;
+                do
+                {
+                    int4 coord_in = (int4)(w, h, depth, 0);
+                    vxc_short8 vec0;
+                    VXC_ReadImage2DArray(vec0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+                    w ++;
+                    output_data = max(output_data, vec0);
+                } while (w < end.x);
+                h ++;
+            } while (h < end.y);
+            VXC_WriteImage2DArray(output, coord_out, output_data, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        }
+        pwh.yw += 1;
+    }
+}
+
+__kernel void roiPooling_U8_F16toU8
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t        rois,
+    __write_only image2d_array_t output,
+                 int             pool_width,
+                 int             pool_height,
+                 float           spatial_scale
+    )
+{
+    int depth = get_global_id(1);
+    int idx   = get_global_id(0);
+    float2 poolWH = (float2)(pool_width, pool_height);
+
+    int2 roiWH;
+    float2 roi_size_scale;
+    int2 coord_roi = (int2)(0, idx);
+
+    if (offset == 1)
+    {
+        int batch_idx = convert_int(read_imagef(rois, coord_roi.xy).x);
+        coord_roi.x = 1;
+        depth = depth + batch_idx * channel_count;
+    }
+
+    vxc_ushort8 rect_coord_u16;
+    vxc_half8 rect_coord_fp16;
+    VXC_ReadImage(rect_coord_u16, rois, coord_roi, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, rect_coord_fp16, rect_coord_u16, 16);
+    vxc_float4 rect_coord_f;
+    VXC_DP4x4(rect_coord_f, rect_coord_fp16, rect_coord_fp16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+    rect_coord_f = rect_coord_f.xyzw * spatial_scale;
+    vxc_int4 rect_coord = convert_int4_rte(rect_coord_f);
+
+    roiWH = rect_coord.zw - rect_coord.xy + 1;
+    roiWH = roiWH > 1 ? roiWH : 1;
+    roi_size_scale = convert_float2(roiWH) * q_PoolWH;
+    float4 pwh = (float4)(0, 0, 1, 1);
+    pwh.xy = 0;
+
+    for (int ph = 0; ph < pool_height; ph++)
+    {
+        pwh.xz = (float2)(0, 1);
+        for (int pw = 0; pw < pool_width; pw++)
+        {
+            float4 tmp = pwh;
+            tmp = tmp * roi_size_scale.xyxy;
+            tmp.xy = floor(tmp.xy);
+            int2 start = convert_int2_rtz(tmp.xy);
+            start += rect_coord.xy;
+            tmp.zw = ceil(tmp.zw - EPS);
+            int2 end = convert_int2_rtz(tmp.zw);
+            end += rect_coord.xy;
+
+            pwh.xz += 1;
+
+            int4 coord_out = (int4)(ph * pool_width + pw, get_global_id(1), idx, 0);
+            end.xy  = end.xy > 0 ? end.xy : 0;
+            start.xy = start.xy > 0 ?  start.xy : 0;
+            end.xy = min(end.xy, inputSize.xy);
+            start.xy = min(start.xy, inputSize.xy);
+            if(end.y <= start.y || end.x <= start.x)
+            {
+                unsigned char vec = 0;
+                VXC_WriteImage2DArray(output, coord_out, vec, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                continue;
+            }
+
+            unsigned char output_data = 0;
+
+            int h = start.y;
+            do
+            {
+                int w = start.x;
+                do
+                {
+                    int4 coord_in = (int4)(w, h, depth, 0);
+                    unsigned char vec0;
+                    VXC_ReadImage2DArray(vec0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+                    w ++;
+
+                    output_data = max(output_data, vec0);
+                } while (w < end.x);
+                h ++;
+            } while (h < end.y);
+
+            float temp = convert_float(output_data);
+            temp = temp - input_zp;
+            temp = temp * output_scale + output_zp;
+            output_data = convert_uchar_rte(temp);
+
+            unsigned char minData;
+            _viv_asm(COPY, minData, minVal, 4);
+            output_data = max(minData, output_data);
+            VXC_WriteImage2DArray(output, coord_out, output_data, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        }
+        pwh.yw += 1;
+    }
+}
+
+__kernel void roiPooling_U8_U8toU8
+     (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       rois,
+    __write_only image2d_array_t output,
+                 int             pool_width,
+                 int             pool_height,
+                 float           spatial_scale
+    )
+{
+    int depth = get_global_id(1);
+    int idx   = get_global_id(0);
+    float2 poolWH = (float2)(pool_width, pool_height);
+
+    int2 roiWH;
+    float2 roi_size_scale;
+    int2 coord_roi = (int2)(0, idx);
+
+    if (offset == 1)
+    {
+        int batch_idx = convert_float(read_imageui(rois, coord_roi.xy).x) * scaleROI + roi_tail;
+        coord_roi.x = 1;
+        depth = depth + batch_idx * channel_count;
+    }
+
+    vxc_uchar8 rect_coord_u16;
+    VXC_ReadImage(rect_coord_u16, rois, coord_roi, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    vxc_float4 rect_coord_f;
+    VXC_DP4x4(rect_coord_f, rect_coord_u16, rect_coord_u16, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniFp16toFp32_4x4);
+    rect_coord_f = rect_coord_f * scaleROI + roi_tail;
+    rect_coord_f = rect_coord_f.xyzw * spatial_scale;
+    vxc_int4 rect_coord = convert_int4_rte(rect_coord_f);
+
+    roiWH = rect_coord.zw - rect_coord.xy + 1;
+    roiWH = roiWH > 1 ? roiWH : 1;
+    roi_size_scale = convert_float2(roiWH) * q_PoolWH;
+    float4 pwh = (float4)(0, 0, 1, 1);
+    pwh.xy = 0;
+
+    for (int ph = 0; ph < pool_height; ph++)
+    {
+        pwh.xz = (float2)(0, 1);
+        for (int pw = 0; pw < pool_width; pw++)
+        {
+            float4 tmp = pwh;
+            tmp = tmp * roi_size_scale.xyxy;
+            tmp.xy = floor(tmp.xy);
+            int2 start = convert_int2_rtz(tmp.xy);
+            start += rect_coord.xy;
+            tmp.zw = ceil(tmp.zw - EPS);
+            int2 end = convert_int2_rtz(tmp.zw);
+            end += rect_coord.xy;
+
+            pwh.xz += 1;
+
+            int4 coord_out = (int4)(ph * pool_width + pw, get_global_id(1), idx, 0);
+            end.xy  = end.xy > 0 ? end.xy : 0;
+            start.xy = start.xy > 0 ?  start.xy : 0;
+            end.xy = min(end.xy, inputSize.xy);
+            start.xy = min(start.xy, inputSize.xy);
+            if(end.y <= start.y || end.x <= start.x)
+            {
+                unsigned char vec = 0;
+                VXC_WriteImage2DArray(output, coord_out, vec, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                continue;
+            }
+
+            unsigned char output_data = 0;
+
+            int h = start.y;
+            do
+            {
+                int w = start.x;
+                do
+                {
+                    int4 coord_in = (int4)(w, h, depth, 0);
+                    unsigned char vec0;
+                    VXC_ReadImage2DArray(vec0, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+                    w ++;
+
+                    output_data = max(output_data, vec0);
+                } while (w < end.x);
+                h ++;
+            } while (h < end.y);
+
+            float temp = convert_float(output_data);
+            temp = temp - input_zp;
+            temp = temp * output_scale + output_zp;
+            output_data = convert_uchar_rte(temp);
+
+            unsigned char minData;
+            _viv_asm(COPY, minData, minVal, 4);
+            output_data = max(minData, output_data);
+            VXC_WriteImage2DArray(output, coord_out, output_data, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        }
+        pwh.yw += 1;
+    }
+}

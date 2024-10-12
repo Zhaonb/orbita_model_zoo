@@ -1,0 +1,44 @@
+__kernel void gpuTensorCrop_F32toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_offset = (int4)(get_global_offset(0), get_global_offset(1), get_global_offset(2), 0);
+    float4 tmp = {0.0};
+
+    tmp = read_imagef(input, coord);
+    coord.xyz -= coord_offset.xyz;
+    write_imagef(output, coord, tmp);
+}
+
+__kernel void gpuTensorCrop_U8toU8
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_offset = (int4)(get_global_offset(0), get_global_offset(1), get_global_offset(2), 0);
+    uint4 tmp = {0.0};
+
+    tmp = read_imageui(input, coord);
+    coord.xyz -= coord_offset.xyz;
+    write_imageui(output, coord, tmp);
+}
+
+__kernel void gpuTensorCrop_I32toI32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_offset = (int4)(get_global_offset(0), get_global_offset(1), get_global_offset(2), 0);
+    int4 tmp = {0.0};
+
+    tmp = read_imagei(input, coord);
+    coord.xyz -= coord_offset.xyz;
+    write_imagei(output, coord, tmp);
+}

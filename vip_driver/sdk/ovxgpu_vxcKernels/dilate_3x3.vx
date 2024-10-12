@@ -1,0 +1,65 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+
+__kernel void dilate_3x3_U8toU8
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) - 1, get_global_id(0) + 1);
+
+    uint4 top, med, bot;
+
+    top.x = read_imageui(input, (int2)(coord.z, coord.y - 1)).x;
+    top.y = read_imageui(input, (int2)(coord.x, coord.y - 1)).x;
+    top.z = read_imageui(input, (int2)(coord.w, coord.y - 1)).x;
+    med.x = read_imageui(input, (int2)(coord.z, coord.y + 0)).x;
+    med.y = read_imageui(input, (int2)(coord.x, coord.y + 0)).x;
+    med.z = read_imageui(input, (int2)(coord.w, coord.y + 0)).x;
+    bot.x = read_imageui(input, (int2)(coord.z, coord.y + 1)).x;
+    bot.y = read_imageui(input, (int2)(coord.x, coord.y + 1)).x;
+    bot.z = read_imageui(input, (int2)(coord.w, coord.y + 1)).x;
+
+    uint4 dst;
+
+    uint4 tmp = max(top, max(med, bot));
+    dst = max(tmp.x, max(tmp.y, tmp.z));
+
+    write_imageui(output, coord.xy, dst.xxxx);
+}
+
+__kernel void dilate_3x3_U1toU1
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) - 1, get_global_id(0) + 1);
+
+    uint4 top, med, bot;
+
+    top.x = read_imageui(input, (int2)(coord.z, coord.y - 1)).x;
+    top.y = read_imageui(input, (int2)(coord.x, coord.y - 1)).x;
+    top.z = read_imageui(input, (int2)(coord.w, coord.y - 1)).x;
+    med.x = read_imageui(input, (int2)(coord.z, coord.y + 0)).x;
+    med.y = read_imageui(input, (int2)(coord.x, coord.y + 0)).x;
+    med.z = read_imageui(input, (int2)(coord.w, coord.y + 0)).x;
+    bot.x = read_imageui(input, (int2)(coord.z, coord.y + 1)).x;
+    bot.y = read_imageui(input, (int2)(coord.x, coord.y + 1)).x;
+    bot.z = read_imageui(input, (int2)(coord.w, coord.y + 1)).x;
+
+    uint4 dst0 = top | med;
+    uint4 dst1 = dst0 | bot;
+    uint4 dst;
+    uint4 packBits;
+
+    packBits = (dst1.x & 0xFF) | ((dst1.y & 0xFF) << 8) | ((dst1.z & 0xFF) << 16);
+
+    uint4 bits = (uint4)(8, 8, 8, 8);
+    uint4 offset = (uint4)(7, 8, 9, 0);
+    uint4 values = viv_bitfieldExtract(packBits.xxxx, offset, bits);
+
+    dst.x = values.x | values.y | values.z;
+
+    write_imageui(output, coord.xy, dst.xxxx);
+}

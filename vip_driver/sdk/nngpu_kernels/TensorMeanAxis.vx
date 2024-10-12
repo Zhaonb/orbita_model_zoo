@@ -1,0 +1,107 @@
+#define GPU_MEAN_F32_PROCESS(COORD) \
+    float4 tmp, dst = {0.0}; \
+    float sum = 0.0; \
+    do \
+    { \
+        tmp = read_imagef(input, coord); \
+        sum += tmp.x; \
+        COORD ++; \
+    }while(COORD < count); \
+    sum *= axis_scale; \
+    dst.x = sum; \
+    COORD = 0; \
+    write_imagef(output, coord, dst);
+
+
+__kernel void gpuTensorMeanAxis0_FP32(
+    __read_only  image2d_array_t input,
+    float                        axis_scale,
+    __write_only image2d_array_t output,
+    int                          count
+    )
+{
+    int4 coord = (int4)(0, get_global_id(0), get_global_id(1), 0);
+    GPU_MEAN_F32_PROCESS(coord.x)
+}
+
+__kernel void gpuTensorMeanAxis1_FP32(
+    __read_only  image2d_array_t input,
+    float                        axis_scale,
+    __write_only image2d_array_t output,
+    int                          count
+    )
+{
+    int4 coord = (int4)(get_global_id(0), 0, get_global_id(1), 0);
+    GPU_MEAN_F32_PROCESS(coord.y)
+}
+
+__kernel void gpuTensorMeanAxis2_FP32(
+    __read_only  image2d_array_t input,
+    float                        axis_scale,
+    __write_only image2d_array_t output,
+    int                          count
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    GPU_MEAN_F32_PROCESS(coord.z)
+}
+
+#define GPU_MEAN_QUANT8_PROCESS(COORD) \
+    uint4 tmp, dst = {0.0}; \
+    float sum = 0.0; \
+    do \
+    { \
+        tmp = read_imageui(input, coord); \
+        sum += (convert_int(tmp.x-zpIn))*scaleIn; \
+        COORD ++; \
+    }while(COORD < count); \
+    sum *= axis_scale; \
+    dst.x = floor(sum*scaleOut + zpOut + 0.5); \
+    COORD = 0; \
+    write_imageui(output, coord, dst);
+
+
+__kernel void gpuTensorMeanAxis0_Quant8(
+    __read_only  image2d_array_t input,
+    float                        axis_scale,
+    __write_only image2d_array_t output,
+    int                          count,
+    float                        scaleIn,
+    int                          zpIn,
+    float                        scaleOut,
+    int                          zpOut
+    )
+{
+    int4 coord = (int4)(0, get_global_id(0), get_global_id(1), 0);
+    GPU_MEAN_QUANT8_PROCESS(coord.x)
+}
+
+__kernel void gpuTensorMeanAxis1_Quant8(
+    __read_only  image2d_array_t input,
+    float                        axis_scale,
+    __write_only image2d_array_t output,
+    int                          count,
+    float                        scaleIn,
+    int                          zpIn,
+    float                        scaleOut,
+    int                          zpOut
+    )
+{
+    int4 coord = (int4)(get_global_id(0), 0, get_global_id(1), 0);
+    GPU_MEAN_QUANT8_PROCESS(coord.y)
+}
+
+__kernel void gpuTensorMeanAxis2_Quant8(
+    __read_only  image2d_array_t input,
+    float                        axis_scale,
+    __write_only image2d_array_t output,
+    int                          count,
+    float                        scaleIn,
+    int                          zpIn,
+    float                        scaleOut,
+    int                          zpOut
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    GPU_MEAN_QUANT8_PROCESS(coord.z)
+}

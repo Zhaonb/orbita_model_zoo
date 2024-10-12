@@ -1,0 +1,421 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits UniformDP4x4_cvtFP16ToFP32;
+_viv_uniform VXC_512Bits Uniform2x8_SubFp16;
+_viv_uniform VXC_512Bits UniformDP4x4_cvtFP16ToFp32High;
+_viv_uniform VXC_512Bits UniformDP2x8_packTwoF16;
+
+__kernel void vxcRPN_Softmax_F16toF16
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int numChannels = get_global_size(2);
+
+    int4 coord_in0  = (int4)(x,y,z,0);
+    int4 coord_in1  = (int4)(x,y,z+numChannels,0);
+
+    vxc_short8 w0, w1;
+    VXC_ReadImage2DArray(w0, input, coord_in0, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(w1, input, coord_in1, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    // get absolute diff half8
+    vxc_half8 w0_h, w1_h, max_h, min_h, diff_f;
+    _viv_asm(COPY, w0_h, w0, 16);
+    _viv_asm(COPY, w1_h, w1, 16);
+    VXC_VertMax3_Half(max_h, w0_h, w0_h, w1_h, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_VertMin3_Half(min_h, w0_h, w0_h, w1_h, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(diff_f, min_h, max_h, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), Uniform2x8_SubFp16);
+
+    // convert input data from f16 to f32
+    vxc_float4 input0_low, input0_high;
+    VXC_DP4x4(input0_low , w0_h, w0_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(input0_high, w0_h, w0_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFp32High);
+
+    vxc_float4 input1_low, input1_high;
+    VXC_DP4x4(input1_low , w1_h, w1_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(input1_high, w1_h, w1_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFp32High);
+
+    // convert diff from f16 to f32
+    vxc_float4 low, high;
+    VXC_DP4x4(low,  diff_f, diff_f, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(high, diff_f, diff_f, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFp32High);
+
+    // main process
+    vxc_float4 cst = {1.0, 1.0, 1.0, 1.0};
+    vxc_float4 low_cvt, high_cvt, tmp;
+
+    low  = exp(low);
+    high = exp(high);
+    low  = low  / (cst + low);
+    high = high / (cst + high);
+    low_cvt  = cst - low;
+    high_cvt = cst - high;
+
+    vxc_float4 output0_low, output0_high, output1_low, output1_high;
+    output0_low  = input0_low  > input1_low  ? low_cvt  : low;
+    output0_high = input0_high > input1_high ? high_cvt : high;
+
+    output1_low  = input0_low  < input1_low  ? low_cvt  : low;
+    output1_high = input0_high < input1_high ? high_cvt : high;
+
+    // convert f32 to f16
+    half4 output_h_low, output_h_high;
+    vxc_half8 output0, output1;
+
+    _viv_asm(CONV, output_h_low , output0_low);
+    _viv_asm(CONV, output_h_high, output0_high);
+    VXC_DP2x8(output0, output_h_low, output_h_high, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDP2x8_packTwoF16);
+
+    _viv_asm(CONV, output_h_low , output1_low );
+    _viv_asm(CONV, output_h_high, output1_high);
+    VXC_DP2x8(output1, output_h_low, output_h_high, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDP2x8_packTwoF16);
+
+    // store output
+    _viv_asm(COPY, w0, output0, 16);
+    _viv_asm(COPY, w1, output1, 16);
+    VXC_WriteImage2DArray(output, coord_in0, w0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage2DArray(output, coord_in1, w1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits Uni4x4_Sub_low;
+_viv_uniform VXC_512Bits Uni4x4_Sub_high;
+_viv_uniform float softMaxScale;
+__kernel void vxcRPN_Softmax_I8toF16
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int numChannels = get_global_size(2);
+
+    int4 coord_in0  = (int4)(x,y,z,0);
+    int4 coord_in1  = (int4)(x,y,z+numChannels,0);
+    vxc_char16 w0, w1;
+    VXC_ReadImage2DArray(w0, input, coord_in0, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(w1, input, coord_in1, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    vxc_float4 diff_low,diff_high;
+    VXC_DP4x4(diff_low, w1, w0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), Uni4x4_Sub_low);
+    VXC_DP4x4(diff_high,w1, w0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), Uni4x4_Sub_high);
+    diff_low  = diff_low  * softMaxScale;
+    diff_high = diff_high * softMaxScale;
+    float4 val_low0  = 1.0/(1.0 + exp(diff_low));
+    float4 val_high0 = 1.0/(1.0 + exp(diff_high));
+    float4 val_low1  = 1.0 - val_low0;
+    float4 val_high1 = 1.0 - val_high0;
+
+    half4 output_h_low, output_h_high;
+    vxc_half8 output0, output1;
+    _viv_asm(CONV, output_h_low , val_low0);
+    _viv_asm(CONV, output_h_high, val_high0);
+    VXC_DP2x8(output0, output_h_low, output_h_high, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDP2x8_packTwoF16);
+    _viv_asm(CONV, output_h_low , val_low1 );
+    _viv_asm(CONV, output_h_high, val_high1);
+    VXC_DP2x8(output1, output_h_low, output_h_high, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDP2x8_packTwoF16);
+    vxc_short8 output0_s, output1_s;
+    _viv_asm(COPY, output0_s, output0, 16);
+    _viv_asm(COPY, output1_s, output1, 16);
+    VXC_WriteImage2DArray(output, coord_in0, output0_s, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage2DArray(output, coord_in1, output1_s, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+__kernel void vxcRPN_Softmax_I16toF16
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int numChannels = get_global_size(2);
+
+    int4 coord_in0  = (int4)(x,y,z,0);
+    int4 coord_in1  = (int4)(x,y,z+numChannels,0);
+    vxc_short8 w0, w1;
+    VXC_ReadImage2DArray(w0, input, coord_in0, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(w1, input, coord_in1, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    vxc_float4 diff_low,diff_high;
+    VXC_DP4x4(diff_low, w1, w0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), Uni4x4_Sub_low);
+    VXC_DP4x4(diff_high,w1, w0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), Uni4x4_Sub_high);
+    diff_low  = diff_low  * softMaxScale;
+    diff_high = diff_high * softMaxScale;
+    float4 val_low0  = 1.0/(1.0 + exp(diff_low));
+    float4 val_high0 = 1.0/(1.0 + exp(diff_high));
+    float4 val_low1  = 1.0 - val_low0;
+    float4 val_high1 = 1.0 - val_high0;
+
+    half4 output_h_low, output_h_high;
+    vxc_half8 output0, output1;
+    _viv_asm(CONV, output_h_low , val_low0);
+    _viv_asm(CONV, output_h_high, val_high0);
+    VXC_DP2x8(output0, output_h_low, output_h_high, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDP2x8_packTwoF16);
+    _viv_asm(CONV, output_h_low , val_low1 );
+    _viv_asm(CONV, output_h_high, val_high1);
+    VXC_DP2x8(output1, output_h_low, output_h_high, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDP2x8_packTwoF16);
+    vxc_short8 output0_s, output1_s;
+    _viv_asm(COPY, output0_s, output0, 16);
+    _viv_asm(COPY, output1_s, output1, 16);
+    VXC_WriteImage2DArray(output, coord_in0, output0_s, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage2DArray(output, coord_in1, output1_s, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Softmax_U8toF16
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int numChannels = get_global_size(2);
+
+    int4 coord_in0  = (int4)(x,y,z,0);
+    int4 coord_in1  = (int4)(x,y,z+numChannels,0);
+    vxc_uchar16 w0, w1;
+    VXC_ReadImage2DArray(w0, input, coord_in0, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(w1, input, coord_in1, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    vxc_float4 diff_low,diff_high;
+    VXC_DP4x4(diff_low, w1, w0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), Uni4x4_Sub_low);
+    VXC_DP4x4(diff_high,w1, w0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), Uni4x4_Sub_high);
+    diff_low  = diff_low  * softMaxScale;
+    diff_high = diff_high * softMaxScale;
+    float4 val_low0  = 1.0/(1.0 + exp(diff_low));
+    float4 val_high0 = 1.0/(1.0 + exp(diff_high));
+    float4 val_low1  = 1.0 - val_low0;
+    float4 val_high1 = 1.0 - val_high0;
+
+    half4 output_h_low, output_h_high;
+    vxc_half8 output0, output1;
+    _viv_asm(CONV, output_h_low , val_low0);
+    _viv_asm(CONV, output_h_high, val_high0);
+    VXC_DP2x8(output0, output_h_low, output_h_high, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDP2x8_packTwoF16);
+    _viv_asm(CONV, output_h_low , val_low1 );
+    _viv_asm(CONV, output_h_high, val_high1);
+    VXC_DP2x8(output1, output_h_low, output_h_high, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), UniformDP2x8_packTwoF16);
+    vxc_short8 output0_s, output1_s;
+    _viv_asm(COPY, output0_s, output0, 16);
+    _viv_asm(COPY, output1_s, output1, 16);
+    VXC_WriteImage2DArray(output, coord_in0, output0_s, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage2DArray(output, coord_in1, output1_s, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Softmax_F16toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int numChannels = get_global_size(2);
+
+    int4 coord_in0  = (int4)(x,y,z,0);
+    int4 coord_in1  = (int4)(x,y,z+numChannels,0);
+
+    vxc_short8 w0, w1;
+    VXC_ReadImage2DArray(w0, input, coord_in0, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(w1, input, coord_in1, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord_in0.x <<= 1;
+    coord_in1.x <<= 1;
+
+    // get absolute diff half8
+    vxc_half8 w0_h, w1_h, max_h, min_h, diff_f;
+    _viv_asm(COPY, w0_h, w0, 16);
+    _viv_asm(COPY, w1_h, w1, 16);
+    VXC_VertMax3_Half(max_h, w0_h, w0_h, w1_h, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_VertMin3_Half(min_h, w0_h, w0_h, w1_h, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(diff_f, min_h, max_h, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), Uniform2x8_SubFp16);
+
+    // convert input data from f16 to f32
+    vxc_float4 input0_low, input0_high;
+    VXC_DP4x4(input0_low , w0_h, w0_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(input0_high, w0_h, w0_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFp32High);
+
+    vxc_float4 input1_low, input1_high;
+    VXC_DP4x4(input1_low , w1_h, w1_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(input1_high, w1_h, w1_h, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFp32High);
+
+    // convert diff from f16 to f32
+    vxc_float4 low, high;
+    VXC_DP4x4(low,  diff_f, diff_f, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFP32);
+    VXC_DP4x4(high, diff_f, diff_f, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDP4x4_cvtFP16ToFp32High);
+
+    // main process
+    vxc_float4 cst = {1.0, 1.0, 1.0, 1.0};
+    vxc_float4 low_cvt, high_cvt, tmp;
+
+    low  = exp(low);
+    high = exp(high);
+    low  = low  / (cst + low);
+    high = high / (cst + high);
+    low_cvt  = cst - low;
+    high_cvt = cst - high;
+
+    vxc_float4 output0_low, output0_high, output1_low, output1_high;
+    output0_low  = input0_low  > input1_low  ? low_cvt  : low;
+    output0_high = input0_high > input1_high ? high_cvt : high;
+
+    output1_low  = input0_low  < input1_low  ? low_cvt  : low;
+    output1_high = input0_high < input1_high ? high_cvt : high;
+
+    vxc_ushort8 dst0, dst1;
+
+    _viv_asm(COPY, dst0, output0_low, 16);
+    _viv_asm(COPY, dst1, output0_high, 16);
+    VXC_WriteImage2DArray(output, coord_in0, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in0.x += 8;
+    VXC_WriteImage2DArray(output, coord_in0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(COPY, dst0, output1_low, 16);
+    _viv_asm(COPY, dst1, output1_high, 16);
+    VXC_WriteImage2DArray(output, coord_in1, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in1.x += 8;
+    VXC_WriteImage2DArray(output, coord_in1, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Softmax_I8toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int numChannels = get_global_size(2);
+
+    int4 coord_in0  = (int4)(x,y,z,0);
+    int4 coord_in1  = (int4)(x,y,z+numChannels,0);
+    vxc_char16 w0, w1;
+    VXC_ReadImage2DArray(w0, input, coord_in0, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(w1, input, coord_in1, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord_in0.x <<= 1;
+    coord_in1.x <<= 1;
+
+    vxc_float4 diff_low,diff_high;
+    VXC_DP4x4(diff_low, w1, w0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), Uni4x4_Sub_low);
+    VXC_DP4x4(diff_high,w1, w0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), Uni4x4_Sub_high);
+    diff_low  = diff_low  * softMaxScale;
+    diff_high = diff_high * softMaxScale;
+    float4 val_low0  = 1.0/(1.0 + exp(diff_low));
+    float4 val_high0 = 1.0/(1.0 + exp(diff_high));
+    float4 val_low1  = 1.0 - val_low0;
+    float4 val_high1 = 1.0 - val_high0;
+
+    vxc_ushort8 dst0, dst1;
+
+    _viv_asm(COPY, dst0, val_low0, 16);
+    _viv_asm(COPY, dst1, val_high0, 16);
+    VXC_WriteImage2DArray(output, coord_in0, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in0.x += 8;
+    VXC_WriteImage2DArray(output, coord_in0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(COPY, dst0, val_low1, 16);
+    _viv_asm(COPY, dst1, val_high1, 16);
+    VXC_WriteImage2DArray(output, coord_in1, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in1.x += 8;
+    VXC_WriteImage2DArray(output, coord_in1, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Softmax_I16toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int numChannels = get_global_size(2);
+
+    int4 coord_in0  = (int4)(x,y,z,0);
+    int4 coord_in1  = (int4)(x,y,z+numChannels,0);
+    vxc_short8 w0, w1;
+    VXC_ReadImage2DArray(w0, input, coord_in0, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(w1, input, coord_in1, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord_in0.x <<= 1;
+    coord_in1.x <<= 1;
+
+    vxc_float4 diff_low,diff_high;
+    VXC_DP4x4(diff_low, w1, w0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), Uni4x4_Sub_low);
+    VXC_DP4x4(diff_high,w1, w0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), Uni4x4_Sub_high);
+    diff_low  = diff_low  * softMaxScale;
+    diff_high = diff_high * softMaxScale;
+    float4 val_low0  = 1.0/(1.0 + exp(diff_low));
+    float4 val_high0 = 1.0/(1.0 + exp(diff_high));
+    float4 val_low1  = 1.0 - val_low0;
+    float4 val_high1 = 1.0 - val_high0;
+
+    vxc_ushort8 dst0, dst1;
+
+    _viv_asm(COPY, dst0, val_low0, 16);
+    _viv_asm(COPY, dst1, val_high0, 16);
+    VXC_WriteImage2DArray(output, coord_in0, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in0.x += 8;
+    VXC_WriteImage2DArray(output, coord_in0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(COPY, dst0, val_low1, 16);
+    _viv_asm(COPY, dst1, val_high1, 16);
+    VXC_WriteImage2DArray(output, coord_in1, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in1.x += 8;
+    VXC_WriteImage2DArray(output, coord_in1, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcRPN_Softmax_U8toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int numChannels = get_global_size(2);
+
+    int4 coord_in0  = (int4)(x,y,z,0);
+    int4 coord_in1  = (int4)(x,y,z+numChannels,0);
+    vxc_uchar16 w0, w1;
+    VXC_ReadImage2DArray(w0, input, coord_in0, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage2DArray(w1, input, coord_in1, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord_in0.x <<= 1;
+    coord_in1.x <<= 1;
+
+    vxc_float4 diff_low,diff_high;
+    VXC_DP4x4(diff_low, w1, w0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), Uni4x4_Sub_low);
+    VXC_DP4x4(diff_high,w1, w0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 1), Uni4x4_Sub_high);
+    diff_low  = diff_low  * softMaxScale;
+    diff_high = diff_high * softMaxScale;
+    float4 val_low0  = 1.0/(1.0 + exp(diff_low));
+    float4 val_high0 = 1.0/(1.0 + exp(diff_high));
+    float4 val_low1  = 1.0 - val_low0;
+    float4 val_high1 = 1.0 - val_high0;
+
+    vxc_ushort8 dst0, dst1;
+
+    _viv_asm(COPY, dst0, val_low0, 16);
+    _viv_asm(COPY, dst1, val_high0, 16);
+    VXC_WriteImage2DArray(output, coord_in0, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in0.x += 8;
+    VXC_WriteImage2DArray(output, coord_in0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(COPY, dst0, val_low1, 16);
+    _viv_asm(COPY, dst1, val_high1, 16);
+    VXC_WriteImage2DArray(output, coord_in1, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in1.x += 8;
+    VXC_WriteImage2DArray(output, coord_in1, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}

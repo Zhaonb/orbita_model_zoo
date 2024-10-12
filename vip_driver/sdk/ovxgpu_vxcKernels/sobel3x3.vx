@@ -1,0 +1,53 @@
+__kernel void sobel_3x3_x(read_only image2d_t Inimg, write_only image2d_t outimgx, write_only image2d_t outimgy)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(x,y);
+    int4 pix00 = convert_int4(read_imageui(Inimg,(int2)(x-1,y-1)));
+    int4 pix20 = convert_int4(read_imageui(Inimg,(int2)(x+1,y-1)));
+    int4 pix01 = convert_int4(read_imageui(Inimg,(int2)(x-1,y)));
+    int4 pix21 = convert_int4(read_imageui(Inimg,(int2)(x+1,y)));
+    int4 pix02 = convert_int4(read_imageui(Inimg,(int2)(x-1,y+1)));
+    int4 pix22 = convert_int4(read_imageui(Inimg,(int2)(x+1,y+1)));
+
+    int gx = -pix00.x - 2 * pix01.x - pix02.x + pix20.x + 2 * pix21.x + pix22.x;
+
+    write_imagei(outimgx, coord, (int4)(gx,0,0,0));
+}
+__kernel void sobel_3x3_y(read_only image2d_t Inimg, write_only image2d_t outimgx, write_only image2d_t outimgy)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(x,y);
+    int4 pix00 = convert_int4(read_imageui(Inimg,(int2)(x-1,y-1)));
+    int4 pix10 = convert_int4(read_imageui(Inimg,(int2)(x,y-1)));
+    int4 pix20 = convert_int4(read_imageui(Inimg,(int2)(x+1,y-1)));
+    int4 pix02 = convert_int4(read_imageui(Inimg,(int2)(x-1,y+1)));
+    int4 pix12 = convert_int4(read_imageui(Inimg,(int2)(x,y+1)));
+    int4 pix22 = convert_int4(read_imageui(Inimg,(int2)(x+1,y+1)));
+
+    int gy = -pix00.x - 2 * pix10.x - pix20.x + pix02.x + 2 * pix12.x + pix22.x;
+
+    write_imagei(outimgy, coord, (int4)(gy,0,0,0));
+}
+__kernel void sobel_3x3_xy(read_only image2d_t Inimg, write_only image2d_t outimgx, write_only image2d_t outimgy)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(x,y);
+    int4 pix00 = convert_int4(read_imageui(Inimg,(int2)(x-1,y-1)));
+    int4 pix10 = convert_int4(read_imageui(Inimg,(int2)(x,y-1)));
+    int4 pix20 = convert_int4(read_imageui(Inimg,(int2)(x+1,y-1)));
+    int4 pix01 = convert_int4(read_imageui(Inimg,(int2)(x-1,y)));
+    int4 pix11 = convert_int4(read_imageui(Inimg,(int2)(x,y)));
+    int4 pix21 = convert_int4(read_imageui(Inimg,(int2)(x+1,y)));
+    int4 pix02 = convert_int4(read_imageui(Inimg,(int2)(x-1,y+1)));
+    int4 pix12 = convert_int4(read_imageui(Inimg,(int2)(x,y+1)));
+    int4 pix22 = convert_int4(read_imageui(Inimg,(int2)(x+1,y+1)));
+
+    int gx = -pix00.x - 2 * pix01.x - pix02.x + pix20.x + 2 * pix21.x + pix22.x;
+    int gy = -pix00.x - 2 * pix10.x - pix20.x + pix02.x + 2 * pix12.x + pix22.x;
+
+    write_imagei(outimgx, coord, (int4)(gx,0,0,0));
+    write_imagei(outimgy, coord, (int4)(gy,0,0,0));
+}

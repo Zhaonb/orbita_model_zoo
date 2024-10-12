@@ -1,0 +1,458 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+#define    VX_SCALAR_OP_AND       0x0
+#define    VX_SCALAR_OP_OR        0x1
+#define    VX_SCALAR_OP_XOR       0x2
+#define    VX_SCALAR_OP_NAND      0x3
+#define    VX_SCALAR_OP_EQUAL     0x4
+#define    VX_SCALAR_OP_NOTEQUAL  0x5
+#define    VX_SCALAR_OP_LESS      0x6
+#define    VX_SCALAR_OP_LESSEQ    0x7
+#define    VX_SCALAR_OP_GREATER   0x8
+#define    VX_SCALAR_OP_GREATEREQ 0x9
+#define    VX_SCALAR_OP_ADD       0xA
+#define    VX_SCALAR_OP_SUBTRACT  0xB
+#define    VX_SCALAR_OP_MULTIPLY  0xC
+#define    VX_SCALAR_OP_DIVIDE    0xD
+#define    VX_SCALAR_OP_MODULUS   0xE
+#define    VX_SCALAR_OP_MIN       0xF
+#define    VX_SCALAR_OP_MAX       0x10
+/////////////////////
+#define    VX_TYPE_INVALID        0x000
+#define    VX_TYPE_CHAR           0x001
+#define    VX_TYPE_INT8           0x002
+#define    VX_TYPE_UINT8          0x003
+#define    VX_TYPE_INT16          0x004
+#define    VX_TYPE_UINT16         0x005
+#define    VX_TYPE_INT32          0x006
+#define    VX_TYPE_UINT32         0x007
+#define    VX_TYPE_FLOAT32        0x00A
+#define    VX_TYPE_ENUM           0x00C
+#define    VX_TYPE_SIZE           0x00D
+#define    VX_TYPE_DF_IMAGE       0x00E
+#define    VX_TYPE_FLOAT16        0x00F
+#define    VX_TYPE_BOOL           0x010
+
+static int logical_operation(int operation, bool a, bool b, bool* output)
+{
+    if(operation == VX_SCALAR_OP_AND)
+    {
+        *output = (a && b) ? 1 : 0;
+    }
+    else if(operation == VX_SCALAR_OP_OR)
+    {
+        *output = (a || b) ? 1 : 0;
+    }
+    else if(operation == VX_SCALAR_OP_XOR)
+    {
+        *output = ((a && !b) || (!a && b)) ? 1 : 0;
+    }
+    else if(operation == VX_SCALAR_OP_NAND)
+    {
+        *output = (!(a && b)) ? 1 : 0;
+    }
+    else
+    {
+        return -1;
+    }
+    return 0;
+}
+
+static bool compare_operation_float32(int operation, float a_value, float b_value)
+{
+    bool o_value = 0;
+    switch(operation)
+    {
+        case VX_SCALAR_OP_EQUAL:
+            o_value = (a_value == b_value) ? 1 : 0;
+            break;
+        case VX_SCALAR_OP_NOTEQUAL:
+            o_value = (a_value != b_value) ? 1 : 0;
+            break;
+        case VX_SCALAR_OP_LESS:
+            o_value = (a_value < b_value) ? 1 : 0;
+            break;
+        case VX_SCALAR_OP_LESSEQ:
+            o_value = (a_value <= b_value) ? 1 : 0;
+            break;
+        case VX_SCALAR_OP_GREATER:
+            o_value = (a_value > b_value) ? 1 : 0;
+            break;
+        case VX_SCALAR_OP_GREATEREQ:
+            o_value = (a_value >= b_value) ? 1 : 0;
+            break;
+        default:
+            break;
+    }
+    return o_value;
+}
+
+static bool compare_operation_int32(int operation, int a_value, int b_value)
+{
+    bool o_value = 0;
+    switch(operation)
+    {
+        case VX_SCALAR_OP_EQUAL:
+            o_value = (a_value == b_value) ? 1 : 0;
+            break;
+        case VX_SCALAR_OP_NOTEQUAL:
+            o_value = (a_value != b_value) ? 1 : 0;
+            break;
+        case VX_SCALAR_OP_LESS:
+            o_value = (a_value < b_value) ? 1 : 0;
+            break;
+        case VX_SCALAR_OP_LESSEQ:
+            o_value = (a_value <= b_value) ? 1 : 0;
+            break;
+        case VX_SCALAR_OP_GREATER:
+            o_value = (a_value > b_value) ? 1 : 0;
+            break;
+        case VX_SCALAR_OP_GREATEREQ:
+            o_value = (a_value >= b_value) ? 1 : 0;
+            break;
+        default:
+            break;
+    }
+    return o_value;
+}
+
+static float arithmetic_operation_float32 (int operation, float a_value, float b_value)
+{
+    float o_value = 0;
+    switch(operation)
+    {
+        case VX_SCALAR_OP_ADD:
+            o_value = (a_value + b_value);
+            break;
+        case VX_SCALAR_OP_SUBTRACT:
+            o_value = (a_value - b_value);
+            break;
+        case VX_SCALAR_OP_MULTIPLY:
+            o_value = (a_value * b_value);
+            break;
+        case VX_SCALAR_OP_DIVIDE:
+            o_value = (b_value != 0) ? (a_value / b_value) : 0;
+            break;
+        case VX_SCALAR_OP_MIN:
+            if( a_value > b_value)
+                o_value = b_value;
+            else
+                o_value = a_value;
+            break;
+        case VX_SCALAR_OP_MAX:
+            if(a_value > b_value)
+               o_value = a_value;
+            else
+               o_value = b_value;
+            break;
+        default:
+            break;
+    }
+    return o_value;
+}
+
+static int arithmetic_operation_int32 (int operation, int a_value, int b_value)
+{
+    float o_value = 0;
+    switch(operation)
+    {
+        case VX_SCALAR_OP_ADD:
+            o_value = (a_value + b_value);
+            break;
+        case VX_SCALAR_OP_SUBTRACT:
+            o_value = (a_value - b_value);
+            break;
+        case VX_SCALAR_OP_MULTIPLY:
+            o_value = (a_value * b_value);
+            break;
+        case VX_SCALAR_OP_DIVIDE:
+            o_value = (b_value != 0) ? (a_value / b_value) : 0;
+            break;
+        case VX_SCALAR_OP_MIN:
+            if( a_value > b_value)
+                o_value = b_value;
+            else
+                o_value = a_value;
+            break;
+        case VX_SCALAR_OP_MAX:
+            if(a_value > b_value)
+               o_value = a_value;
+            else
+               o_value = b_value;
+            break;
+        default:
+            break;
+    }
+    return o_value;
+}
+
+__kernel void scalar_operation(
+    global int* op,
+    global void* a,
+    global void* b,
+    global void* out,
+    global int* atype,
+    global int* btype,
+    global int* otype,
+    global int* outputOrigType
+)
+{
+    const int pX = get_global_id(0);
+    const int pY = get_global_id(1);
+    int operation, a_type, b_type, o_type;
+    operation = (*op) & 0xFF;
+    a_type = *atype;
+    b_type = *btype;
+    o_type = *otype;
+    float tempA = 0;
+    float tempB = 0;
+    int temp = 0;
+    char temp8 = 0;
+    short temp16 = 0;
+    int temp32 = 0;
+    switch( operation )
+    {
+        case VX_SCALAR_OP_AND:
+        case VX_SCALAR_OP_OR:
+        case VX_SCALAR_OP_XOR:
+        case VX_SCALAR_OP_NAND:
+        {
+            bool* aPtr = (bool*)a;
+            bool* bPtr = (bool*)b;
+            bool* oPtr = (bool*)out;
+            logical_operation(operation,*aPtr, *bPtr, oPtr);
+            aPtr = 0;
+            bPtr = 0;
+            oPtr = 0;
+            break;
+        }
+        case VX_SCALAR_OP_EQUAL:
+        case VX_SCALAR_OP_NOTEQUAL:
+        case VX_SCALAR_OP_LESS:
+        case VX_SCALAR_OP_LESSEQ:
+        case VX_SCALAR_OP_GREATER:
+        case VX_SCALAR_OP_GREATEREQ:
+        {
+            if(a_type == VX_TYPE_FLOAT32 || b_type == VX_TYPE_FLOAT32){
+                if(a_type != VX_TYPE_FLOAT32){
+                    if(a_type == VX_TYPE_INT16 || a_type == VX_TYPE_UINT16){
+                        temp16 = *((short*)a);
+                        temp = (int)temp16;
+                    }else if(a_type == VX_TYPE_INT8 || a_type == VX_TYPE_UINT8){
+                        temp8 = *((char*)a);
+                        temp = (int)temp8;
+                    }else{
+                        temp32 = *((int*)a);
+                        temp = (int)temp32;
+                    }
+                    tempA = (float)temp;
+                }else{
+                    tempA = *((float*)a);
+                }
+                if(b_type != VX_TYPE_FLOAT32){
+                    if(b_type == VX_TYPE_INT16 || b_type == VX_TYPE_UINT16){
+                        temp16 = *((short*)b);
+                        temp = (int)temp16;
+                    }else if(b_type == VX_TYPE_INT8 || b_type == VX_TYPE_UINT8){
+                        temp8 = *((char*)b);
+                        temp = (int)temp8;
+                    }else{
+                        temp32 = *((int*)b);
+                        temp = (int)temp32;
+                    }
+                    tempB = (float)temp;
+                }else{
+                    tempB = *((float*)b);
+                }
+                if(o_type == VX_TYPE_FLOAT32){
+                    *((float*)out) = (float)compare_operation_int32(operation, tempA, tempB);
+                }else{
+                    *((int*)out) = (int)compare_operation_int32(operation, tempA, tempB);
+                }
+            }else{
+                if(a_type == VX_TYPE_INT16 || a_type == VX_TYPE_UINT16){
+                    temp16 = *((short*)a);
+                    tempA = (int)temp16;
+                }else if(a_type == VX_TYPE_INT8 || a_type == VX_TYPE_UINT8){
+                    temp8 = *((char*)a);
+                    tempA = (int)temp8;
+                }else{
+                    temp32 = *((int*)a);
+                    tempA = (int)temp32;
+                }
+
+                if(b_type == VX_TYPE_INT16 || b_type == VX_TYPE_UINT16){
+                    temp16 = *((short*)b);
+                    tempB = (int)temp16;
+                }else if(b_type == VX_TYPE_INT8 || b_type == VX_TYPE_UINT8){
+                    temp8 = *((char*)b);
+                    tempB = (int)temp8;
+                }else{
+                    temp32 = *((int*)b);
+                    tempB = (int)temp32;
+                }
+                if(o_type == VX_TYPE_FLOAT32){
+                    *((float*)out) = (float)compare_operation_int32(operation, tempA, tempB);
+                }else{
+                    *((int*)out) = (int)compare_operation_int32(operation, tempA, tempB);
+                }
+            }
+            break;
+        }
+        case VX_SCALAR_OP_ADD:
+        case VX_SCALAR_OP_SUBTRACT:
+        case VX_SCALAR_OP_MULTIPLY:
+        case VX_SCALAR_OP_DIVIDE:
+        case VX_SCALAR_OP_MIN:
+        case VX_SCALAR_OP_MAX:
+        {
+            if(a_type == VX_TYPE_FLOAT32 || b_type == VX_TYPE_FLOAT32){
+                if(a_type != VX_TYPE_FLOAT32){
+                    if(a_type == VX_TYPE_INT16 || a_type == VX_TYPE_UINT16){
+                        temp16 = *((short*)a);
+                        temp = (int)temp16;
+                    }else if(a_type == VX_TYPE_INT8 || a_type == VX_TYPE_UINT8){
+                        temp8 = *((char*)a);
+                        temp = (int)temp8;
+                    }else{
+                        temp32 = *((int*)a);
+                        temp = (int)temp32;
+                    }
+                    tempA = (float)temp;
+                }else{
+                    tempA = *((float*)a);
+                }
+                if(b_type != VX_TYPE_FLOAT32){
+                    if(b_type == VX_TYPE_INT16 || b_type == VX_TYPE_UINT16){
+                        temp16 = *((short*)b);
+                        temp = (int)temp16;
+                    }else if(b_type == VX_TYPE_INT8 || b_type == VX_TYPE_UINT8){
+                        temp8 = *((char*)b);
+                        temp = (int)temp8;
+                    }else{
+                        temp32 = *((int*)b);
+                        temp = (int)temp32;
+                    }
+                    tempB = (float)temp;
+                }else{
+                    tempB = *((float*)b);
+                }
+
+                if(o_type == VX_TYPE_SIZE){
+                    *((uint*)out) = (uint)arithmetic_operation_float32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_INT32){
+                    *((int*)out) = (int)arithmetic_operation_float32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_UINT32){
+                    *((uint*)out) = (uint)arithmetic_operation_float32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_INT16){
+                    *((short*)out) = (short)arithmetic_operation_float32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_UINT16){
+                    *((ushort*)out) = (ushort)arithmetic_operation_float32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_INT8){
+                    *((char*)out) = (char)arithmetic_operation_float32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_FLOAT32){
+                    *((float*)out) = (float)arithmetic_operation_float32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_FLOAT16){
+                    *((float16*)out) = (float16)arithmetic_operation_float32(operation, tempA, tempB);
+                }
+                else{
+                    *((uchar*)out) = (uchar)arithmetic_operation_float32(operation, tempA, tempB);
+                }
+            }else{
+                if(a_type == VX_TYPE_INT16 || a_type == VX_TYPE_UINT16){
+                    temp16 = *((short*)a);
+                    tempA = (int)temp16;
+                }else if(a_type == VX_TYPE_INT8 || a_type == VX_TYPE_UINT8){
+                    temp8 = *((char*)a);
+                    tempA = (int)temp8;
+                }else{
+                    temp32 = *((int*)a);
+                    tempA = (int)temp32;
+                }
+
+                if(b_type == VX_TYPE_INT16 || b_type == VX_TYPE_UINT16){
+                    temp16 = *((short*)b);
+                    tempB = (int)temp16;
+                }else if(b_type == VX_TYPE_INT8 || b_type == VX_TYPE_UINT8){
+                    temp8 = *((char*)b);
+                    tempB = (int)temp8;
+                }else{
+                    temp32 = *((int*)b);
+                    tempB = (int)temp32;
+                }
+
+                if(o_type == VX_TYPE_SIZE){
+                    *((uint*)out) = (uint)arithmetic_operation_int32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_INT32){
+                    *((int*)out) = (int)arithmetic_operation_int32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_UINT32){
+                    *((uint*)out) = (uint)arithmetic_operation_int32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_INT16){
+                    *((short*)out) = (short)arithmetic_operation_int32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_UINT16){
+                    *((ushort*)out) = (ushort)arithmetic_operation_int32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_INT8){
+                    *((char*)out) = (char)arithmetic_operation_int32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_FLOAT32){
+                    *((float*)out) = (float)arithmetic_operation_int32(operation, tempA, tempB);
+                }else if(o_type == VX_TYPE_FLOAT16){
+                    *((float16*)out) = (float16)arithmetic_operation_int32(operation, tempA, tempB);
+                }
+                else{
+                    *((uchar*)out) = (uchar)arithmetic_operation_int32(operation, tempA, tempB);
+                }
+            }
+            break;
+        }
+        case VX_SCALAR_OP_MODULUS:
+        {
+            int* oPtr = (int*)out;
+            if(a_type == VX_TYPE_FLOAT32 || b_type == VX_TYPE_FLOAT32
+               || a_type == VX_TYPE_FLOAT16 || b_type == VX_TYPE_FLOAT16
+            ){
+                break;
+            }else{
+                    int a_value = 0;
+                    int b_value = 0;
+                    if(a_type == VX_TYPE_INT16 || a_type == VX_TYPE_UINT16){
+                        a_value = (int)(*((short*)a));
+                    }else if(a_type == VX_TYPE_INT8 || a_type == VX_TYPE_UINT8){
+                        a_value = (int)(*((char*)a));
+                    }else{
+                        a_value = (int)(*((int*)a));
+                    }
+
+                    if(b_type == VX_TYPE_INT16 || b_type == VX_TYPE_UINT16){
+                        b_value = (int)(*((short*)b));
+                    }else if(b_type == VX_TYPE_INT8 || b_type == VX_TYPE_UINT8){
+                        b_value = (int)(*((char*)b));
+                    }else{
+                        b_value = (int)(*((int*)b));
+                    }
+
+                    if(o_type == VX_TYPE_SIZE){
+                        *((uint*)out) = (uint)((b_value != 0) ? (a_value % b_value) : 0);
+                    }else if(o_type == VX_TYPE_INT32){
+                        *((int*)out) = (int)((b_value != 0) ? (a_value % b_value) : 0);
+                    }else if(o_type == VX_TYPE_UINT32){
+                        *((uint*)out) = (uint)((b_value != 0) ? (a_value % b_value) : 0);
+                    }else if(o_type == VX_TYPE_INT16){
+                        *((short*)out) = (short)((b_value != 0) ? (a_value % b_value) : 0);
+                    }else if(o_type == VX_TYPE_UINT16){
+                        *((ushort*)out) = (ushort)((b_value != 0) ? (a_value % b_value) : 0);
+                    }else if(o_type == VX_TYPE_INT8){
+                        *((char*)out) = (char)((b_value != 0) ? (a_value % b_value) : 0);
+                    }
+                    else{
+                        *((uchar*)out) = (uchar)((b_value != 0) ? (a_value % b_value) : 0);
+                    }
+                }
+            oPtr = 0;
+            break;
+        }
+        default:
+            break;
+    }
+}

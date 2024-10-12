@@ -1,0 +1,211 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int item_size;
+_viv_uniform int width;
+_viv_uniform int width_item_size;
+_viv_uniform VXC_512Bits uniConv2float_part0_4x4;
+_viv_uniform VXC_512Bits uniConv2float_part1_4x4;
+_viv_uniform VXC_512Bits uniConv2float_part2_4x4;
+_viv_uniform VXC_512Bits uniConv2float_part3_4x4;
+
+#define CREATELISTER_PROCESS_U8(uinform_val) \
+        VXC_DP4x4(s_value, r1, r1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uinform_val); \
+        _viv_asm(COPY, s_value_i, s_value, 16); \
+        if (s_value.x > 0) \
+        { \
+            coord.z = s_value_i.x; \
+            _viv_asm(COPY, r2, coord, 16); \
+            VXC_Vstore16(out_arry_ptr, 0, r2); \
+            cntSum.x++; \
+            out_arry_ptr = out_arry_ptr + item_size; \
+        } \
+        coord.x++; \
+        if (s_value.y > 0) \
+        { \
+            coord.z = s_value_i.y; \
+            _viv_asm(COPY, r2, coord, 16); \
+            VXC_Vstore16(out_arry_ptr, 0, r2); \
+            cntSum.x++; \
+            out_arry_ptr = out_arry_ptr + item_size; \
+        } \
+        coord.x++; \
+        if (s_value.z > 0) \
+        { \
+            coord.z = s_value_i.z; \
+            _viv_asm(COPY, r2, coord, 16); \
+            VXC_Vstore16(out_arry_ptr, 0, r2); \
+            cntSum.x++; \
+            out_arry_ptr = out_arry_ptr + item_size; \
+        } \
+        coord.x++; \
+        if (s_value.w > 0) \
+        { \
+            coord.z = s_value_i.w; \
+            _viv_asm(COPY, r2, coord, 16); \
+            VXC_Vstore16(out_arry_ptr, 0, r2); \
+            cntSum.x++; \
+            out_arry_ptr = out_arry_ptr + item_size; \
+        } \
+        coord.x++;
+
+
+__kernel void createlister_U8
+    (
+                   image2d_t      inputImage,
+                   image2d_t      countImage,
+         global    unsigned char* outArray
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 r1 = 0, r2;
+    int4 cntSum = 0;
+    float4 s_value;
+    int4   s_value_i;
+    unsigned char* out_arry_ptr;
+
+    out_arry_ptr = outArray + coord_out.y * width_item_size;
+
+    do
+    {
+        VXC_ReadImage(r1, inputImage, coord.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        CREATELISTER_PROCESS_U8(uniConv2float_part0_4x4)
+        CREATELISTER_PROCESS_U8(uniConv2float_part1_4x4)
+        CREATELISTER_PROCESS_U8(uniConv2float_part2_4x4)
+        CREATELISTER_PROCESS_U8(uniConv2float_part3_4x4)
+    }while(coord.x < width);
+
+    _viv_asm(COPY, r1, cntSum, 16);
+    VXC_WriteImage(countImage, coord_out, r1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+
+__kernel void createlister_F32
+    (
+                   image2d_t      inputImage,
+                   image2d_t      countImage,
+         global    unsigned char* outArray
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 r1, r2;
+    int4 cntSum = 0;
+    float4 s_value;
+    int4   s_value_i;
+    unsigned char* out_arry_ptr;
+
+    out_arry_ptr = outArray + coord_out.y * width_item_size;
+
+    do
+    {
+        s_value = read_imagef(inputImage, coord.xy);
+        _viv_asm(COPY, s_value_i, s_value, 16);
+        if (s_value.x > 0)
+        {
+            coord.z = s_value_i.x;
+            _viv_asm(COPY, r2, coord, 16);
+            VXC_Vstore16(out_arry_ptr, 0, r2);
+            cntSum.x++;
+            out_arry_ptr = out_arry_ptr + item_size;
+        }
+        coord.x++;
+        if (s_value.y > 0)
+        {
+            coord.z = s_value_i.y;
+            _viv_asm(COPY, r2, coord, 16);
+            VXC_Vstore16(out_arry_ptr, 0, r2);
+            cntSum.x++;
+            out_arry_ptr = out_arry_ptr + item_size;
+        }
+        coord.x++;
+        if (s_value.z > 0)
+        {
+            coord.z = s_value_i.z;
+            _viv_asm(COPY, r2, coord, 16);
+            VXC_Vstore16(out_arry_ptr, 0, r2);
+            cntSum.x++;
+            out_arry_ptr = out_arry_ptr + item_size;
+        }
+        coord.x++;
+        if (s_value.w > 0)
+        {
+            coord.z = s_value_i.w;
+            _viv_asm(COPY, r2, coord, 16);
+            VXC_Vstore16(out_arry_ptr, 0, r2);
+            cntSum.x++;
+            out_arry_ptr = out_arry_ptr + item_size;
+        }
+        coord.x++;
+    }while(coord.x < width);
+
+    _viv_asm(COPY, r1, cntSum, 16);
+    VXC_WriteImage(countImage, coord_out, r1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void createlister_S32
+    (
+                   image2d_t      inputImage,
+                   image2d_t      countImage,
+         global    unsigned char* outArray
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    int2 coord_out = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 r1, r2;
+    int4 cntSum = 0;
+    float4 s_value;
+    int4   s_value_i;
+    unsigned char* out_arry_ptr;
+
+    out_arry_ptr = outArray + coord_out.y * width_item_size;
+
+    do
+    {
+        s_value_i = read_imagei(inputImage, coord.xy);
+        s_value = convert_float(s_value_i);
+        _viv_asm(COPY, s_value_i, s_value, 16);
+        if (s_value.x > 0)
+        {
+            coord.z = s_value_i.x;
+            _viv_asm(COPY, r2, coord, 16);
+            VXC_Vstore16(out_arry_ptr, 0, r2);
+            cntSum.x++;
+            out_arry_ptr = out_arry_ptr + item_size;
+        }
+        coord.x++;
+        if (s_value.y > 0)
+        {
+            coord.z = s_value_i.y;
+            _viv_asm(COPY, r2, coord, 16);
+            VXC_Vstore16(out_arry_ptr, 0, r2);
+            cntSum.x++;
+            out_arry_ptr = out_arry_ptr + item_size;
+        }
+        coord.x++;
+        if (s_value.z > 0)
+        {
+            coord.z = s_value_i.z;
+            _viv_asm(COPY, r2, coord, 16);
+            VXC_Vstore16(out_arry_ptr, 0, r2);
+            cntSum.x++;
+            out_arry_ptr = out_arry_ptr + item_size;
+        }
+        coord.x++;
+        if (s_value.w > 0)
+        {
+            coord.z = s_value_i.w;
+            _viv_asm(COPY, r2, coord, 16);
+            VXC_Vstore16(out_arry_ptr, 0, r2);
+            cntSum.x++;
+            out_arry_ptr = out_arry_ptr + item_size;
+        }
+        coord.x++;
+    }while(coord.x < width);
+
+    _viv_asm(COPY, r1, cntSum, 16);
+    VXC_WriteImage(countImage, coord_out, r1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+}
+

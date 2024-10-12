@@ -1,0 +1,9 @@
+
+__kernel void copy(
+    global unsigned char* input,
+    global unsigned char* output
+)
+{
+    int idx = get_global_id(0);
+    output[idx] = input[idx];
+}

@@ -1,0 +1,195 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform uint value_data;
+_viv_uniform int  value_data_S16;
+_viv_uniform uint true_data;
+_viv_uniform uint false_data;
+_viv_uniform uint upper_data;
+_viv_uniform uint lower_data;
+_viv_uniform int  upper_data_S16;
+_viv_uniform int  lower_data_S16;
+
+
+__kernel void threshold_U8toU8_Binary
+(
+    __read_only  image2d_t input,
+            int  threshold,
+            int  ture_false,
+            int  upper_lower,
+            int  type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src = read_imageui(input, coord);
+    uint4 dst;
+    if (src.x > value_data) dst.x = true_data;
+    else dst.x = false_data;
+    write_imageui(output, coord, dst);
+}
+
+__kernel void threshold_U8toU8_Range
+(
+    __read_only  image2d_t input,
+            int  threshold,
+            int  ture_false,
+            int  upper_lower,
+            int  type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src = read_imageui(input, coord);
+    uint4 dst;
+    if (src.x > upper_data || src.x < lower_data) dst.x = false_data;
+    else dst.x = true_data;
+    write_imageui(output, coord, dst);
+}
+
+__kernel void threshold_S16toU8_Binary
+(
+    __read_only  image2d_t input,
+            int  threshold,
+            int  ture_false,
+            int  upper_lower,
+            int  type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4 src = read_imagei(input, coord);
+    uint4 dst;
+    if (src.x > value_data_S16) dst.x = true_data;
+    else dst.x = false_data;
+    write_imageui(output, coord, dst);
+}
+
+__kernel void threshold_S16toU8_Range
+(
+    __read_only  image2d_t input,
+            int  threshold,
+            int  ture_false,
+            int  upper_lower,
+            int  type_,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4 src = read_imagei(input, coord);
+    uint4 dst;
+    if (src.x > upper_data_S16 || src.x < lower_data_S16) dst.x = false_data;
+    else dst.x = true_data;
+    write_imageui(output, coord, dst);
+}
+
+__kernel void threshold_U8toU1_Binary
+(
+    __read_only  image2d_t input,
+            int  threshold,
+            int  ture_false,
+            int  upper_lower,
+            int  type_,
+    __write_only image2d_t output
+)
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    uint4 src;
+    int src0[8];
+    for (int i = 0; i < 8; i++)
+    {
+        src = read_imageui(input, (int2)(pix + i, piy));
+        if (src.x > value_data) src0[i] = true_data;
+        else src0[i] = false_data;
+    }
+    uint4 dst;
+    for (int i = 0; i < 8; i++)
+    {
+        dst.x += exp2(i) * src0[i];
+    }
+    write_imageui(output, (int2)(pix >> 3 ,piy), dst);
+}
+
+__kernel void threshold_U8toU1_Range
+(
+    __read_only  image2d_t input,
+            int  threshold,
+            int  ture_false,
+            int  upper_lower,
+            int  type_,
+    __write_only image2d_t output
+)
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    uint4 src;
+    int src0[8];
+    for (int i = 0; i < 8; i++)
+    {
+        src = read_imageui(input, (int2)(pix + i, piy));
+        if (src.x > upper_data || src.x < lower_data) src0[i] = false_data;
+        else src0[i] = true_data;
+    }
+    uint4 dst;
+    for (int i = 0; i < 8; i++)
+    {
+        dst.x += exp2(i) * src0[i];
+    }
+    write_imageui(output, (int2)(pix >> 3 ,piy), dst);
+}
+
+__kernel void threshold_S16toU1_Binary
+(
+    __read_only  image2d_t input,
+            int  threshold,
+            int  ture_false,
+            int  upper_lower,
+            int  type_,
+    __write_only image2d_t output
+)
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    int4 src;
+    int src0[8];
+    for (int i = 0; i < 8; i++)
+    {
+        src = read_imagei(input, (int2)(pix + i, piy));
+        if (src.x > value_data_S16) src0[i] = true_data;
+        else src0[i] = false_data;
+    }
+    uint4 dst;
+    for (int i = 0; i < 8; i++)
+    {
+        dst.x += exp2(i) * src0[i];
+    }
+    write_imageui(output, (int2)(pix >> 3 ,piy), dst);
+}
+
+__kernel void threshold_S16toU1_Range
+(
+    __read_only  image2d_t input,
+            int  threshold,
+            int  ture_false,
+            int  upper_lower,
+            int  type_,
+    __write_only image2d_t output
+)
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    int4 src;
+    int src0[8];
+    for (int i = 0; i < 8; i++)
+    {
+        src = read_imagei(input, (int2)(pix + i, piy));
+        if (src.x > upper_data_S16 || src.x < lower_data_S16) src0[i] = false_data;
+        else src0[i] = true_data;
+    }
+    uint4 dst;
+    for (int i = 0; i < 8; i++)
+    {
+        dst.x += exp2(i) * src0[i];
+    }
+    write_imageui(output, (int2)(pix >> 3 ,piy), dst);
+}

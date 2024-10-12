@@ -1,0 +1,110 @@
+__kernel void gpuBatch2Space_F32toF32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_w,
+                 int             block_h,
+                 uint            input_depth,
+                 uint            output_batch,
+                 int             crop_left,
+                 int             crop_top
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+
+    int in_b = convert_int(convert_ushort(z) / convert_ushort(input_depth));
+    ushort short_b = convert_ushort(in_b);
+    ushort short_blockw = convert_ushort(block_w);
+    int in_z = z - in_b * input_depth;
+
+    float4 tmp = {0.0};
+    tmp = read_imagef(input, (int4)(x, y, z, 0));
+
+    ushort usOut_batch = convert_ushort(output_batch);
+    ushort out_b = short_b % usOut_batch;
+    ushort spatial_offset = short_b / usOut_batch;
+    int tmpx = spatial_offset % short_blockw;
+    int tmpy = spatial_offset / short_blockw;
+
+    int out_w = (x * block_w + tmpx - crop_left);
+    int out_h = (y * block_h + tmpy - crop_top);
+    int out_z = out_b * input_depth + in_z;
+
+    write_imagef(output, (int4)(out_w, out_h, out_z, 0), tmp);
+}
+
+__kernel void gpuBatch2Space_U8toU8
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_w,
+                 int             block_h,
+                 uint            input_depth,
+                 uint            output_batch,
+                 int             crop_left,
+                 int             crop_top
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+
+    int in_b = convert_int(convert_ushort(z) / convert_ushort(input_depth));
+    ushort short_b = convert_ushort(in_b);
+    ushort short_blockw = convert_ushort(block_w);
+    int in_z = z - in_b * input_depth;
+
+    uint4 tmp = {0.0};
+    tmp = read_imageui(input, (int4)(x, y, z, 0));
+
+    ushort usOut_batch = convert_ushort(output_batch);
+    ushort out_b = short_b % usOut_batch;
+    ushort spatial_offset = short_b / usOut_batch;
+    int tmpx = spatial_offset % short_blockw;
+    int tmpy = spatial_offset / short_blockw;
+
+    int out_w = (x * block_w + tmpx - crop_left);
+    int out_h = (y * block_h + tmpy - crop_top);
+    int out_z = out_b * input_depth + in_z;
+
+    write_imageui(output, (int4)(out_w, out_h, out_z, 0), tmp);
+}
+
+__kernel void gpuBatch2Space_I32toI32
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             block_w,
+                 int             block_h,
+                 uint            input_depth,
+                 uint            output_batch,
+                 int             crop_left,
+                 int             crop_top
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+
+    int in_b = convert_int(convert_ushort(z) / convert_ushort(input_depth));
+    ushort short_b = convert_ushort(in_b);
+    ushort short_blockw = convert_ushort(block_w);
+    int in_z = z - in_b * input_depth;
+
+    int4 dst = {0.0};
+    dst = read_imagei(input, (int4)(x, y, z, 0));
+
+    ushort usOut_batch = convert_ushort(output_batch);
+    ushort out_b = short_b % usOut_batch;
+    ushort spatial_offset = short_b / usOut_batch;
+    int tmpx = spatial_offset % short_blockw;
+    int tmpy = spatial_offset / short_blockw;
+
+    int out_w = (x * block_w + tmpx - crop_left);
+    int out_h = (y * block_h + tmpy - crop_top);
+    int out_z = out_b * input_depth + in_z;
+
+    write_imagei(output, (int4)(out_w, out_h, out_z, 0), dst);
+}

@@ -1,0 +1,74 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniAccCdfInt32_4x4;
+_viv_uniform int area;
+
+__kernel __attribute__((reqd_work_group_size(32, 1, 1))) void equalizehistogram_cdf(
+        __read_only  image2d_t input,
+        __read_only  image2d_t in_hist,
+        __global int* in_min,
+        __write_only image2d_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) + 128, get_global_id(1));
+    int lidx = get_local_id(0);
+
+    uint4 src0 = read_imageui(in_hist, coord.xy);
+    uint4 src1 = read_imageui(in_hist, coord.zy);
+
+    __local int cdf[256];
+    __local int cur_sum[64];
+
+    int4 sum = (int4)0;
+    int4 sum2 = (int4)0;
+    int tmpSum = 0;
+    VXC_DP4x4(sum, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniAccCdfInt32_4x4);
+    VXC_DP4x4(sum2, src1, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniAccCdfInt32_4x4);
+    cur_sum[lidx] = sum.w;
+    cur_sum[lidx + 32] = sum2.w;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for(int i = 0; i < lidx; i++)
+    {
+        sum += cur_sum[i];
+        sum2 += cur_sum[i + 32];
+    }
+
+    for(int i = 0; i < 32; i++)
+    {
+        tmpSum += cur_sum[i];
+    }
+    sum2 += tmpSum;
+
+    vstore4(sum, lidx, cdf);
+    vstore4(sum2, lidx + 32, cdf);
+    barrier(CLK_LOCAL_MEM_FENCE);
+    int cdf_min = cdf[*in_min];
+
+    int div = area - cdf_min;
+
+    if(div > 0)
+    {
+        sum -= cdf_min;
+        float4 cdfx = convert_float4_rtp(sum);
+        float fdiv = (float)div;
+        float4 p = cdfx / fdiv;
+        int4 data = convert_int4_rtz(p * 255.0f + 0.5f);
+
+        sum2 -= cdf_min;
+        cdfx = convert_float4_rtp(sum2);
+        p = cdfx / fdiv;
+        int4 data2 = convert_int4_rtz(p * 255.0f + 0.5f);
+
+        write_imagei(output, coord.xy, data);
+        write_imagei(output, coord.zy, data2);
+    }
+    else
+    {
+        int4 data = (int4)(coord.x, coord.x + 1, coord.x + 2, coord.x + 3);
+        int4 data2 = data + 128;
+        write_imagei(output, coord.xy, data);
+        write_imagei(output, coord.zy, data2);
+    }
+}

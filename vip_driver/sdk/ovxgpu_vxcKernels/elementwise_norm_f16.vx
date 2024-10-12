@@ -1,0 +1,57 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+__kernel void elementwise_norm_f16_l1
+(
+    __read_only image2d_t  input_x,
+    __read_only image2d_t  input_y,
+    __global int* norm_type,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src0 = read_imageui(input_x, coord);
+    uint4 src1 = read_imageui(input_y, coord);
+
+    half4 data0, data1;
+    _viv_asm(COPY, data0, src0, 16);
+    _viv_asm(COPY, data1, src1, 16);
+
+    float4 val0, val1;
+    _viv_asm(CONV, val0, data0);
+    _viv_asm(CONV, val1, data1);
+
+    uint4 dst;
+    int tmpDst = convert_int_rtz(fabs(val0.x) + fabs(val1.x));
+    dst.x = min(tmpDst, 65535);
+
+    write_imageui(output, coord, dst);
+}
+
+__kernel void elementwise_norm_f16_l2
+(
+    __read_only image2d_t  input_x,
+    __read_only image2d_t  input_y,
+    __global int* norm_type,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 src0 = read_imageui(input_x, coord);
+    uint4 src1 = read_imageui(input_y, coord);
+
+    half4 data0, data1;
+    _viv_asm(COPY, data0, src0, 16);
+    _viv_asm(COPY, data1, src1, 16);
+
+    float4 val0, val1;
+    _viv_asm(CONV, val0, data0);
+    _viv_asm(CONV, val1, data1);
+
+    int val = convert_int_rtz(hypot(val0.x, val1.x));
+
+    uint4 dst;
+    dst.x = min(val, 65535);
+
+    write_imageui(output, coord, dst);
+}

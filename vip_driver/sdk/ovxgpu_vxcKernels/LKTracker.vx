@@ -1,0 +1,283 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#define INI_ROUND(x,n)  (((x) + (1 << ((n) - 1))) >> (n))
+
+typedef struct _vx_keypoint_t
+{
+    int     x;
+    int     y;
+    float   strength;
+    float   scale;
+    float   orientation;
+    int     tracking_status;
+    float   error;
+}
+vx_keypoint_t;
+
+typedef struct _vx_keypoint_t_optpyrlk_internal
+{
+    float   x;
+    float   y;
+    float   strength;
+    float   scale;
+    float   orientation;
+    int     tracking_status;
+    float   error;
+}
+vx_keypoint_t_optpyrlk_internal;
+
+_viv_uniform int  halfwin;
+_viv_uniform uint width;
+_viv_uniform uint height;
+_viv_uniform int  termination_Criteria_type;
+_viv_uniform float pyramid_scale_value_reciprocal;
+_viv_uniform float pyramid_scale_value_pown;
+
+
+__kernel void LKTracker(
+    __read_only  image2d_t  prevImg,
+    __read_only  image2d_t  prevDervIx,
+    __read_only  image2d_t  prevDervIy,
+    __read_only  image2d_t  nextImg,
+         global       int*  prevPts,
+         global       int*  lastoutput,
+         global       int*  nextPts,
+                       int  winSize_s,
+                       int  criteria_s,
+                     float  epsilon,
+                      uint  num_iterations,
+                       int  level0,
+                     float  pyramid_scale_value,
+                       int  maxLevel_value,
+                       int  isUseInitialEstimateScalar,
+         global      char*  estimatedPts
+)
+{
+    int list_indx = get_global_id(0);
+    int   j       = 0;
+    int   W_BITS  = 14;
+    int   W_BITS1 = 14;
+    int   iw00    = 0;
+    int   iw01    = 0;
+    int   iw10    = 0;
+    int   iw11    = 0;
+    int   dstep_x = 0;
+    int   dstep_y = 0;
+    int   stepJ   = 0;
+    int   stepI   = 0;
+    int   x       = 0;
+    int   y       = 0;
+    float a       = 0;
+    float b       = 0;
+    float A11     = 0;
+    float A12     = 0;
+    float A22     = 0;
+    float D       = 0;
+    float minEig  = 0;
+    float prevDelta_x = 0.0f;
+    float prevDelta_y = 0.0f;
+    float FLT_SCALE = 1.f / (1 << 20);
+    short Iptr[10][10];
+    short dIptr_x[10][10];
+    short dIptr_y[10][10];
+    float prevPt_item_x;
+    float prevPt_item_y;
+    float nextPt_item_x;
+    float nextPt_item_y;
+    vx_keypoint_t_optpyrlk_internal nextPt;
+    vx_keypoint_t_optpyrlk_internal prevPt;
+    vx_keypoint_t_optpyrlk_internal iprevPt;
+    vx_keypoint_t_optpyrlk_internal inextPt;
+    vx_keypoint_t* prevPt_item    = (vx_keypoint_t*)prevPts;
+    vx_keypoint_t* estimated_item = (vx_keypoint_t*)estimatedPts;
+    vx_keypoint_t_optpyrlk_internal* nextPt_item    = (vx_keypoint_t_optpyrlk_internal*)lastoutput;
+    vx_keypoint_t*                   outputPt_item0 = (vx_keypoint_t*)nextPts;
+    vx_keypoint_t_optpyrlk_internal* outputPt_item1 = (vx_keypoint_t_optpyrlk_internal*)nextPts;
+
+    if (level0 != maxLevel_value)
+    {
+        nextPt_item_x = convert_float(nextPt_item[list_indx].x) * pyramid_scale_value_reciprocal;
+        nextPt_item_y = convert_float(nextPt_item[list_indx].y) * pyramid_scale_value_reciprocal;
+    }
+    else
+    {
+        if (isUseInitialEstimateScalar == 1)
+        {
+            nextPt_item_x = convert_float(estimated_item[list_indx].x) * pyramid_scale_value_pown;
+            nextPt_item_y = convert_float(estimated_item[list_indx].y) * pyramid_scale_value_pown;
+            nextPt_item[list_indx].tracking_status = estimated_item[list_indx].tracking_status;
+        }
+        else
+        {
+            nextPt_item_x = convert_float(prevPt_item[list_indx].x) * pyramid_scale_value_pown;
+            nextPt_item_y = convert_float(prevPt_item[list_indx].y) * pyramid_scale_value_pown;
+            nextPt_item[list_indx].tracking_status = prevPt_item[list_indx].tracking_status;
+        }
+    }
+
+    if (level0 == 0)
+    {
+        outputPt_item0[list_indx].tracking_status = nextPt_item[list_indx].tracking_status;
+        outputPt_item0[list_indx].x = nextPt_item_x;
+        outputPt_item0[list_indx].y = nextPt_item_y;
+    }
+    else
+    {
+        outputPt_item1[list_indx].tracking_status = nextPt_item[list_indx].tracking_status;
+        outputPt_item1[list_indx].x = nextPt_item_x;
+        outputPt_item1[list_indx].y = nextPt_item_y;
+    }
+    prevPt_item_x = convert_float(prevPt_item[list_indx].x) * pown(pyramid_scale_value, level0);
+    prevPt_item_y = convert_float(prevPt_item[list_indx].y) * pown(pyramid_scale_value, level0);
+    if (prevPt_item[list_indx].tracking_status == 0)
+    {
+        return;
+    }
+    prevPt.x = convert_float(prevPt_item_x - halfwin);
+    prevPt.y = convert_float(prevPt_item_y - halfwin);
+    nextPt.x = convert_float(nextPt_item_x - halfwin);
+    nextPt.y = convert_float(nextPt_item_y - halfwin);
+    iprevPt.x = floor(prevPt.x);
+    iprevPt.y = floor(prevPt.y);
+    if (iprevPt.x < 0 || iprevPt.x > width - winSize_s - 1 ||
+        iprevPt.y < 0 || iprevPt.y > height - winSize_s - 1)
+    {
+        return;
+    }
+    a = prevPt.x - iprevPt.x;
+    b = prevPt.y - iprevPt.y;
+    iw00 = convert_int(((1.f - a) * (1.f - b) * (1 << W_BITS)) + 0.5f);
+    iw01 = convert_int((a * (1.f - b) * (1 << W_BITS)) + 0.5f);
+    iw10 = convert_int(((1.f - a) * b * (1 << W_BITS)) + 0.5f);
+    iw11 = (1 << W_BITS) - iw00 - iw01 - iw10;
+    A11 = 0;
+    A12 = 0;
+    A22 = 0;
+
+    int4 coord, coord2;
+    coord2 = (int4)(convert_uint(iprevPt.x), convert_uint(iprevPt.y), convert_uint(iprevPt.x) + 1, convert_uint(iprevPt.y) + 1);
+    for (y = 0;y < winSize_s;y++)
+    {
+        for (x = 0;x < winSize_s;x++)
+        {
+            coord = coord2 + (int4)(x,y,x,y);
+
+            uchar src0 = convert_uchar(read_imageui(prevImg, coord.xy).x);
+            uchar src1 = convert_uchar(read_imageui(prevImg, coord.zy).x);
+            uchar src2 = convert_uchar(read_imageui(prevImg, coord.xw).x);
+            uchar src3 = convert_uchar(read_imageui(prevImg, coord.zw).x);
+
+            short dsrc_x0 = convert_short(read_imagei(prevDervIx, coord.xy).x);
+            short dsrc_x1 = convert_short(read_imagei(prevDervIx, coord.zy).x);
+            short dsrc_x2 = convert_short(read_imagei(prevDervIx, coord.xw).x);
+            short dsrc_x3 = convert_short(read_imagei(prevDervIx, coord.zw).x);
+
+            short dsrc_y0 = convert_short(read_imagei(prevDervIy, coord.xy).x);
+            short dsrc_y1 = convert_short(read_imagei(prevDervIy, coord.zy).x);
+            short dsrc_y2 = convert_short(read_imagei(prevDervIy, coord.xw).x);
+            short dsrc_y3 = convert_short(read_imagei(prevDervIy, coord.zw).x);
+
+            int ival = INI_ROUND(src0 * iw00 + src1 * iw01 + src2 * iw10 + src3 * iw11, W_BITS1 - 5);
+            int ixval = INI_ROUND(dsrc_x0 * iw00 + dsrc_x1 * iw01 + dsrc_x2 * iw10 + dsrc_x3 * iw11, W_BITS1);
+            int iyval = INI_ROUND(dsrc_y0 * iw00 + dsrc_y1 * iw01 + dsrc_y2 * iw10 + dsrc_y3 * iw11, W_BITS1);
+
+            Iptr[x][y] = convert_short(ival);
+            dIptr_x[x][y] = convert_short(ixval);
+            dIptr_y[x][y] = convert_short(iyval);
+            A11 += convert_float(ixval * ixval);
+            A12 += convert_float(ixval * iyval);
+            A22 += convert_float(iyval * iyval);
+        }
+    }
+
+    A11 *= FLT_SCALE;
+    A12 *= FLT_SCALE;
+    A22 *= FLT_SCALE;
+    D = A11*A22 - A12*A12;
+    minEig = convert_float(A22 + A11 - sqrt((A11 - A22) * (A11 - A22) + 4.f * A12 * A12)) / (2 * winSize_s * winSize_s);
+
+    if (minEig < 1.0e-04F || D < 1.e-07F)
+    {
+        return;
+    }
+    D = 1.f / D;
+    prevDelta_x = 0.0f;
+    prevDelta_y = 0.0f;
+    j = 0;
+    while (j < num_iterations || termination_Criteria_type == 2)
+    {
+        float b1 = 0;
+        float b2 = 0;
+        float delta_x = 0;
+        float delta_y = 0;
+        inextPt.x = floor(nextPt.x);
+        inextPt.y = floor(nextPt.y);
+        if (inextPt.x < 0 || inextPt.x >= width - winSize_s - 1 ||
+            inextPt.y < 0 || inextPt.y >= height - winSize_s - 1)
+        {
+            break;
+        }
+        a = nextPt.x - inextPt.x;
+        b = nextPt.y - inextPt.y;
+        iw00 = (int)(((1.f - a) * (1.f - b) * (1 << W_BITS)) + 0.5f);
+        iw01 = (int)((a * (1.f - b) * (1 << W_BITS)) + 0.5f);
+        iw10 = (int)(((1.f - a) * b * (1 << W_BITS)) + 0.5f);
+        iw11 = (1 << W_BITS) - iw00 - iw01 - iw10;
+
+        coord2 = (int4)(convert_uint(inextPt.x), convert_uint(inextPt.y), convert_uint(inextPt.x) + 1, convert_uint(inextPt.y) + 1);
+        for (y = 0;y < winSize_s;y++)
+        {
+            for (x = 0;x < winSize_s;x++)
+            {
+                coord = coord2 + (int4)(x,y,x,y);
+                uchar dst0 = convert_uchar(read_imageui(nextImg, coord.xy));
+                uchar dst1 = convert_uchar(read_imageui(nextImg, coord.zy));
+                uchar dst2 = convert_uchar(read_imageui(nextImg, coord.xw));
+                uchar dst3 = convert_uchar(read_imageui(nextImg, coord.zw));
+
+                int diff = INI_ROUND(dst0 * iw00 + dst1 * iw01 + dst2 * iw10 + dst3 * iw11, W_BITS1 - 5) - Iptr[x][y];
+                b1 += convert_float(diff * dIptr_x[x][y]);
+                b2 += convert_float(diff * dIptr_y[x][y]);
+            }
+        }
+
+        b1 *= FLT_SCALE;
+        b2 *= FLT_SCALE;
+        delta_x = convert_float((A12 * b2 - A22 * b1) * D);
+        delta_y = convert_float((A12 * b1 - A11 * b2) * D);
+        nextPt.x += delta_x;
+        nextPt.y += delta_y;
+        if (level0 == 0)
+        {
+            outputPt_item0[list_indx].x = (nextPt.x + halfwin);
+            outputPt_item0[list_indx].y = (nextPt.y + halfwin);
+        }
+        else
+        {
+            outputPt_item1[list_indx].x = (nextPt.x + halfwin);
+            outputPt_item1[list_indx].y = (nextPt.y + halfwin);
+        }
+        if ((delta_x * delta_x + delta_y * delta_y) < epsilon &&
+            (termination_Criteria_type == 2 || termination_Criteria_type == 3))
+        {
+            break;
+        }
+        if (j > 0 && fabs(delta_x + prevDelta_x) < 0.01 && fabs(delta_y + prevDelta_y) < 0.01)
+        {
+            if (level0 == 0)
+            {
+                outputPt_item0[list_indx].x -= (delta_x * 0.5f);
+                outputPt_item0[list_indx].y -= (delta_y * 0.5f);
+            }
+            else
+            {
+                outputPt_item1[list_indx].x -= (delta_x * 0.5f);
+                outputPt_item1[list_indx].y -= (delta_y * 0.5f);
+            }
+            break;
+        }
+        prevDelta_x = delta_x;
+        prevDelta_y = delta_y;
+        j++;
+    }
+}

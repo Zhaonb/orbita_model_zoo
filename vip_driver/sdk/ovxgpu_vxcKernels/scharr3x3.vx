@@ -1,0 +1,28 @@
+
+__kernel void scharr3x3(
+    read_only  image2d_t Inimg,
+    write_only image2d_t outimgx,
+    write_only image2d_t outimgy
+)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 coord = (int2)(x,y);
+    int pix00 = convert_int(read_imageui(Inimg,(int2)(x-1,y-1)).x);
+    int pix10 = convert_int(read_imageui(Inimg,(int2)(x,y-1)).x);
+    int pix20 = convert_int(read_imageui(Inimg,(int2)(x+1,y-1)).x);
+    int pix01 = convert_int(read_imageui(Inimg,(int2)(x-1,y)).x);
+    int pix11 = convert_int(read_imageui(Inimg,(int2)(x,y)).x);
+    int pix21 = convert_int(read_imageui(Inimg,(int2)(x+1,y)).x);
+    int pix02 = convert_int(read_imageui(Inimg,(int2)(x-1,y+1)).x);
+    int pix12 = convert_int(read_imageui(Inimg,(int2)(x,y+1)).x);
+    int pix22 = convert_int(read_imageui(Inimg,(int2)(x+1,y+1)).x);
+
+    int gx = -3*pix00 - 10*pix01 - 3*pix02 + 3*pix20 + 10*pix21 + 3*pix22;
+    int gy = -3*pix00 - 10*pix10 - 3*pix20 + 3*pix02 + 10*pix12 + 3*pix22;
+
+    int4 gradx = (int4)(gx, 0, 0, 0);
+    int4 grady = (int4)(gy, 0, 0, 0);
+    write_imagei(outimgx, coord, gradx);
+    write_imagei(outimgy, coord, grady);
+}

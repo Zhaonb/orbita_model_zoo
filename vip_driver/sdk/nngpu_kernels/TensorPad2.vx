@@ -1,0 +1,571 @@
+#pragma OPENCL EXTENSION CL_VIV_asm : enable
+
+__kernel void gpuTensorPad2_F32toF32_chn
+    (
+    __read_only image2d_array_t input,
+               int              in_chn_num,
+               int              out_chn_num,
+               int              in_batch_num,
+               int              padLeft,
+               int              padTop,
+               int              padChn,
+               int              padBatchFront,
+               float            constData,
+    __write_only image2d_array_t output,
+               int             in_width,
+               int             in_height
+   )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+
+    int inc = cid - padChn;
+    int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, inc + bid * in_chn_num, 0);
+
+    if( inc >=0 && inc < in_chn_num &&
+        coord_in.x >= 0 && coord_in.x < in_width &&
+        coord_in.y >= 0 && coord_in.y < in_height )
+    {
+        float4 tmp = {0.0};
+        tmp = read_imagef(input, coord_in);
+        write_imagef(output, coord_out, tmp);
+    }
+    else
+    {
+        float4 tmp = {constData, constData, constData, constData};
+        write_imagef(output, coord_out, tmp);
+    }
+}
+
+__kernel void gpuTensorPad2_F32toF32_wh
+    (
+    __read_only image2d_array_t input,
+               int              in_chn_num,
+               int              out_chn_num,
+               int              in_batch_num,
+               int              padLeft,
+               int              padTop,
+               int              padChn,
+               int              padBatchFront,
+               float            constData,
+    __write_only image2d_array_t output,
+               int             in_width,
+               int             in_height
+   )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inx = x - padLeft;
+    int iny = y - padTop;
+    int4 coord_in = (int4)(inx, iny, z, 0);
+    float4 tmp = {0.0};
+
+    if( coord_in.x >= 0 && coord_in.x < in_width &&
+        coord_in.y >= 0 && coord_in.y < in_height )
+    {
+        tmp = read_imagef(input, coord_in);
+        write_imagef(output, coord_out, tmp);
+    }
+    else
+    {
+        float4 tmp = {constData, constData, constData, constData};
+        write_imagef(output, coord_out, tmp);
+    }
+}
+
+__kernel void gpuTensorPad2_U8toU8_chn
+    (
+    __read_only  image2d_array_t input,
+                 int             in_chn_num,
+                 int             out_chn_num,
+                 int             in_batch_num,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn,
+                 int             padBatchFront,
+                 uint            constData,
+    __write_only image2d_array_t output
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+
+    int inc = cid - padChn;
+
+    if(inc >=0 && inc < in_chn_num)
+    {
+        int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, inc + bid * in_chn_num, 0);
+        uint4 tmp = {0};
+        tmp = read_imageui(input, coord_in);
+        write_imageui(output, coord_out, tmp);
+    }
+    else
+    {
+        uint4 tmp = {constData, constData, constData, constData};
+        write_imageui(output, coord_out, tmp);
+    }
+}
+
+__kernel void gpuTensorPad2_U8toU8_wh
+    (
+    __read_only  image2d_array_t input,
+                 int             in_chn_num,
+                 int             out_chn_num,
+                 int             in_batch_num,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn,
+                 int             padBatchFront,
+                 uint            constData,
+    __write_only image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inx = x - padLeft;
+    int iny = y - padTop;
+    int4 coord_in = (int4)(inx, iny, z, 0);
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord_in);
+    write_imageui(output, coord_out, tmp);
+}
+
+__kernel void gpuTensorPad2_U8toU8_nchw
+    (
+    __read_only  image2d_array_t input,
+                 int             in_chn_num,
+                 int             out_chn_num,
+                 int             in_batch_num,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn,
+                 int             padBatchFront,
+                 uint            constData,
+    __write_only image2d_array_t output
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+
+    int inb_f = bid - padBatchFront;
+    int inc = cid - padChn;
+
+    if((inb_f >= 0 && inb_f < in_batch_num)
+        && (inc >=0 && inc < in_chn_num))
+    {
+        int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, inc + inb_f * in_chn_num, 0);
+        uint4 tmp = {0};
+        tmp = read_imageui(input, coord_in);
+        write_imageui(output, coord_out, tmp);
+    }
+    else
+    {
+        uint4 tmp = {constData, constData, constData, constData};
+        write_imageui(output, coord_out, tmp);
+    }
+}
+
+__kernel void gpuTensorPad2_F32toF32_nchw
+    (
+    __read_only image2d_array_t input,
+               int              in_chn_num,
+               int              out_chn_num,
+               int              in_batch_num,
+               int              padLeft,
+               int              padTop,
+               int              padChn,
+               int              padBatchFront,
+               float            constData,
+    __write_only image2d_array_t output,
+               int             in_width,
+               int             in_height
+   )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+
+    int inb_f = bid - padBatchFront;
+    int inc = cid - padChn;
+    int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, inc + inb_f * in_chn_num, 0);
+
+    if( inb_f >= 0 && inb_f < in_batch_num &&
+        inc >=0 && inc < in_chn_num &&
+        coord_in.x >= 0 && coord_in.x < in_width &&
+        coord_in.y >= 0 && coord_in.y < in_height )
+    {
+        float4 tmp = {0.0};
+        tmp = read_imagef(input, coord_in);
+        write_imagef(output, coord_out, tmp);
+    }
+    else
+    {
+        float4 tmp = {constData, constData, constData, constData};
+        write_imagef(output, coord_out, tmp);
+    }
+}
+
+__kernel void gpuTensorPad2_F32toBF16_chn
+    (
+    __read_only image2d_array_t input,
+               int              in_chn_num,
+               int              out_chn_num,
+               int              in_batch_num,
+               int              padLeft,
+               int              padTop,
+               int              padChn,
+               int              padBatchFront,
+               float            constData,
+    __write_only image2d_array_t output,
+               int             in_width,
+               int             in_height
+   )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+
+    int inc = cid - padChn;
+    int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, inc + bid * in_chn_num, 0);
+
+    if( inc >=0 && inc < in_chn_num &&
+        coord_in.x >= 0 && coord_in.x < in_width &&
+        coord_in.y >= 0 && coord_in.y < in_height )
+    {
+        float4 tmp = {0.0};
+        tmp = read_imagef(input, coord_in);
+        uint4 src, dst;
+        _viv_asm(COPY, src, tmp, 16);
+        dst = src >> 16;
+        write_imageui(output, coord_out, dst);
+    }
+    else
+    {
+        uint4 tmp = {constData, constData, constData, constData};
+        write_imageui(output, coord_out, tmp);
+    }
+}
+
+__kernel void gpuTensorPad2_F32toBF16_wh
+    (
+    __read_only image2d_array_t input,
+               int              in_chn_num,
+               int              out_chn_num,
+               int              in_batch_num,
+               int              padLeft,
+               int              padTop,
+               int              padChn,
+               int              padBatchFront,
+               float            constData,
+    __write_only image2d_array_t output,
+               int             in_width,
+               int             in_height
+   )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inx = x - padLeft;
+    int iny = y - padTop;
+    int4 coord_in = (int4)(inx, iny, z, 0);
+    float4 tmp = {constData, constData, constData, constData};
+
+    if( coord_in.x >= 0 && coord_in.x < in_width &&
+        coord_in.y >= 0 && coord_in.y < in_height )
+    {
+        tmp = read_imagef(input, coord_in);
+        uint4 src, dst;
+        _viv_asm(COPY, src, tmp, 16);
+        dst = src >> 16;
+        write_imageui(output, coord_out, dst);
+    }
+    else
+    {
+        uint4 src, dst;
+        _viv_asm(COPY, src, tmp, 16);
+        dst = src >> 16;
+        write_imageui(output, coord_out, dst);
+    }
+}
+
+__kernel void gpuTensorPad2_F32toBF16_nchw
+    (
+    __read_only  image2d_array_t input,
+                 int             in_chn_num,
+                 int             out_chn_num,
+                 int             in_batch_num,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn,
+                 int             padBatchFront,
+                 float           constData,
+    __write_only image2d_array_t output,
+                 int             in_width,
+                 int             in_height
+   )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+
+    int inb_f = bid - padBatchFront;
+    int inc = cid - padChn;
+    int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, inc + inb_f * in_chn_num, 0);
+
+    if( inb_f >= 0 && inb_f < in_batch_num &&
+        inc >=0 && inc < in_chn_num &&
+        coord_in.x >= 0 && coord_in.x < in_width &&
+        coord_in.y >= 0 && coord_in.y < in_height )
+    {
+        float4 tmp = {0.0};
+        tmp = read_imagef(input, coord_in);
+        uint4 src, dst;
+        _viv_asm(COPY, src, tmp, 16);
+        dst = src >> 16;
+        write_imageui(output, coord_out, dst);
+    }
+    else
+    {
+        uint4 tmp = {constData, constData, constData, constData};
+        uint4 src, dst;
+        _viv_asm(COPY, src, tmp, 16);
+        dst = src >> 16;
+        write_imageui(output, coord_out, dst);
+    }
+}
+
+__kernel void gpuTensorPad2_BF16toF32_chn
+    (
+    __read_only  image2d_array_t input,
+                 int             in_chn_num,
+                 int             out_chn_num,
+                 int             in_batch_num,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn,
+                 int             padBatchFront,
+                 float           constData,
+    __write_only image2d_array_t output
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+
+    int inc = cid - padChn;
+
+    if(inc >=0 && inc < in_chn_num)
+    {
+        int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, inc + bid * in_chn_num, 0);
+        uint4 src = read_imageui(input, coord_in);
+        float4 dst;
+        src = src << 16;
+        _viv_asm(COPY, dst, src, 16);
+        write_imagef(output, coord_out, dst);
+    }
+    else
+    {
+        float4 tmp = {constData, constData, constData, constData};
+        write_imagef(output, coord_out, tmp);
+    }
+}
+
+__kernel void gpuTensorPad2_BF16toF32_wh
+    (
+    __read_only  image2d_array_t input,
+                 int             in_chn_num,
+                 int             out_chn_num,
+                 int             in_batch_num,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn,
+                 int             padBatchFront,
+                 float           constData,
+    __write_only image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inx = x - padLeft;
+    int iny = y - padTop;
+    int4 coord_in = (int4)(inx, iny, z, 0);
+    uint4 src = read_imageui(input, coord_in);
+    float4 dst;
+    src = src << 16;
+    _viv_asm(COPY, dst, src, 16);
+    write_imagef(output, coord_out, dst);
+}
+
+__kernel void gpuTensorPad2_BF16toF32_nchw
+    (
+    __read_only  image2d_array_t input,
+                 int             in_chn_num,
+                 int             out_chn_num,
+                 int             in_batch_num,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn,
+                 int             padBatchFront,
+                 float           constData,
+    __write_only image2d_array_t output
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+
+    int inb_f = bid - padBatchFront;
+    int inc = cid - padChn;
+
+    if((inb_f >= 0 && inb_f < in_batch_num)
+        && (inc >=0 && inc < in_chn_num))
+    {
+        int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, inc + inb_f * in_chn_num, 0);
+        uint4 src = read_imageui(input, coord_in);
+        float4 dst;
+        src = src << 16;
+        _viv_asm(COPY, dst, src, 16);
+        write_imagef(output, coord_out, dst);
+    }
+    else
+    {
+        float4 tmp = {constData, constData, constData, constData};
+        write_imagef(output, coord_out, tmp);
+    }
+}
+
+__kernel void gpuTensorPad2_I32toI32_nchw
+    (
+    __read_only  image2d_array_t input,
+                 int             in_chn_num,
+                 int             out_chn_num,
+                 int             in_batch_num,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn,
+                 int             padBatchFront,
+                 int             constData,
+    __write_only image2d_array_t output
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+
+    int inb_f = bid - padBatchFront;
+    int inc = cid - padChn;
+
+    if((inb_f >= 0 && inb_f < in_batch_num)
+        && (inc >=0 && inc < in_chn_num))
+    {
+        int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, inc + inb_f * in_chn_num, 0);
+        int4 tmp = {0};
+        tmp = read_imagei(input, coord_in);
+        write_imagei(output, coord_out, tmp);
+    }
+    else
+    {
+        int4 tmp = {constData, constData, constData, constData};
+        write_imagei(output, coord_out, tmp);
+    }
+}
+
+__kernel void gpuTensorPad2_I32toI32_wh
+    (
+    __read_only  image2d_array_t input,
+                 int             in_chn_num,
+                 int             out_chn_num,
+                 int             in_batch_num,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn,
+                 int             padBatchFront,
+                 int             constData,
+    __write_only image2d_array_t output
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    int4 coord_out = (int4)(x, y, z, 0);
+    int inx = x - padLeft;
+    int iny = y - padTop;
+    int4 coord_in = (int4)(inx, iny, z, 0);
+
+    int4  tmp = read_imagei(input, coord_in);
+    write_imagei(output, coord_out, tmp);
+}
+
+__kernel void gpuTensorPad2_U8toU8_chn
+    (
+    __read_only  image2d_array_t input,
+                 int             in_chn_num,
+                 int             out_chn_num,
+                 int             in_batch_num,
+                 int             padLeft,
+                 int             padTop,
+                 int             padChn,
+                 int             padBatchFront,
+                 int             constData,
+    __write_only image2d_array_t output
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, gidz, 0);
+
+    int inc = cid - padChn;
+
+    if(inc >=0 && inc < in_chn_num)
+    {
+        int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, inc + bid * in_chn_num, 0);
+        int4 tmp = read_imagei(input, coord_in);
+        write_imagei(output, coord_out, tmp);
+    }
+    else
+    {
+        int4 tmp = {constData, constData, constData, constData};
+        write_imagei(output, coord_out, tmp);
+    }
+}

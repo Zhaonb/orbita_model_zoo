@@ -1,0 +1,110 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform uint offset;
+_viv_uniform VXC_512Bits vxcData_to_Int4_4x4;
+_viv_uniform VXC_512Bits vxcData_to_Int4_2_4x4;
+_viv_uniform VXC_512Bits vxcData_to_Int4_3_4x4;
+_viv_uniform VXC_512Bits vxcData_to_Int4_4_4x4;
+_viv_uniform VXC_512Bits short4_to_vxcData_2x8;
+_viv_uniform VXC_512Bits uchar4_to_vxcData_2x8;
+
+__kernel void table_lookup_offset0
+(
+    __read_only  image2d_t input,
+    __global     uchar*    lut,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 index_vxc;
+    uint4 index0;
+    uint4 index1;
+    uint4 index2;
+    uint4 index3;
+    vxc_uchar16 dst0;
+    uchar4 value0;
+    uchar4 value1;
+    uchar4 value2;
+    uchar4 value3;
+
+    VXC_ReadImage(index_vxc, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(index0, index_vxc, index_vxc, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), vxcData_to_Int4_4x4);
+    VXC_DP4x4(index1, index_vxc, index_vxc, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), vxcData_to_Int4_2_4x4);
+    VXC_DP4x4(index2, index_vxc, index_vxc, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), vxcData_to_Int4_3_4x4);
+    VXC_DP4x4(index3, index_vxc, index_vxc, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), vxcData_to_Int4_4_4x4);
+
+    value0 = (uchar4)(lut[index0.x],lut[index0.y],lut[index0.z],lut[index0.w]);
+    value1 = (uchar4)(lut[index1.x],lut[index1.y],lut[index1.z],lut[index1.w]);
+    value2 = (uchar4)(lut[index2.x],lut[index2.y],lut[index2.z],lut[index2.w]);
+    value3 = (uchar4)(lut[index3.x],lut[index3.y],lut[index3.z],lut[index3.w]);
+
+    VXC_DP2x8(dst0, value0, value1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uchar4_to_vxcData_2x8);
+    VXC_DP2x8(dst0, value2, value3, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0), uchar4_to_vxcData_2x8);
+
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void table_lookup_u8
+(
+    __read_only  image2d_t input,
+    __global     uchar*    lut,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 index_vxc;
+    uint4 index0;
+    uint4 index1;
+    uint4 index2;
+    uint4 index3;
+    vxc_uchar16 dst0;
+    uchar4 value0;
+    uchar4 value1;
+    uchar4 value2;
+    uchar4 value3;
+
+    VXC_ReadImage(index_vxc, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(index0, index_vxc, index_vxc, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), vxcData_to_Int4_4x4);
+    VXC_DP4x4(index1, index_vxc, index_vxc, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), vxcData_to_Int4_2_4x4);
+    VXC_DP4x4(index2, index_vxc, index_vxc, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), vxcData_to_Int4_3_4x4);
+    VXC_DP4x4(index3, index_vxc, index_vxc, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), vxcData_to_Int4_4_4x4);
+
+    value0 = (uchar4)(lut[index0.x + offset],lut[index0.y + offset],lut[index0.z + offset],lut[index0.w + offset]);
+    value1 = (uchar4)(lut[index1.x + offset],lut[index1.y + offset],lut[index1.z + offset],lut[index1.w + offset]);
+    value2 = (uchar4)(lut[index2.x + offset],lut[index2.y + offset],lut[index2.z + offset],lut[index2.w + offset]);
+    value3 = (uchar4)(lut[index3.x + offset],lut[index3.y + offset],lut[index3.z + offset],lut[index3.w + offset]);
+
+    VXC_DP2x8(dst0, value0, value1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uchar4_to_vxcData_2x8);
+    VXC_DP2x8(dst0, value2, value3, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 0), uchar4_to_vxcData_2x8);
+
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void table_lookup_s16
+(
+    __read_only  image2d_t input,
+    __global     short*    lut,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_short8 index_vxc;
+    uint4 index0;
+    uint4 index1;
+    vxc_short8 dst0;
+    short4 value0;
+    short4 value1;
+
+    VXC_ReadImage(index_vxc, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(index0, index_vxc, index_vxc, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), vxcData_to_Int4_4x4);
+    VXC_DP4x4(index1, index_vxc, index_vxc, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), vxcData_to_Int4_2_4x4);
+
+    value0 = (short4)(lut[index0.x + offset],lut[index0.y + offset],lut[index0.z + offset],lut[index0.w + offset]);
+    value1 = (short4)(lut[index1.x + offset],lut[index1.y + offset],lut[index1.z + offset],lut[index1.w + offset]);
+
+    VXC_DP2x8(dst0, value0, value1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), short4_to_vxcData_2x8);
+
+    VXC_WriteImage(output, coord, dst0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}

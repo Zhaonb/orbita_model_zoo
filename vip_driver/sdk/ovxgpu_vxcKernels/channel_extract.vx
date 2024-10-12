@@ -1,0 +1,248 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+//coordinate follows pixel
+__kernel void channel_extract_rgb_r(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 rgb = read_imageui(input, coord);
+    write_imageui(output, coord, rgb.xxxx);
+}
+
+__kernel void channel_extract_rgb_g(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 rgb = read_imageui(input, coord);
+    write_imageui(output, coord, rgb.yyyy);
+}
+
+__kernel void channel_extract_rgb_b(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 rgb = read_imageui(input, coord);
+    write_imageui(output, coord, rgb.zzzz);
+}
+
+__kernel void channel_extract_rgbx_r(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 rgbx = read_imageui(input, coord);
+    write_imageui(output, coord, rgbx.xxxx);
+}
+
+__kernel void channel_extract_rgbx_g(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 rgbx = read_imageui(input, coord);
+    write_imageui(output, coord, rgbx.yyyy);
+}
+
+__kernel void channel_extract_rgbx_b(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 rgbx = read_imageui(input, coord);
+    write_imageui(output, coord, rgbx.zzzz);
+}
+
+__kernel void channel_extract_rgbx_a(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 rgbx = read_imageui(input, coord);
+    write_imageui(output, coord, rgbx.wwww);
+}
+
+__kernel void channel_extract_uyvy_y(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 2 + 1, get_global_id(1));
+
+    uint4 y = read_imageui(input, coord_in);
+    write_imageui(output, coord, y);
+}
+
+__kernel void channel_extract_uyvy_u(
+            __read_only  image2d_t input,
+            int chn,
+    __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 4, get_global_id(1));
+
+    uint4 u = read_imageui(input, coord_in);
+    write_imageui(output, coord, u);
+}
+
+__kernel void channel_extract_uyvy_v(
+    __read_only  image2d_t input,
+    int chn,
+    __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 4 + 2, get_global_id(1));
+
+    uint4 v = read_imageui(input, coord_in);
+    write_imageui(output, coord, v);
+}
+
+__kernel void channel_extract_yuyv_y(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 2, get_global_id(1));
+
+    uint4 y = read_imageui(input, coord_in);
+    write_imageui(output, coord, y);
+}
+
+__kernel void channel_extract_yuyv_u(
+            __read_only  image2d_t input,
+            int chn,
+    __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 4 + 1, get_global_id(1));
+
+    uint4 u = read_imageui(input, coord_in);
+    write_imageui(output, coord, u);
+}
+
+__kernel void channel_extract_yuyv_v(
+            __read_only  image2d_t input,
+            int chn,
+    __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 4 + 3, get_global_id(1));
+
+    uint4 v = read_imageui(input, coord_in);
+    write_imageui(output, coord, v);
+}
+
+__kernel void channel_extract_yuv_y(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 y = read_imageui(input, coord);
+    write_imageui(output, coord, y);
+}
+
+__kernel void channel_extract_nv12_u(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 2, get_global_id(1));
+
+    uint4 u = read_imageui(input, coord_in);
+    write_imageui(output, coord, u);
+}
+
+__kernel void channel_extract_nv12_v(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 2 + 1, get_global_id(1));
+
+    uint4 v = read_imageui(input, coord_in);
+    write_imageui(output, coord, v);
+}
+
+__kernel void channel_extract_nv21_u(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 2 + 1, get_global_id(1));
+
+    uint4 u = read_imageui(input, coord_in);
+    write_imageui(output, coord, u);
+}
+
+__kernel void channel_extract_nv21_v(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_in = (int2)(get_global_id(0) * 2, get_global_id(1));
+
+    uint4 v = read_imageui(input, coord_in);
+    write_imageui(output, coord, v);
+}
+
+#define CHANNELEXTRACT_IYUV(src0_type_name) \
+__kernel void channel_extract_iyuv_##src0_type_name( \
+        __read_only  image2d_t input, \
+        int chn, \
+        __write_only image2d_t output) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    uint4 src = read_imageui(input, coord); \
+    write_imageui(output, coord, src); \
+}
+CHANNELEXTRACT_IYUV(u)
+CHANNELEXTRACT_IYUV(v)
+
+#define CHANNELEXTRACT_YUV4(src0_type_name) \
+__kernel void channel_extract_yuv4_##src0_type_name( \
+        __read_only  image2d_t input, \
+        int chn, \
+        __write_only image2d_t output) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    uint4 src = read_imageui(input, coord); \
+    write_imageui(output, coord, src); \
+}
+CHANNELEXTRACT_YUV4(u)
+CHANNELEXTRACT_YUV4(v)
+
+__kernel void channel_extract_yuv_uv(
+        __read_only  image2d_t input,
+        int chn,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src = read_imageui(input, coord);
+    write_imageui(output, coord, src);
+}

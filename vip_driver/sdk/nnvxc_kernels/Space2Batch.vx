@@ -1,0 +1,158 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform float output_scale;
+_viv_uniform float output_tail;
+_viv_uniform int input_batch;
+_viv_uniform int4 pad_val;
+_viv_uniform int4 strides;
+
+__kernel void space2batch_U8toU8
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+                 int             input_depth
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+
+    int4 coord = (int4)(gidx - pad_val.x, gidy - pad_val.z, gidz, 0);
+
+    uchar imageData;
+    VXC_ReadImage2DArray(imageData, input, coord, 0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    short sidx = (short)gidx;
+    short sidy = (short)gidy;
+    short blockX = (short)strides.x;
+    short blockY = (short)strides.y;
+    int out_batch = (int)(sidx % blockX + (sidy % blockY) * blockX);
+    int out_z = out_batch * input_depth * input_batch + gidz;
+    int4 coord_out = (int4)((int)(sidx / blockX), (int)(sidy / blockY), out_z, 0);
+
+    float tmpVal0 = imageData * output_scale + output_tail;
+    tmpVal0 = clamp(tmpVal0, 0, 255);
+    imageData = convert_uchar_rte(tmpVal0);
+
+    VXC_WriteImage2DArray(output, coord_out, imageData, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void space2batch_I8toI8
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int input_depth
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+
+    int4 coord = (int4)(gidx - pad_val.x, gidy - pad_val.z, gidz, 0);
+
+    char imageData;
+    VXC_ReadImage2DArray(imageData, input, coord, 0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    short sidx = (short)gidx;
+    short sidy = (short)gidy;
+    short blockX = (short)strides.x;
+    short blockY = (short)strides.y;
+    int out_batch = (int)(sidx % blockX + (sidy % blockY) * blockX);
+    int out_z = out_batch * input_depth * input_batch + gidz;
+    int4 coord_out = (int4)((int)(sidx / blockX), (int)(sidy / blockY), out_z, 0);
+
+    float tmpVal0 = imageData * output_scale + output_tail;
+    tmpVal0 = clamp(tmpVal0, -128, 127);
+    imageData = convert_char_rte(tmpVal0);
+
+    VXC_WriteImage2DArray(output, coord_out, imageData, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void space2batch_I16to16
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int input_depth
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+
+    int4 coord = (int4)(gidx - pad_val.x, gidy - pad_val.z, gidz, 0);
+
+    short imageData;
+    VXC_ReadImage2DArray(imageData, input, coord, 0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    short sidx = (short)gidx;
+    short sidy = (short)gidy;
+    short blockX = (short)strides.x;
+    short blockY = (short)strides.y;
+    int out_batch = (int)(sidx % blockX + (sidy % blockY) * blockX);
+    int out_z = out_batch * input_depth * input_batch + gidz;
+    int4 coord_out = (int4)((int)(sidx / blockX), (int)(sidy / blockY), out_z, 0);
+
+    float tmpVal0 = imageData * output_scale + output_tail;
+    tmpVal0 = clamp(tmpVal0, -32768, 32767);
+    imageData = convert_short_rte(tmpVal0);
+
+    VXC_WriteImage2DArray(output, coord_out, imageData, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void space2batch_8BitsTo8Bits
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int input_depth
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+
+    int4 coord = (int4)(gidx - pad_val.x, gidy - pad_val.z, gidz, 0);
+    vxc_uchar16 imageData;
+    VXC_ReadImage2DArray(imageData, input, coord, 0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    short sidx = (short)gidx;
+    short sidy = (short)gidy;
+    short blockX = (short)strides.x;
+    short blockY = (short)strides.y;
+    int out_batch = (int)(sidx % blockX + (sidy % blockY) * blockX);
+    int out_z = out_batch * input_depth * input_batch + gidz;
+    int4 coord_out = (int4)((int)(sidx / blockX), (int)(sidy / blockY), out_z, 0);
+
+    VXC_WriteImage2DArray(output, coord_out, imageData, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void space2batch_16BitsTo16Bits
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output,
+    int input_depth
+    )
+{
+    int2 coord_para = (int2)(0, 0);
+
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int gidz = get_global_id(2);
+
+    int4 coord = (int4)(gidx - pad_val.x, gidy - pad_val.z, gidz, 0);
+
+    short imageData;
+    VXC_ReadImage2DArray(imageData, input, coord, 0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    short sidx = (short)gidx;
+    short sidy = (short)gidy;
+    short blockX = (short)strides.x;
+    short blockY = (short)strides.y;
+    int out_batch = (int)(sidx % blockX + (sidy % blockY) * blockX);
+    //int out_z = out_batch * input_depth + gidz;
+    int out_z = out_batch * input_depth * input_batch + gidz;
+    int4 coord_out = (int4)((int)(sidx / blockX), (int)(sidy / blockY), out_z, 0);
+
+    VXC_WriteImage2DArray(output, coord_out, imageData, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}

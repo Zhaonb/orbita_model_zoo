@@ -1,0 +1,207 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniConvert1stUint8SubZpToFp32_4x4;
+_viv_uniform VXC_512Bits uniConvert2ndUint8SubZpToFp32_4x4;
+_viv_uniform VXC_512Bits uniConvert3rdUint8SubZpToFp32_4x4;
+_viv_uniform VXC_512Bits uniConvert4thUint8SubZpToFp32_4x4;
+_viv_uniform VXC_512Bits uniConvertInt32toUint8_2x8;
+_viv_uniform int value_rows;
+_viv_uniform float input_scale;
+_viv_uniform int inputZP;
+_viv_uniform float output_scale;
+_viv_uniform int outputZP;
+_viv_uniform float scale_inOut_u8;
+_viv_uniform int key_count;
+
+__kernel void vxcHashLUT_u8_nofl(
+    image2d_array_t input,
+    image2d_array_t keys,
+    image2d_array_t value,
+    image2d_array_t hit,
+    image2d_array_t output
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+
+    int4 coord_key = (int4)(gidy, 0, 0, 0);
+    int2 coord = (int2)(gidx, -1);
+    int2 coord_out = (int2)(gidx, gidy);
+
+    vxc_uchar16 inputVal;
+    int4 key = read_imagei(input, coord_key);
+    coord_key.x = 0;
+    int cntExt = ((key_count + 3) >> 2) << 2;
+    vxc_uchar8 hitFlg = (vxc_uchar8)(0);
+    for(int i = 0; i < cntExt; i += 4)
+    {
+        int4 kId = read_imagei(keys, coord_key);
+        if(kId.s0 == key.s0)
+        {
+            coord.y = i;
+            hitFlg.s0 = 1;
+            break;
+        }
+        if(kId.s1 == key.s0)
+        {
+            coord.y = i + 1;
+            hitFlg.s0 = 1;
+            break;
+        }
+        if(kId.s2 == key.s0)
+        {
+            coord.y = i + 2;
+            hitFlg.s0 = 1;
+            break;
+        }
+        if(kId.s3 == key.s0)
+        {
+            coord.y = i + 3;
+            hitFlg.s0 = 1;
+            break;
+        }
+        coord_key.x += 4;
+    }
+
+    //if(coord.y >= 0 && coord.y < value_rows)
+    VXC_ReadImage(inputVal, value, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out, inputVal, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    if(gidx == 0)
+        VXC_WriteImage(hit, coord_out.yx, hitFlg, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcHashLUT_u8(
+    image2d_array_t input,
+    image2d_array_t keys,
+    image2d_array_t value,
+    image2d_array_t hit,
+    image2d_array_t output
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+
+    int4 coord_key = (int4)(gidy, 0, 0, 0);
+    int2 coord = (int2)(gidx, -1);
+    int2 coord_out = (int2)(gidx, gidy);
+
+    vxc_uchar16 inputVal, outputVal;
+    int4 key = read_imagei(input, coord_key);
+    coord_key.x = 0;
+    int cntExt = ((key_count + 3) >> 2) << 2;
+    vxc_uchar8 hitFlg = (vxc_uchar8)(0);
+    for(int i = 0; i < cntExt; i += 4)
+    {
+        int4 kId = read_imagei(keys, coord_key);
+        if(kId.s0 == key.s0)
+        {
+            coord.y = i;
+            hitFlg.s0 = 1;
+            break;
+        }
+        if(kId.s1 == key.s0)
+        {
+            coord.y = i + 1;
+            hitFlg.s0 = 1;
+            break;
+        }
+        if(kId.s2 == key.s0)
+        {
+            coord.y = i + 2;
+            hitFlg.s0 = 1;
+            break;
+        }
+        if(kId.s3 == key.s0)
+        {
+            coord.y = i + 3;
+            hitFlg.s0 = 1;
+            break;
+        }
+        coord_key.x += 4;
+    }
+
+    vxc_float4  tmpData0, tmpData1, tmpData2, tmpData3;
+    vxc_float4  tmpVal0, tmpVal1, tmpVal2, tmpVal3;
+    vxc_int4  tmpOut0, tmpOut1, tmpOut2, tmpOut3;
+    VXC_ReadImage(inputVal, value, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    short zp = inputZP;
+    VXC_DP4x4(tmpData0, inputVal, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+    VXC_DP4x4(tmpData1, inputVal, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+    VXC_DP4x4(tmpData2, inputVal, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert3rdUint8SubZpToFp32_4x4);
+    VXC_DP4x4(tmpData3, inputVal, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert4thUint8SubZpToFp32_4x4);
+
+    tmpVal0 = tmpData0 * scale_inOut_u8 + outputZP;
+    tmpVal1 = tmpData1 * scale_inOut_u8 + outputZP;
+    tmpVal2 = tmpData2 * scale_inOut_u8 + outputZP;
+    tmpVal3 = tmpData3 * scale_inOut_u8 + outputZP;
+
+    tmpOut0 = convert_int4_rte(tmpVal0);
+    tmpOut1 = convert_int4_rte(tmpVal1);
+    tmpOut2 = convert_int4_rte(tmpVal2);
+    tmpOut3 = convert_int4_rte(tmpVal3);
+    VXC_DP2x8(outputVal, tmpOut0, tmpOut1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvertInt32toUint8_2x8);
+    VXC_DP2x8(outputVal, tmpOut2, tmpOut3, VXC_MODIFIER(8, 15, 0, VXC_RM_TowardZero, 1), uniConvertInt32toUint8_2x8);
+    VXC_WriteImage(output, coord_out, outputVal, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    if(gidx == 0)
+        VXC_WriteImage(hit, coord_out.yx, hitFlg, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcHashLUT_fp16(
+    image2d_array_t input,
+    image2d_array_t keys,
+    image2d_array_t value,
+    image2d_array_t hit,
+    image2d_array_t output
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+
+    int4 coord_key = (int4)(gidy, 0, 0, 0);
+    int2 coord = (int2)(gidx, -1);
+    int2 coord_out = (int2)(gidx, gidy);
+
+    vxc_short8 inputVal;
+    int4 key = read_imagei(input, coord_key);
+    coord_key.x = 0;
+    int cntExt = ((key_count + 3) >> 2) << 2;
+    vxc_uchar8 hitFlg = (vxc_uchar8)(0);
+    for(int i = 0; i < cntExt; i += 4)
+    {
+        int4 kId = read_imagei(keys, coord_key);
+        if(kId.s0 == key.s0)
+        {
+            coord.y = i;
+            hitFlg.s0 = 1;
+            break;
+        }
+        if(kId.s1 == key.s0)
+        {
+            coord.y = i + 1;
+            hitFlg.s0 = 1;
+            break;
+        }
+        if(kId.s2 == key.s0)
+        {
+            coord.y = i + 2;
+            hitFlg.s0 = 1;
+            break;
+        }
+        if(kId.s3 == key.s0)
+        {
+            coord.y = i + 3;
+            hitFlg.s0 = 1;
+            break;
+        }
+        coord_key.x += 4;
+    }
+
+    //if(coord.y >= 0 && coord.y < value_rows)
+    VXC_ReadImage(inputVal, value, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_WriteImage(output, coord_out, inputVal, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    if(gidx == 0)
+        VXC_WriteImage(hit, coord_out.yx, hitFlg, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}

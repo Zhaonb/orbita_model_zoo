@@ -1,0 +1,23 @@
+__kernel void copy_I32
+(
+    __read_only image2d_t  input,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4 src = read_imagei(input, coord);
+
+    write_imagei(output, coord, src);
+}
+
+__kernel void copy_U32
+(
+    __read_only image2d_t  input,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 src = read_imageui(input, coord);
+
+    write_imageui(output, coord, src);
+}

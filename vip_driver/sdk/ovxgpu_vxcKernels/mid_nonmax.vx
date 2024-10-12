@@ -1,0 +1,65 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int width;
+_viv_uniform int r;
+_viv_uniform float r2;
+_viv_uniform int area;
+
+__kernel void mid_nonmaxsuppression
+(
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 float     radius
+)
+{
+    Image img_in = create_image_from_image2d(input, 4);
+    Image img_out = create_image_from_image2d(output, 4);
+    __global float* input_ptr = (__global float*)img_in.ptr;
+    __global int* mask_ptr = (__global int*)img_out.ptr;
+
+    int index = get_global_id(0) + get_global_id(1) * width;
+    float data = input_ptr[index];
+
+    if(data > 0)
+    {
+        int max_flg = 1;
+
+        for(int j = -r; j <= r; j++)
+        {
+            for(int i = -r; i <= r; i++)
+            {
+                float d = (float)i * i + j * j;
+                int offset = index + i + j * width;
+                if(d < r2 && d > 2.0f && offset < area && offset >= 0)
+                {
+                    float data1 = input_ptr[offset];
+                    if(data1 > data)
+                    {
+                        max_flg = 0;
+                        j = r + 1;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if(max_flg)
+        {
+            mask_ptr[index] = 2;
+            for(int j = -r; j <= r; j++)
+            {
+                for(int i = -r; i <= r; i++)
+                {
+                    float d = (float)i * i + j * j;
+                    int offset = index + i + j * width;
+                    if(d < r2 && d != 0 && offset < area && offset >= 0)
+                    {
+                        input_ptr[offset] = 0;
+                    }
+                }
+            }
+        }
+    }
+}

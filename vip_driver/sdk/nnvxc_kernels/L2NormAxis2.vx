@@ -1,0 +1,148 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform float epsilon;
+_viv_uniform float nSquareZP;
+_viv_uniform float outputScale;
+_viv_uniform float outputZP;
+_viv_uniform int inputZP;
+_viv_uniform int axis_size;
+_viv_uniform VXC_512Bits uniDataSqualAdd_part0_4x4;
+_viv_uniform VXC_512Bits uniDataSqualAdd_part1_4x4;
+_viv_uniform VXC_512Bits uniDataSubZp_part0_4x4;
+_viv_uniform VXC_512Bits uniDataSubZp_part1_4x4;
+_viv_uniform VXC_512Bits uniExtact8Bin_2x8;
+
+#define VXC_IMG_READ(read_func) \
+        read_func(v0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+        _viv_asm(COPY, src0, v0, 16); \
+
+#define VXC_IMG_WRITE_8PIXELS(write_func) \
+        write_func(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+
+#define L2_NORM_AXIS2_SH_IMPL(name0, name1, src_type, copy_type, conv_type, dst_type, save_type) \
+    __kernel void l2norm_axis2_##name0##to##name1 \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0); \
+    src_type  v0, v1, v2, v3; \
+    copy_type src0, src1, src2, src3; \
+ \
+    float4 total0 = nSquareZP; \
+    float4 total1 = nSquareZP; \
+    float4 sum0 = 0, sum1 = 0; \
+    do \
+    {  \
+        VXC_IMG_READ(VXC_ReadImage2DArray) \
+        coord.z ++; \
+        VXC_DP4x4(sum0, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataSqualAdd_part0_4x4); \
+        VXC_DP4x4(sum1, src0, src0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataSqualAdd_part1_4x4); \
+ \
+        total0 = total0 + sum0; \
+        total1 = total1 + sum1; \
+    } while (coord.z < axis_size); \
+ \
+    total0 = total0 > epsilon ? total0 : epsilon; \
+    total1 = total1 > epsilon ? total1 : epsilon; \
+    float4 scale0 = rsqrt(total0) * outputScale; \
+    float4 scale1 = rsqrt(total1) * outputScale; \
+ \
+    coord.z = 0; \
+    do \
+    { \
+        VXC_IMG_READ(VXC_ReadImage2DArray) \
+        float4 data0, data1; \
+        short zp; \
+        _viv_asm(COPY, zp, inputZP, 4); \
+        VXC_DP4x4(data0, src0, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataSubZp_part0_4x4); \
+        VXC_DP4x4(data1, src0, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataSubZp_part1_4x4); \
+        data0 = data0 * scale0 + outputZP; \
+        data1 = data1 * scale1 + outputZP; \
+        conv_type data2, data3; \
+        _viv_asm(CONV_RTE, data2, data0); \
+        _viv_asm(CONV_RTE, data3, data1); \
+        dst_type dst0; \
+        VXC_DP2x8(dst0, data2, data3, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniExtact8Bin_2x8); \
+        save_type dst;\
+        _viv_asm(COPY, dst, dst0, 16); \
+        VXC_IMG_WRITE_8PIXELS(VXC_WriteImage2DArray) \
+        coord.z ++; \
+    } while (coord.z < axis_size); \
+}
+
+L2_NORM_AXIS2_SH_IMPL(F16, F16, vxc_short8,  vxc_half8,   half4, vxc_half8,   vxc_short8)
+L2_NORM_AXIS2_SH_IMPL(F16, I16, vxc_short8,  vxc_half8,   int4,  vxc_short8,  vxc_short8)
+L2_NORM_AXIS2_SH_IMPL(F16, I8,  vxc_short8,  vxc_half8,   int4,  vxc_char16,  vxc_char16)
+L2_NORM_AXIS2_SH_IMPL(F16, U8,  vxc_short8,  vxc_half8,   int4,  vxc_uchar16, vxc_uchar16)
+L2_NORM_AXIS2_SH_IMPL(I16, F16, vxc_short8,  vxc_short8,  half4, vxc_half8,   vxc_short8)
+L2_NORM_AXIS2_SH_IMPL(I16, I16, vxc_short8,  vxc_short8,  int4,  vxc_short8,  vxc_short8)
+L2_NORM_AXIS2_SH_IMPL(I8,  F16, vxc_char16,  vxc_char16,  half4, vxc_half8,   vxc_short8)
+L2_NORM_AXIS2_SH_IMPL(I8,  I8,  vxc_char16,  vxc_char16,  int4,  vxc_char16,  vxc_char16)
+L2_NORM_AXIS2_SH_IMPL(U8,  F16, vxc_uchar16, vxc_uchar16, half4, vxc_half8,   vxc_short8)
+L2_NORM_AXIS2_SH_IMPL(U8,  U8,  vxc_uchar16, vxc_uchar16, int4,  vxc_uchar16, vxc_uchar16)
+
+
+_viv_uniform VXC_512Bits uniConvBF16toF32_Part0_2x8;
+_viv_uniform VXC_512Bits uniConvBF16toF32_Part1_2x8;
+_viv_uniform VXC_512Bits uniPackedBF16_2x8;
+__kernel void l2norm_axis2_BF16toBF16
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    vxc_ushort8 v0, v1, v2, v3;
+    vxc_ushort8 src0, src1, src, dst;
+    float  total = 0;
+    vxc_float4 sum0 = 0;
+    vxc_float4 sum1 = 0;
+
+    do
+    {
+        VXC_IMG_READ(VXC_ReadImage2DArray)
+        coord.z ++;
+        vxc_float4 vectA, vectB;
+        vxc_short8 zero = (vxc_short8)(0, 0, 0, 0, 0, 0, 0, 0);
+        VXC_DP2x8(src, src0, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+        _viv_asm(COPY, vectA, src, 16);
+        VXC_DP2x8(src0, src0, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+        _viv_asm(COPY, vectB, src0, 16);
+
+        float4 one = (float4)(1.0f, 1.0f, 1.0f, 1.0f);
+        sum0 = sum0 + vectA * vectA;
+        sum1 = sum1 + vectB * vectB;
+    } while (coord.z < axis_size);
+
+    sum0 = sum0 > epsilon ? sum0 : epsilon;
+    sum1 = sum1 > epsilon ? sum1 : epsilon;
+    float4 scale0 = rsqrt(sum0);
+    float4 scale1 = rsqrt(sum1);
+
+    coord.z = 0;
+    do
+    {
+        VXC_IMG_READ(VXC_ReadImage2DArray)
+        vxc_float4 vectA, vectB;
+        vxc_short8 zero = (vxc_short8)(0, 0, 0, 0, 0, 0, 0, 0);
+        VXC_DP2x8(src, src0, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part0_2x8);
+        _viv_asm(COPY, vectA, src, 16);
+        VXC_DP2x8(src0, src0, zero, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniConvBF16toF32_Part1_2x8);
+        _viv_asm(COPY, vectB, src0, 16);
+
+        vectA = vectA * scale0;
+        vectB = vectB * scale1;
+        _viv_asm(COPY, src0, vectA, 16);
+        _viv_asm(COPY, src, vectB, 16);
+        VXC_DP2x8(dst, src0, src, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniPackedBF16_2x8);
+        VXC_IMG_WRITE_8PIXELS(VXC_WriteImage2DArray)
+        coord.z ++;
+
+    } while (coord.z < axis_size);
+}
+

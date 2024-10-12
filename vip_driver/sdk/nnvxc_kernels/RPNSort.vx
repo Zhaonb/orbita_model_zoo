@@ -1,0 +1,66 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+#define THREAD_NUM 32
+#define MAX(a,b) ((a)>(b)?(a):(b))
+__kernel __attribute__((reqd_work_group_size(32,1,1)))
+    void vxcRPN_Sort_FP16
+    (
+    image2d_array_t inputData,
+    global int *changeFlag,
+    int len
+    )
+{
+    int x = get_global_id(0);
+    int boxNum1 = len - 1;
+    int numPerThread = (boxNum1 + THREAD_NUM) / THREAD_NUM;
+
+    numPerThread = numPerThread + (numPerThread & 1);
+    numPerThread = MAX(numPerThread, 2);
+    int x2 = x  * numPerThread;
+    int x3 = x2 + numPerThread;
+    vxc_ushort8 w0, w1;
+    int2 coord_in0, coord_in1;
+
+    *changeFlag = 0;
+    while (true)
+    {
+        *changeFlag = 0;
+        barrier(CLK_GLOBAL_MEM_FENCE);
+
+        for (int i=x2; i<x3; i+=2)
+        {
+            if (i >= boxNum1)
+                continue;
+            coord_in0 = (int2)(0, i);
+            coord_in1 = (int2)(0, i+1);
+            VXC_ReadImage(w0, inputData,  coord_in0, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(w1, inputData,  coord_in1, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+            if (w0.s4 < w1.s4){
+                VXC_WriteImage(inputData, coord_in0, w1, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+                VXC_WriteImage(inputData, coord_in1, w0, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+                atomic_inc(changeFlag);
+            }
+        }
+        barrier(CLK_GLOBAL_MEM_FENCE);
+
+        for (int i=x2+1; i<x3; i+=2)
+        {
+            if (i >= boxNum1)
+                continue;
+            coord_in0 = (int2)(0, i);
+            coord_in1 = (int2)(0, i+1);
+            VXC_ReadImage(w0, inputData,  coord_in0, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(w1, inputData,  coord_in1, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+            if (w0.s4 < w1.s4){
+                VXC_WriteImage(inputData, coord_in0, w1, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+                VXC_WriteImage(inputData, coord_in1, w0, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+                atomic_inc(changeFlag);
+            }
+        }
+        barrier(CLK_GLOBAL_MEM_FENCE);
+
+        if (*changeFlag == 0)
+            break;
+    }
+}

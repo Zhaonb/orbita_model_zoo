@@ -1,0 +1,238 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+#define CONVERT_DEPTH_U1_SH_IMPL(name1, dst_type, data) \
+__kernel void convertdepth_U1to##name1 \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 int       policy, \
+                 int       shift \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+ \
+    vxc_uchar16 src0; \
+    dst_type src1, dst; \
+ \
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0)); \
+ \
+    coord.x <<= 3; \
+    _viv_asm(COPY, src1, src0, 16); \
+    vxc_uint4 config = {0x03020100, 0x07060504, 0x01010101, 0x01010101}; \
+    VXC_BitExtract(src1, src1, src1, config, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+ \
+    dst = src1 * data; \
+ \
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+}
+CONVERT_DEPTH_U1_SH_IMPL(U8,  vxc_uchar8,  0xFF)
+CONVERT_DEPTH_U1_SH_IMPL(U16, vxc_ushort8, 0xFFFF)
+CONVERT_DEPTH_U1_SH_IMPL(S16, vxc_ushort8, 0xFFFF)
+
+__kernel void convertdepth_U1toU32
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 int       policy,
+                 int       shift
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_uchar16 src;
+    uint4 dst0, dst1;
+
+    VXC_ReadImage(src, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    coord.x <<= 3;
+    vxc_uint4 config0 = {0x03020100, 0x07060504, 0x01010101, 0x01010101};
+    vxc_uint4 config1 = {0x07060504, 0x07060504, 0x01010101, 0x01010101};
+    VXC_BitExtract(dst0, src, src, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(dst1, src, src, config1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    dst0 = dst0 * 0xFFFFFFFF;
+    dst1 = dst1 * 0xFFFFFFFF;
+
+    write_imageui(output, coord, dst0);
+    coord.x += 4;
+    write_imageui(output, coord, dst1);
+}
+
+
+_viv_uniform VXC_512Bits uniPackU1_16x1;
+#define CONVERT_DEPTH_TOU1_SH_IMPL(name0, src_type) \
+__kernel void convertdepth_##name0##toU1 \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 int       policy, \
+                 int       shift \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+ \
+    src_type src0; \
+    vxc_uchar8 dst; \
+ \
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+ \
+    coord.x >>= 3; \
+ \
+    src_type zero = (src_type)(0, 0, 0, 0, 0, 0, 0, 0); \
+    src_type one = (src_type)(1, 1, 1, 1, 1, 1, 1, 1); \
+ \
+    src0 = src0 != zero ? one : zero; \
+    src0 <<= (src_type)(0, 1, 2, 3, 4, 5, 6, 7); \
+ \
+    VXC_DP16x1(dst, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniPackU1_16x1); \
+ \
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0)); \
+}
+CONVERT_DEPTH_TOU1_SH_IMPL(U8,  vxc_uchar8)
+CONVERT_DEPTH_TOU1_SH_IMPL(U16, vxc_ushort8)
+CONVERT_DEPTH_TOU1_SH_IMPL(S16, vxc_ushort8)
+
+_viv_uniform VXC_512Bits uniPackU32toU1_16x1;
+__kernel void convertdepth_U32toU1
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 int       policy,
+                 int       shift
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(0));
+
+    vxc_uint4 src0, src1;
+    vxc_uchar8 dst;
+
+    src0 = read_imageui(input, coord.xy);
+    coord.z += 4;
+    src1 = read_imageui(input, coord.zy);
+
+    coord.x >>= 3;
+
+    vxc_uint4 zero = (vxc_uint4)(0, 0, 0, 0);
+    vxc_uint4 one = (vxc_uint4)(1, 1, 1, 1);
+
+    src0 = src0 > zero ? one : zero;
+    src0 <<= (vxc_uint4)(0, 1, 2, 3);
+    src1 = src1 != zero ? one : zero;
+    src1 <<= (vxc_uint4)(4, 5, 6, 7);
+
+    VXC_DP16x1(dst, src0, src1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniPackU32toU1_16x1);
+
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits uniATimesB0_2x8;
+#define CONVERT_DEPTH_U8_SH_IMPL(name1, dst_type) \
+__kernel void convertdepth_U8to##name1 \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 int       policy, \
+                 int       shift \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+ \
+    vxc_uchar16 src; \
+    dst_type dst; \
+ \
+    VXC_ReadImage(src, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+ \
+    ushort mul = 1 << shift; \
+    VXC_DP2x8(dst, src, mul, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniATimesB0_2x8); \
+ \
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+}
+CONVERT_DEPTH_U8_SH_IMPL(U16, vxc_ushort8)
+CONVERT_DEPTH_U8_SH_IMPL(S16, vxc_short8)
+
+_viv_uniform VXC_512Bits uniDataMulConstData_0_4x4;
+_viv_uniform VXC_512Bits uniDataMulConstData_1_4x4;
+#define CONVERT_DEPTH_8OR16BIT_TO_32BIT_SH_IMPL(name0, name1, src_type, dst_type, write_func) \
+__kernel void convertdepth_##name0##to##name1 \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 int       policy, \
+                 int       shift \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+ \
+    src_type src; \
+    dst_type dst0, dst1; \
+ \
+    VXC_ReadImage(src, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+ \
+    VXC_DP4x4(dst0, src, src, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataMulConstData_0_4x4); \
+    dst0 <<= shift; \
+    VXC_DP4x4(dst1, src, src, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniDataMulConstData_1_4x4); \
+    dst1 <<= shift; \
+ \
+    write_func(output, coord, dst0); \
+    coord.x += 4; \
+    write_func(output, coord, dst1); \
+}
+CONVERT_DEPTH_8OR16BIT_TO_32BIT_SH_IMPL(U8,  U32, vxc_uchar8,  uint4, write_imageui)
+CONVERT_DEPTH_8OR16BIT_TO_32BIT_SH_IMPL(U16, U32, vxc_ushort8, uint4, write_imageui)
+CONVERT_DEPTH_8OR16BIT_TO_32BIT_SH_IMPL(S16, S32, vxc_short8,  int4,  write_imagei)
+
+#define CONVERT_DEPTH_16BTOU8_SH_IMPL(name0, name2, src_type, policy) \
+__kernel void convertdepth_##name0##toU8_##name2 \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 int       _policy, \
+                 int       shift \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+ \
+    src_type src; \
+    vxc_uchar8 dst; \
+ \
+    VXC_ReadImage(src, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+ \
+    vxc_ushort8 one = (vxc_ushort8)(1, 1, 1, 1, 1, 1, 1, 1); \
+    VXC_MulShift(dst, src, one, shift, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, policy)); \
+ \
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+}
+CONVERT_DEPTH_16BTOU8_SH_IMPL(U16, warp, vxc_ushort8, 0)
+CONVERT_DEPTH_16BTOU8_SH_IMPL(S16, warp, vxc_short8,  0)
+CONVERT_DEPTH_16BTOU8_SH_IMPL(U16, sat,  vxc_ushort8, 1)
+CONVERT_DEPTH_16BTOU8_SH_IMPL(S16, sat,  vxc_short8,  1)
+
+_viv_uniform VXC_512Bits uni32BPostShift_2x8;
+#define CONVERT_DEPTH_32B_SH_IMPL(name0, name1, name2, src_type, dst_type, policy, read_fun) \
+__kernel void convertdepth_##name0##to##name1##_##name2 \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 int       _policy, \
+                 int       shift \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(0)); \
+    vxc_uchar8 dst; \
+ \
+    src_type src0 = read_fun(input, coord.xy); \
+    coord.z += 4; \
+    src_type src1 = read_fun(input, coord.zy); \
+ \
+    VXC_DP2x8(dst, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, policy), uni32BPostShift_2x8); \
+ \
+    VXC_WriteImage(output, coord, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+}
+CONVERT_DEPTH_32B_SH_IMPL(S32, S16, warp, int4,  vxc_short8,  0, read_imagei)
+CONVERT_DEPTH_32B_SH_IMPL(S32, S16, sat,  int4,  vxc_short8,  1, read_imagei)
+CONVERT_DEPTH_32B_SH_IMPL(U32, U16, warp, uint4, vxc_ushort8, 0, read_imageui)
+CONVERT_DEPTH_32B_SH_IMPL(U32, U16, sat,  uint4, vxc_ushort8, 1, read_imageui)
+CONVERT_DEPTH_32B_SH_IMPL(U32, U8,  warp, uint4, vxc_uchar8,  0, read_imageui)
+CONVERT_DEPTH_32B_SH_IMPL(U32, U8,  sat,  uint4, vxc_uchar8,  1, read_imageui)

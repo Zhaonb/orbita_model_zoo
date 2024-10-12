@@ -1,0 +1,304 @@
+__kernel void gpuTensorReverse_axis0_FP32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int count = get_image_width(input) - 1;
+    float4 tmp = {0.0};
+
+    tmp = read_imagef(input, coord);
+    coord.x = count - coord.x;
+    write_imagef(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis1_FP32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int count = get_image_height(input) - 1;
+    float4 tmp = {0.0};
+
+    tmp = read_imagef(input, coord);
+    coord.y = count - coord.y;
+    write_imagef(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis2_FP32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int count = get_image_array_size(input) - 1;
+    float4 tmp = {0.0};
+
+    tmp = read_imagef(input, coord);
+    coord.z = count - coord.z;
+    write_imagef(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis01_FP32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int countX = get_image_width(input) - 1;
+    int countY = get_image_height(input) - 1;
+    float4 tmp = {0.0};
+
+    tmp = read_imagef(input, coord);
+    coord.x = countX - coord.x;
+    coord.y = countY - coord.y;
+    write_imagef(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis02_FP32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int countX = get_image_width(input) - 1;
+    int countZ = get_image_array_size(input) - 1;
+    float4 tmp = {0.0};
+
+    tmp = read_imagef(input, coord);
+    coord.x = countX - coord.x;
+    coord.z = countZ - coord.z;
+    write_imagef(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis12_FP32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int countY = get_image_height(input) - 1;
+    int countZ = get_image_array_size(input) - 1;
+    float4 tmp = {0.0};
+
+    tmp = read_imagef(input, coord);
+    coord.y = countY - coord.y;
+    coord.z = countZ - coord.z;
+    write_imagef(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis012_FP32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int countX = get_image_width(input) - 1;
+    int countY = get_image_height(input) - 1;
+    int countZ = get_image_array_size(input) - 1;
+    float4 tmp = {0.0};
+
+    tmp = read_imagef(input, coord);
+    coord.x = countX - coord.x;
+    coord.y = countY - coord.y;
+    coord.z = countZ - coord.z;
+    write_imagef(output, coord, tmp);
+}
+
+/*quant8 format*/
+__kernel void gpuTensorReverse_axis0_Quant8(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int count = get_image_width(input) - 1;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord);
+    coord.x = count - coord.x;
+    write_imageui(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis1_Quant8(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int count = get_image_height(input) - 1;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord);
+    coord.y = count - coord.y;
+    write_imageui(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis2_Quant8(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int count = get_image_array_size(input) - 1;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord);
+    coord.z = count - coord.z;
+    write_imageui(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis01_Quant8(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int countX = get_image_width(input) - 1;
+    int countY = get_image_height(input) - 1;
+    uint4 tmp = {0.0};
+
+    tmp = read_imageui(input, coord);
+    coord.x = countX - coord.x;
+    coord.y = countY - coord.y;
+    write_imageui(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis02_Quant8(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int countX = get_image_width(input) - 1;
+    int countZ = get_image_array_size(input) - 1;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord);
+    coord.x = countX - coord.x;
+    coord.z = countZ - coord.z;
+    write_imageui(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis12_Quant8(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int countY = get_image_height(input) - 1;
+    int countZ = get_image_array_size(input) - 1;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord);
+    coord.y = countY - coord.y;
+    coord.z = countZ - coord.z;
+    write_imageui(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis012_Quant8(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int countX = get_image_width(input) - 1;
+    int countY = get_image_height(input) - 1;
+    int countZ = get_image_array_size(input) - 1;
+    uint4 tmp = {0};
+
+    tmp = read_imageui(input, coord);
+    coord.x = countX - coord.x;
+    coord.y = countY - coord.y;
+    coord.z = countZ - coord.z;
+    write_imageui(output, coord, tmp);
+}
+
+/*int32 format*/
+__kernel void gpuTensorReverse_axis0_I32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int count = get_image_width(input) - 1;
+    int4 tmp = {0.0};
+
+    tmp = read_imagei(input, coord);
+    coord.x = count - coord.x;
+    write_imagei(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis1_I32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int count = get_image_height(input) - 1;
+    int4 tmp = {0.0};
+
+    tmp = read_imagei(input, coord);
+    coord.y = count - coord.y;
+    write_imagei(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis2_I32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int count = get_image_array_size(input) - 1;
+    int4 tmp = {0.0};
+
+    tmp = read_imagei(input, coord);
+    coord.z = count - coord.z;
+    write_imagei(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis01_I32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int countX = get_image_width(input) - 1;
+    int countY = get_image_height(input) - 1;
+    int4 tmp = {0.0};
+
+    tmp = read_imagei(input, coord);
+    coord.x = countX - coord.x;
+    coord.y = countY - coord.y;
+    write_imagei(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis02_I32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int countX = get_image_width(input) - 1;
+    int countZ = get_image_array_size(input) - 1;
+    int4 tmp = {0.0};
+
+    tmp = read_imagei(input, coord);
+    coord.x = countX - coord.x;
+    coord.z = countZ - coord.z;
+    write_imagei(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis12_I32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int countY = get_image_height(input) - 1;
+    int countZ = get_image_array_size(input) - 1;
+    int4 tmp = {0.0};
+
+    tmp = read_imagei(input, coord);
+    coord.y = countY - coord.y;
+    coord.z = countZ - coord.z;
+    write_imagei(output, coord, tmp);
+}
+
+__kernel void gpuTensorReverse_axis012_I32(
+    __read_only     image2d_array_t input,
+    __write_only    image2d_array_t output)
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int countX = get_image_width(input) - 1;
+    int countY = get_image_height(input) - 1;
+    int countZ = get_image_array_size(input) - 1;
+    int4 tmp = {0.0};
+
+    tmp = read_imagei(input, coord);
+    coord.x = countX - coord.x;
+    coord.y = countY - coord.y;
+    coord.z = countZ - coord.z;
+    write_imagei(output, coord, tmp);
+}

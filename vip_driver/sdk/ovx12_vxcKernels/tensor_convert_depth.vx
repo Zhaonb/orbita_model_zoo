@@ -1,0 +1,54 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform float scale;
+_viv_uniform float offsetScale;
+_viv_uniform VXC_512Bits uniConvertIntergeToFloat4Lo_4x4;
+_viv_uniform VXC_512Bits uniConvertIntergeToFloat4Hi_4x4;
+_viv_uniform VXC_512Bits uniExtact8Bin_2x8;
+
+#define TENSOR_CONVERT_DEPTH(name0, name1, name2, input_type, output_type, overflow) \
+__kernel void tensor_convert_depth_##name0##to##name1##_##name2##_func( \
+             __read_only image2d_array_t input, \
+                int                      policy, \
+                float                    norm, \
+                float                    offset, \
+            __write_only image2d_array_t output) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    input_type src;  \
+    VXC_ReadImage2DArray(src, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+ \
+    vxc_float4 vec0, vec1; \
+    VXC_DP4x4(vec0, src, src, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertIntergeToFloat4Lo_4x4); \
+    VXC_DP4x4(vec1, src, src, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvertIntergeToFloat4Hi_4x4); \
+    vec0 = vec0 * scale - offsetScale; \
+    vec1 = vec1 * scale - offsetScale; \
+    vxc_int4 dst0, dst1; \
+    dst0 = convert_int4(vec0); \
+    dst1 = convert_int4(vec1); \
+    output_type dst; \
+    VXC_DP2x8(dst, dst0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, overflow), uniExtact8Bin_2x8);\
+    VXC_WriteImage2DArray(output, coord, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+}
+
+                  //(name0, name1, name2, input_type, output_type, overflow)
+TENSOR_CONVERT_DEPTH(U8,  U8,  Sat,  vxc_uchar16, vxc_uchar16, 1)
+TENSOR_CONVERT_DEPTH(U8,  U8,  Warp, vxc_uchar16, vxc_uchar16, 0)
+TENSOR_CONVERT_DEPTH(U8,  S8,  Sat,  vxc_uchar16, vxc_char16,  1)
+TENSOR_CONVERT_DEPTH(U8,  S8,  Warp, vxc_uchar16, vxc_char16,  0)
+TENSOR_CONVERT_DEPTH(U8,  S16, Sat,  vxc_uchar16, vxc_short8,  1)
+TENSOR_CONVERT_DEPTH(U8,  S16, Warp, vxc_uchar16, vxc_short8,  0)
+TENSOR_CONVERT_DEPTH(S8,  U8,  Sat,  vxc_char16,  vxc_uchar16, 1)
+TENSOR_CONVERT_DEPTH(S8,  U8,  Warp, vxc_char16,  vxc_uchar16, 0)
+TENSOR_CONVERT_DEPTH(S8,  S8,  Sat,  vxc_char16,  vxc_char16,  1)
+TENSOR_CONVERT_DEPTH(S8,  S8,  Warp, vxc_char16,  vxc_char16,  0)
+TENSOR_CONVERT_DEPTH(S8,  S16, Sat,  vxc_char16,  vxc_short8,  1)
+TENSOR_CONVERT_DEPTH(S8,  S16, Warp, vxc_char16,  vxc_short8,  0)
+TENSOR_CONVERT_DEPTH(S16, U8,  Sat,  vxc_short8,  vxc_uchar16, 1)
+TENSOR_CONVERT_DEPTH(S16, U8,  Warp, vxc_short8,  vxc_uchar16, 0)
+TENSOR_CONVERT_DEPTH(S16, S8,  Sat,  vxc_short8,  vxc_char16,  1)
+TENSOR_CONVERT_DEPTH(S16, S8,  Warp, vxc_short8,  vxc_char16,  0)
+TENSOR_CONVERT_DEPTH(S16, S16, Sat,  vxc_short8,  vxc_short8,  1)
+TENSOR_CONVERT_DEPTH(S16, S16, Warp, vxc_short8,  vxc_short8,  0)

@@ -1,0 +1,134 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniSumU8_16x1;
+_viv_uniform VXC_512Bits uniSqrSum_16x1;
+_viv_uniform int width;
+_viv_uniform int height;
+_viv_uniform float rcp_pixels;
+__kernel void mean_stddev_U8
+    (
+    __read_only  image2d_t input,
+          global float     *fmean,
+          global float     *fstddev
+    )
+{
+    int2 coord = (int2)(get_global_id(0), 0);
+    int lidx = get_local_id(0);
+    vxc_uchar16 src0;
+    float4 sum4 = 0;
+
+    __local float lcl_sum[32];
+    __local float lcl_sqr[32];
+
+    do
+    {
+        coord.x = get_global_id(0);
+        VXC_ReadImage(src0, input, coord, 0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+        do
+        {
+            coord.x += 512;
+
+            VXC_DP16x1(sum4, src0, src0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumU8_16x1);
+            VXC_DP16x1(sum4, src0, src0, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSqrSum_16x1);
+
+            VXC_ReadImage(src0, input, coord, 0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            sum4.zw += sum4.xy;
+
+        } while (coord.x < width);
+
+        coord.y ++;
+    } while (coord.y < height);
+
+    lcl_sum[lidx] = sum4.z;
+    lcl_sqr[lidx] = sum4.w;
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    __local float4* tmp_sum = (__local float4*)lcl_sum;
+    __local float4* tmp_sqr = (__local float4*)lcl_sqr;
+
+    float sum = 0;
+    float sqr = 0;
+    float4 one = (float4)(1, 1, 1, 1);
+    for(int i = 0; i < 8; i++)
+    {
+        sum += dot(tmp_sum[i], one);
+        sqr += dot(tmp_sqr[i], one);
+    }
+
+    float mean = sum * rcp_pixels;
+    float sqrts = sqr * rcp_pixels - mean * mean;
+
+    sqrts = (sqrts <= 0) ? 0 : sqrt(sqrts);
+
+    *fmean = mean;
+    *fstddev = sqrts;
+}
+
+_viv_uniform VXC_512Bits uniSumU32_16x1;
+
+__kernel void mean_stddev_U1
+    (
+    __read_only  image2d_t input,
+          global float     *fmean,
+          global float     *fstddev
+    )
+{
+    int2 coord = (int2)(get_global_id(0), 0);
+    int lidx = get_local_id(0);
+    vxc_uchar16 src0;
+    uint2 sum2 = 0;
+
+    __local uint lcl_sum[32];
+
+    do
+    {
+        coord.x = get_global_id(0);
+        VXC_ReadImage(src0, input, coord, 0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+        do
+        {
+            coord.x += 512;
+
+            vxc_uchar16 cnt;
+
+            cnt = popcount(src0);
+
+            VXC_DP16x1(sum2, cnt, cnt, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumU8_16x1);
+
+            VXC_ReadImage(src0, input, coord, 0, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            sum2.y += sum2.x;
+
+        } while (coord.x < width);
+
+        coord.y ++;
+    } while (coord.y < height);
+
+    lcl_sum[lidx] = sum2.y;
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    __local uint4* tmp_sum = (__local uint4*)lcl_sum;
+
+    uint4 sum4;
+    float sum = 0;
+    float4 one = (float4)(1, 1, 1, 1);
+
+    VXC_DP16x1(sum4, tmp_sum[0], tmp_sum[1], VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumU32_16x1);
+    VXC_DP16x1(sum4, tmp_sum[2], tmp_sum[3], VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0), uniSumU32_16x1);
+    VXC_DP16x1(sum4, tmp_sum[4], tmp_sum[5], VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0), uniSumU32_16x1);
+    VXC_DP16x1(sum4, tmp_sum[6], tmp_sum[7], VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0), uniSumU32_16x1);
+    VXC_DP16x1(sum, sum4, 0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniSumU32_16x1);
+
+    float mean = sum * rcp_pixels;
+    float sqrts = mean - mean * mean;
+
+    sqrts = (sqrts <= 0) ? 0 : sqrt(sqrts);
+
+    *fmean = mean;
+    *fstddev = sqrts;
+}
+

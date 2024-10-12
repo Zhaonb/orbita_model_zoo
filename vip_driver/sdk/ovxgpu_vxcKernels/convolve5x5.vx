@@ -1,0 +1,263 @@
+
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+/*
+const int gaussian5x5[5][5] =
+{
+    {1,  4,  6,  4, 1},
+    {4, 16, 24, 16, 4},
+    {6, 24, 36, 24, 6},
+    {4, 16, 24, 16, 4},
+    {1,  4,  6,  4, 1}
+};
+*/
+
+constant float4 conv5x5[4] =
+{
+    (float4)(1,  4,  6,  4),
+    (float4)(4, 16, 24, 16),
+    (float4)(6, 24, 36, 24),
+    (float4)(1, 0, 0, 0)
+};
+
+__kernel void convolve5x5_I16toI16
+(
+     __read_only image2d_t  input,
+            vx_convolution  in_conv,
+    __write_only image2d_t  output
+)
+{
+    int gidx = get_global_id(0);
+    int4 coord0 = (int4)(gidx + 1, get_global_id(1) - 2, gidx - 2, gidx - 1);
+    int4 coord1 = (int4)(gidx, get_global_id(1) - 2, gidx + 2, get_global_id(1));
+    int4 src0, src1, src2, src3, src4, src5, dst;
+    float tmpSum = 0, lastVal;
+    src0.x = read_imagei(input, coord0.zy).x;
+    src0.y = read_imagei(input, coord0.wy).x;
+    src0.z = read_imagei(input, coord1.xy).x;
+    src0.w = read_imagei(input, coord0.xy).x;
+    src5.x = read_imagei(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src1.x = read_imagei(input, coord0.zy).x;
+    src1.y = read_imagei(input, coord0.wy).x;
+    src1.z = read_imagei(input, coord1.xy).x;
+    src1.w = read_imagei(input, coord0.xy).x;
+    src5.y = read_imagei(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src2.x = read_imagei(input, coord0.zy).x;
+    src2.y = read_imagei(input, coord0.wy).x;
+    src2.z = read_imagei(input, coord1.xy).x;
+    src2.w = read_imagei(input, coord0.xy).x;
+    src5.z = read_imagei(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src3.x = read_imagei(input, coord0.zy).x;
+    src3.y = read_imagei(input, coord0.wy).x;
+    src3.z = read_imagei(input, coord1.xy).x;
+    src3.w = read_imagei(input, coord0.xy).x;
+    src5.w = read_imagei(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src4.x = read_imagei(input, coord0.zy).x;
+    src4.y = read_imagei(input, coord0.wy).x;
+    src4.z = read_imagei(input, coord1.xy).x;
+    src4.w = read_imagei(input, coord0.xy).x;
+    lastVal = convert_float(read_imagei(input, coord1.zy).x);
+
+    tmpSum = dot(convert_float4(src0), conv5x5[0]) +
+             dot(convert_float4(src1), conv5x5[1]) +
+             dot(convert_float4(src2), conv5x5[2]) +
+             dot(convert_float4(src3), conv5x5[1]) +
+             dot(convert_float4(src4), conv5x5[0]) +
+             dot(convert_float4(src5), conv5x5[0]) + lastVal;
+
+    int sum = convert_int_rte(tmpSum);
+    dst.x = (sum >> 8);
+    dst.x = min(max(dst.x, -32768), 32767);
+
+    write_imagei(output, coord1.xw, dst);
+}
+
+__kernel void convolve5x5_I16toU8
+(
+     __read_only image2d_t  input,
+            vx_convolution  in_conv,
+    __write_only image2d_t  output
+)
+{
+    int gidx = get_global_id(0);
+    int4 coord0 = (int4)(gidx + 1, get_global_id(1) - 2, gidx - 2, gidx - 1);
+    int4 coord1 = (int4)(gidx, get_global_id(1) - 2, gidx + 2, get_global_id(1));
+    int4 src0, src1, src2, src3, src4, src5;
+    uint4 dst;
+    float tmpSum = 0, lastVal;
+    src0.x = read_imagei(input, coord0.zy).x;
+    src0.y = read_imagei(input, coord0.wy).x;
+    src0.z = read_imagei(input, coord1.xy).x;
+    src0.w = read_imagei(input, coord0.xy).x;
+    src5.x = read_imagei(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src1.x = read_imagei(input, coord0.zy).x;
+    src1.y = read_imagei(input, coord0.wy).x;
+    src1.z = read_imagei(input, coord1.xy).x;
+    src1.w = read_imagei(input, coord0.xy).x;
+    src5.y = read_imagei(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src2.x = read_imagei(input, coord0.zy).x;
+    src2.y = read_imagei(input, coord0.wy).x;
+    src2.z = read_imagei(input, coord1.xy).x;
+    src2.w = read_imagei(input, coord0.xy).x;
+    src5.z = read_imagei(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src3.x = read_imagei(input, coord0.zy).x;
+    src3.y = read_imagei(input, coord0.wy).x;
+    src3.z = read_imagei(input, coord1.xy).x;
+    src3.w = read_imagei(input, coord0.xy).x;
+    src5.w = read_imagei(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src4.x = read_imagei(input, coord0.zy).x;
+    src4.y = read_imagei(input, coord0.wy).x;
+    src4.z = read_imagei(input, coord1.xy).x;
+    src4.w = read_imagei(input, coord0.xy).x;
+    lastVal = convert_float(read_imagei(input, coord1.zy).x);
+
+    tmpSum = dot(convert_float4(src0), conv5x5[0]) +
+             dot(convert_float4(src1), conv5x5[1]) +
+             dot(convert_float4(src2), conv5x5[2]) +
+             dot(convert_float4(src3), conv5x5[1]) +
+             dot(convert_float4(src4), conv5x5[0]) +
+             dot(convert_float4(src5), conv5x5[0]) + lastVal;
+
+    int sum = convert_int_rte(tmpSum);
+    dst.x = min(max((sum >> 8), 0), 255);
+
+    write_imageui(output, coord1.xw, dst);
+}
+
+__kernel void convolve5x5_U8toU8
+(
+    __read_only image2d_t  input,
+           vx_convolution  in_conv,
+    __write_only image2d_t output
+)
+{
+    int gidx = get_global_id(0);
+    int4 coord0 = (int4)(gidx + 1, get_global_id(1) - 2, gidx - 2, gidx - 1);
+    int4 coord1 = (int4)(gidx, get_global_id(1) - 2, gidx + 2, get_global_id(1));
+    uint4 src0, src1, src2, src3, src4, src5;
+    uint4 dst;
+    float tmpSum = 0, lastVal;
+    src0.x = read_imageui(input, coord0.zy).x;
+    src0.y = read_imageui(input, coord0.wy).x;
+    src0.z = read_imageui(input, coord1.xy).x;
+    src0.w = read_imageui(input, coord0.xy).x;
+    src5.x = read_imageui(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src1.x = read_imageui(input, coord0.zy).x;
+    src1.y = read_imageui(input, coord0.wy).x;
+    src1.z = read_imageui(input, coord1.xy).x;
+    src1.w = read_imageui(input, coord0.xy).x;
+    src5.y = read_imageui(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src2.x = read_imageui(input, coord0.zy).x;
+    src2.y = read_imageui(input, coord0.wy).x;
+    src2.z = read_imageui(input, coord1.xy).x;
+    src2.w = read_imageui(input, coord0.xy).x;
+    src5.z = read_imageui(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src3.x = read_imageui(input, coord0.zy).x;
+    src3.y = read_imageui(input, coord0.wy).x;
+    src3.z = read_imageui(input, coord1.xy).x;
+    src3.w = read_imageui(input, coord0.xy).x;
+    src5.w = read_imageui(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src4.x = read_imageui(input, coord0.zy).x;
+    src4.y = read_imageui(input, coord0.wy).x;
+    src4.z = read_imageui(input, coord1.xy).x;
+    src4.w = read_imageui(input, coord0.xy).x;
+    lastVal = convert_float(read_imageui(input, coord1.zy).x);
+
+    tmpSum = dot(convert_float4(src0), conv5x5[0]) +
+             dot(convert_float4(src1), conv5x5[1]) +
+             dot(convert_float4(src2), conv5x5[2]) +
+             dot(convert_float4(src3), conv5x5[1]) +
+             dot(convert_float4(src4), conv5x5[0]) +
+             dot(convert_float4(src5), conv5x5[0]) + lastVal;
+
+    int sum = convert_int_rte(tmpSum);
+    dst.x = min(max((sum >> 8), 0), 255);
+
+    write_imageui(output, coord1.xw, dst);
+}
+
+__kernel void convolve5x5_U8toI16
+(
+     __read_only image2d_t  input,
+            vx_convolution  in_conv,
+    __write_only image2d_t  output
+)
+{
+    int gidx = get_global_id(0);
+    int4 coord0 = (int4)(gidx + 1, get_global_id(1) - 2, gidx - 2, gidx - 1);
+    int4 coord1 = (int4)(gidx, get_global_id(1) - 2, gidx + 2, get_global_id(1));
+    uint4 src0, src1, src2, src3, src4, src5;
+    int4 dst;
+    float tmpSum = 0, lastVal;
+    src0.x = read_imageui(input, coord0.zy).x;
+    src0.y = read_imageui(input, coord0.wy).x;
+    src0.z = read_imageui(input, coord1.xy).x;
+    src0.w = read_imageui(input, coord0.xy).x;
+    src5.x = read_imageui(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src1.x = read_imageui(input, coord0.zy).x;
+    src1.y = read_imageui(input, coord0.wy).x;
+    src1.z = read_imageui(input, coord1.xy).x;
+    src1.w = read_imageui(input, coord0.xy).x;
+    src5.y = read_imageui(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src2.x = read_imageui(input, coord0.zy).x;
+    src2.y = read_imageui(input, coord0.wy).x;
+    src2.z = read_imageui(input, coord1.xy).x;
+    src2.w = read_imageui(input, coord0.xy).x;
+    src5.z = read_imageui(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src3.x = read_imageui(input, coord0.zy).x;
+    src3.y = read_imageui(input, coord0.wy).x;
+    src3.z = read_imageui(input, coord1.xy).x;
+    src3.w = read_imageui(input, coord0.xy).x;
+    src5.w = read_imageui(input, coord1.zy).x;
+    coord0.y++;
+    coord1.y++;
+    src4.x = read_imageui(input, coord0.zy).x;
+    src4.y = read_imageui(input, coord0.wy).x;
+    src4.z = read_imageui(input, coord1.xy).x;
+    src4.w = read_imageui(input, coord0.xy).x;
+    lastVal = convert_float(read_imageui(input, coord1.zy).x);
+
+    tmpSum = dot(convert_float4(src0), conv5x5[0]) +
+             dot(convert_float4(src1), conv5x5[1]) +
+             dot(convert_float4(src2), conv5x5[2]) +
+             dot(convert_float4(src3), conv5x5[1]) +
+             dot(convert_float4(src4), conv5x5[0]) +
+             dot(convert_float4(src5), conv5x5[0]) + lastVal;
+
+    int sum = convert_int_rte(tmpSum);
+    dst.x = min((sum >> 8), 32767);
+
+    write_imagei(output, coord1.xw, dst);
+}

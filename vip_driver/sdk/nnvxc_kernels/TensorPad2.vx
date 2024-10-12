@@ -1,0 +1,407 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int padBatchFront;
+_viv_uniform int padChn;
+_viv_uniform int padTop;
+_viv_uniform int padLeft;
+_viv_uniform int in_chn_num;
+_viv_uniform int out_chn_num;
+_viv_uniform int in_batch_num;
+_viv_uniform int4 packedPadData;
+
+__kernel void vxcTensorPad2_Const16Bits_chn(
+    image2d_array_t input,
+    int constData,
+    image2d_array_t output)
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, 0, gidz);
+
+    int inc = cid - padChn;
+
+    int8 input_desc, output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+    int baseAddr = (int)gidz * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.z, baseAddr);
+
+    if(inc >=0 && inc < in_chn_num)
+    {
+        int4 coord_in = (int4)(gidx, gidy, 0, inc + bid * in_chn_num);
+        vxc_short8 src0, src1, src2, src3;
+
+        _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+        int baseAddr_in = (int)coord_in.w * input_desc.s4 + input_desc.s0;
+        _viv_asm(MOV, coord_in.z, baseAddr_in);
+        VXC_OP4(img_load_3d, src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0),
+                    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1),
+                    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src2, input, coord_in, VXC_5BITOFFSET_XY(0, 2),
+                    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src3, input, coord_in, VXC_5BITOFFSET_XY(0, 3),
+                    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src1, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src2, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src3, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        vxc_short8 src0;
+        _viv_asm(COPY, src0, packedPadData, 16);
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+}
+__kernel void vxcTensorPad2_Const8Bits_chn(
+    image2d_array_t input,
+    int constData,
+    image2d_array_t output)
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, 0, gidz);
+
+    int inc = cid - padChn;
+
+    int8 input_desc, output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+    int baseAddr = (int)gidz * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.z, baseAddr);
+
+    if(inc >=0 && inc < in_chn_num)
+    {
+        int4 coord_in = (int4)(gidx, gidy, 0, inc + bid * in_chn_num);
+        vxc_char16 src0, src1, src2, src3;
+        _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+        int baseAddr_in = (int)coord_in.w * input_desc.s4 + input_desc.s0;
+        _viv_asm(MOV, coord_in.z, baseAddr_in);
+        VXC_OP4(img_load_3d, src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0),
+                    VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1),
+                    VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src2, input, coord_in, VXC_5BITOFFSET_XY(0, 2),
+                    VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src3, input, coord_in, VXC_5BITOFFSET_XY(0, 3),
+                    VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src1, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src2, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src3, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        vxc_char16 src0;
+        _viv_asm(COPY, src0, packedPadData, 16);
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcTensorPad2_Const16Bits_whc(
+    image2d_array_t input,
+    int constData,
+    image2d_array_t output)
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, 0, gidz);
+
+    int inc = cid - padChn;
+
+    int8 input_desc, output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+    int baseAddr = (int)gidz * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.z, baseAddr);
+
+    if(inc >=0 && inc < in_chn_num)
+    {
+        int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, 0, inc + bid * in_chn_num);
+        vxc_short8 src0, src1, src2, src3;
+
+        _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+        int baseAddr_in = (int)coord_in.w * input_desc.s4 + input_desc.s0;
+        _viv_asm(MOV, coord_in.z, baseAddr_in);
+        VXC_OP4(img_load_3d, src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0),
+                    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1),
+                    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src2, input, coord_in, VXC_5BITOFFSET_XY(0, 2),
+                    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src3, input, coord_in, VXC_5BITOFFSET_XY(0, 3),
+                    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src1, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src2, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src3, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        vxc_short8 src0;
+        _viv_asm(COPY, src0, packedPadData, 16);
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+}
+__kernel void vxcTensorPad2_Const8Bits_whc(
+    image2d_array_t input,
+    int constData,
+    image2d_array_t output)
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, 0, gidz);
+
+    int inc = cid - padChn;
+
+    int8 input_desc, output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+    int baseAddr = (int)gidz * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.z, baseAddr);
+
+    if(inc >=0 && inc < in_chn_num)
+    {
+        int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, 0, inc + bid * in_chn_num);
+        vxc_char16 src0, src1, src2, src3;
+        _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+        int baseAddr_in = (int)coord_in.w * input_desc.s4 + input_desc.s0;
+        _viv_asm(MOV, coord_in.z, baseAddr_in);
+        VXC_OP4(img_load_3d, src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0),
+                    VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1),
+                    VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src2, input, coord_in, VXC_5BITOFFSET_XY(0, 2),
+                    VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src3, input, coord_in, VXC_5BITOFFSET_XY(0, 3),
+                    VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src1, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src2, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src3, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        vxc_char16 src0;
+        _viv_asm(COPY, src0, packedPadData, 16);
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+    }
+}
+
+__kernel void vxcTensorPad2_Const16Bits_whcn(
+    image2d_array_t input,
+    int constData,
+    image2d_array_t output)
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, 0, gidz);
+
+    int inb_f = bid - padBatchFront;
+    int inc = cid - padChn;
+
+    int8 input_desc, output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+    int baseAddr = (int)gidz * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.z, baseAddr);
+
+    if((inc >=0 && inc < in_chn_num)
+        && (inb_f >= 0 && inb_f < in_batch_num))
+    {
+        int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, 0, inc + inb_f * in_chn_num);
+        vxc_short8 src0, src1, src2, src3;
+
+        _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+        int baseAddr_in = (int)coord_in.w * input_desc.s4 + input_desc.s0;
+        _viv_asm(MOV, coord_in.z, baseAddr_in);
+        VXC_OP4(img_load_3d, src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0),
+                    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1),
+                    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src2, input, coord_in, VXC_5BITOFFSET_XY(0, 2),
+                    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src3, input, coord_in, VXC_5BITOFFSET_XY(0, 3),
+                    VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src1, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src2, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src3, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        vxc_short8 src0;
+        _viv_asm(COPY, src0, packedPadData, 16);
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    }
+}
+__kernel void vxcTensorPad2_Const8Bits_whcn(
+    image2d_array_t input,
+    int constData,
+    image2d_array_t output)
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    ushort gidz = get_global_id(2);
+    int cid = gidz % (ushort)out_chn_num;
+    int bid = gidz / (ushort)out_chn_num;
+    int4 coord_out = (int4)(gidx, gidy, 0, gidz);
+
+    int inb_f = bid - padBatchFront;
+    int inc = cid - padChn;
+
+    int8 input_desc, output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+    int baseAddr = (int)gidz * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.z, baseAddr);
+
+    if((inc >=0 && inc < in_chn_num)
+        && (inb_f >= 0 && inb_f < in_batch_num))
+    {
+        int4 coord_in = (int4)(gidx - padLeft, gidy - padTop, 0, inc + inb_f * in_chn_num);
+        vxc_char16 src0, src1, src2, src3;
+
+        _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+        int baseAddr_in = (int)coord_in.w * input_desc.s4 + input_desc.s0;
+        _viv_asm(MOV, coord_in.z, baseAddr_in);
+        VXC_OP4(img_load_3d, src0, input, coord_in, VXC_5BITOFFSET_XY(0, 0),
+                    VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src1, input, coord_in, VXC_5BITOFFSET_XY(0, 1),
+                    VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src2, input, coord_in, VXC_5BITOFFSET_XY(0, 2),
+                    VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+        VXC_OP4(img_load_3d, src3, input, coord_in, VXC_5BITOFFSET_XY(0, 3),
+                    VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src1, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src2, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src3, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+    }
+    else
+    {
+        vxc_char16 src0;
+        _viv_asm(COPY, src0, packedPadData, 16);
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+        coord_out.y++;
+        VXC_OP4_NoDest(img_store_3d, output, coord_out, src0, \
+                VXC_MODIFIER(0, 15, 0,VXC_RM_TowardZero, 0));
+    }
+}

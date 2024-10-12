@@ -1,0 +1,97 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform uint xOffset;
+_viv_uniform uint yOffset;
+_viv_uniform uint width_U1;
+_viv_uniform uint last_bits_U1;
+
+__kernel void image_crop_U8orU16
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 int       xPos,
+                 int       yPos,
+                 int       width,
+                 int       height
+    )
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    uint4 src  = read_imageui(input, (int2)(pix + xOffset, piy + yOffset));
+    write_imageui(output, (int2)(pix, piy), src);
+}
+
+__kernel void image_crop_S16
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 int       xPos,
+                 int       yPos,
+                 int       width,
+                 int       height
+    )
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    int4 src  = read_imagei(input, (int2)(pix + xOffset, piy + yOffset));
+    write_imagei(output, (int2)(pix, piy), src);
+}
+__kernel void image_crop_U1toU1
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output,
+                 int       xPos,
+                 int       yPos,
+                 int       width,
+                 int       height
+    )
+{
+    uint i,j,truncate_pos;
+    int  pix = get_global_id(0);
+    int  piy = get_global_id(1);
+    uint xByteOft = xOffset >> 3;
+    uint yByteOft = yOffset;
+    uint dst[8] = {0};
+    uint4 src0  = read_imageui(input, (int2)(pix >> 3 + xByteOft, piy + yByteOft));
+    uint4 dst0 = (uint4)(0,0,0,0);
+
+    if (xOffset & 7 == 0)
+    {
+        if (width_U1 == pix >> 3 + 1) truncate_pos = last_bits_U1;
+        else truncate_pos = 8;
+        for(i = 0; i < truncate_pos; i++)
+        {
+            dst[i] = (src0.x >> i) & 1;
+            dst0.x += exp2(i) * dst[i];
+        }
+    }
+    else
+    {
+        uint4 src1 = read_imageui(input, (int2)(pix >> 3 + xByteOft + 1, piy + yByteOft));
+        j = 0;
+
+        for (i = xOffset & 7; i < 8; i++)
+        {
+            dst[j] = (src0.x >> i) & 1;
+            j++;
+        }
+
+        for (i = 0; i < xOffset & 7; i++)
+        {
+            dst[j] = (src1.x >> i) & 1;
+            j++;
+        }
+        if (width_U1 == pix >> 3 + 1)
+        {
+            for (i = last_bits_U1; i < 8; i++)
+            {
+                dst[i] = 0;
+            }
+        }
+        for (i = 0; i < 8; i++)
+        {
+            dst0.x += exp2(i) * dst[i];
+        }
+    }
+    write_imageui(output, (int2)(pix >> 3, piy), dst0);
+}

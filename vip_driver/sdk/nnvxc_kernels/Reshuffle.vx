@@ -1,0 +1,961 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+_viv_uniform VXC_512Bits UniReshuffle_dual_0_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_dual_1_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_quad_0_4x4;
+_viv_uniform VXC_512Bits UniReshuffle_quad_1_4x4;
+_viv_uniform VXC_512Bits UniReshuffle_quad_2_4x4;
+_viv_uniform VXC_512Bits UniReshuffle_quad_3_4x4;
+_viv_uniform VXC_512Bits UniReshuffle_trip_0_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_trip_1_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_trip_2_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_trip_4_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_trip_5_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_trip_6_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_trip_3_2x8;
+
+_viv_uniform VXC_512Bits uniReshuffleExtractEvenI16_2x8;
+
+_viv_uniform uint strideXY;
+_viv_uniform int strideX;
+_viv_uniform int strideY;
+
+__kernel void vxcReshuffle_16Bits_stride4x4
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in;
+    coord_in.xy -= (int2)(padXLeft, padYTop);
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    vxc_ushort8 vec0, vec1, vec2, vec3, vec4, vec5, vec6, vec7, vec;
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec2, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec1, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec3, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec4, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec6, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec5, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec7, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    coord_out.xy = coord_out.xy >> 2;
+    coord_out.z  = coord_out.z << 4;
+
+    VXC_DP4x4(vec, vec0, vec2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_0_4x4);
+    VXC_DP4x4(vec, vec0, vec2, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_1_4x4);
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 3, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(4, 7, 0,VXC_RM_TowardZero, 0));
+    VXC_WriteImage2DArray(output, coord_out, vec, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP4x4(vec, vec0, vec2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_2_4x4);
+    VXC_DP4x4(vec, vec0, vec2, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_3_4x4);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 3, 0,VXC_RM_TowardZero, 0))
+    coord_out.z ++;
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(4, 7, 0,VXC_RM_TowardZero, 0))
+    coord_out.z ++;
+
+    VXC_DP4x4(vec, vec1, vec3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_0_4x4);
+    VXC_DP4x4(vec, vec1, vec3, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_1_4x4);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 3, 0,VXC_RM_TowardZero, 0))
+    coord_out.z ++;
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(4, 7, 0,VXC_RM_TowardZero, 0))
+    coord_out.z ++;
+    VXC_DP4x4(vec, vec1, vec3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_2_4x4);
+    VXC_DP4x4(vec, vec1, vec3, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_3_4x4);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 3, 0,VXC_RM_TowardZero, 0))
+    coord_out.z ++;
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(4, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+
+    VXC_DP4x4(vec, vec4, vec6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_0_4x4);
+    VXC_DP4x4(vec, vec4, vec6, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_1_4x4);
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 3, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(4, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP4x4(vec, vec4, vec6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_2_4x4);
+    VXC_DP4x4(vec, vec4, vec6, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_3_4x4);
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 3, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(4, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+
+    VXC_DP4x4(vec, vec5, vec7, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_0_4x4);
+    VXC_DP4x4(vec, vec5, vec7, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_1_4x4);
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 3, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(4, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP4x4(vec, vec5, vec7, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_2_4x4);
+    VXC_DP4x4(vec, vec5, vec7, VXC_MODIFIER(4, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_3_4x4);
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 3, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(4, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcReshuffle_16Bits_stride2x2
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out = coord_in;
+
+    coord_in.xy -= (int2)(padXLeft, padYTop);
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+    vxc_ushort8 vec0, vec1, vec2, vec3, vec4, vec5, vec6, vec7, vec;
+
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec2, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec1, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec3, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec4, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec6, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec5, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec7, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    coord_out.xy = coord_out.xy >> 1;
+    coord_out.z  = coord_out.z << 2;
+
+    VXC_DP2x8(vec, vec0, vec2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_dual_0_2x8);
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec0, vec2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_dual_1_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+
+    coord_out.yz += (int2)(1, -1);
+    VXC_DP2x8(vec, vec4, vec6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_dual_0_2x8);
+    baseAddr -= output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec4, vec6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_dual_1_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+
+    coord_out.yz += (int2)(-1, 1);
+    VXC_DP2x8(vec, vec1, vec3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_dual_0_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec1, vec3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_dual_1_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+
+    coord_out.yz += (int2)(1, -1);
+    VXC_DP2x8(vec, vec5, vec7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_dual_0_2x8);
+    baseAddr -= output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec5, vec7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_dual_1_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcReshuffle_16Bits_stride3x3
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_in = (int4)(0, 0, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    vxc_ushort8 vec0, vec1, vec2, vec3, vec4, vec5, vec6, vec7, vec8;
+    vxc_ushort8 vec_o0, vec_o1, vec_o2, vec_o3, vec_o4;
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    coord_in.xy  = coord_out.xy * 3;
+    coord_in.xy -= (int2)(padXLeft, padYTop);
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec1, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in.x += 16;
+    VXC_OP4(img_load_3d, vec2, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in.x -= 16;
+    VXC_OP4(img_load_3d, vec3, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec4, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in.x += 16;
+    VXC_OP4(img_load_3d, vec5, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in.x -= 16;
+    VXC_OP4(img_load_3d, vec6, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec7, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in.x += 16;
+    VXC_OP4(img_load_3d, vec8, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in.x -= 16;
+    coord_out.z  = coord_in.z * 9;
+
+    VXC_DP2x8(vec_o0, vec0, vec1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_0_2x8);
+    VXC_DP2x8(vec_o1, vec0, vec1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_1_2x8);
+    VXC_DP2x8(vec_o2, vec2, vec2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_2_2x8);
+
+    VXC_DP2x8(vec_o3, vec_o0, vec_o2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_3_2x8);
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec_o3, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+    VXC_DP2x8(vec_o4, vec_o0, vec_o1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_4_2x8);
+    VXC_DP2x8(vec_o3, vec_o4, vec_o2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_5_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec_o3, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+
+    VXC_DP2x8(vec_o3, vec_o1, vec_o2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_6_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec_o3, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+
+    VXC_DP2x8(vec_o0, vec3, vec4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_0_2x8);
+    VXC_DP2x8(vec_o1, vec3, vec4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_1_2x8);
+    VXC_DP2x8(vec_o2, vec5, vec5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_2_2x8);
+
+    VXC_DP2x8(vec_o3, vec_o0, vec_o2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_3_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec_o3, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+    VXC_DP2x8(vec_o4, vec_o0, vec_o1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_4_2x8);
+    VXC_DP2x8(vec_o3, vec_o4, vec_o2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_5_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec_o3, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+
+    VXC_DP2x8(vec_o3, vec_o1, vec_o2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_6_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec_o3, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+
+    VXC_DP2x8(vec_o0, vec6, vec7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_0_2x8);
+    VXC_DP2x8(vec_o1, vec6, vec7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_1_2x8);
+    VXC_DP2x8(vec_o2, vec8, vec8, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_2_2x8);
+
+    VXC_DP2x8(vec_o3, vec_o0, vec_o2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_3_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec_o3, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+    VXC_DP2x8(vec_o4, vec_o0, vec_o1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_4_2x8);
+    VXC_DP2x8(vec_o3, vec_o4, vec_o2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_5_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec_o3, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+
+    VXC_DP2x8(vec_o3, vec_o1, vec_o2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_trip_6_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec_o3, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcReshuffle_8Bits_stride2x2
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in;
+
+    coord_in = coord_out - (int4)(padXLeft, padYTop, 0, 0);
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    vxc_uchar16 vec0, vec1, vec2, vec3, vec;
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec2, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec1, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec3, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord_out.xy = coord_out.xy >> 1;
+    coord_out.z  = coord_out.z << 2;
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    vec0 = vec0.s02468ace13579bdf;
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec0, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+
+    coord_out.z ++;
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec0, VXC_MODIFIER(8, 15, 0,VXC_RM_TowardZero, 0));
+
+    coord_out.yz += (int2)(1, -1);
+    vec2 = vec2.s02468ace13579bdf;
+    baseAddr -= output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec2, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+
+    coord_out.z ++;
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec2, VXC_MODIFIER(8, 15, 0,VXC_RM_TowardZero, 0));
+
+    coord_out.yz += (int2)(-1, 1);
+
+    vec1 = vec1.s02468ace13579bdf;
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec1, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec1, VXC_MODIFIER(8, 15, 0,VXC_RM_TowardZero, 0));
+
+    coord_out.yz += (int2)(1, -1);
+    vec3 = vec3.s02468ace13579bdf;
+    baseAddr -= output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec3, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec3, VXC_MODIFIER(8, 15, 0,VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits UniReshuffle_quad_0_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_quad_1_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_quad_2_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_quad_3_2x8;
+
+__kernel void vxcReshuffle_8Bits_stride4x4
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_in = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_out;
+    coord_out = coord_in;
+    coord_in.xy -= (int2)(padXLeft, padYTop);
+
+    vxc_uchar16 vec0, vec1, vec2, vec3, vec4, vec5, vec6, vec7, vec8;
+    vxc_uchar8 vec;
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec1, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec2, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec3, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord_in.x += 16;
+
+    VXC_OP4(img_load_3d, vec4, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec5, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec6, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec7, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord_out.xy = coord_out.xy >> 2;
+    coord_out.z  = coord_out.z << 4;
+
+    VXC_DP2x8(vec, vec0, vec4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_0_2x8);
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec0, vec4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_1_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec0, vec4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_2_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec0, vec4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_3_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+
+    VXC_DP2x8(vec, vec1, vec5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_0_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec1, vec5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_1_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec1, vec5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_2_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec1, vec5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_3_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+
+    VXC_DP2x8(vec, vec2, vec6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_0_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec2, vec6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_1_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec2, vec6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_2_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec2, vec6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_3_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+
+    VXC_DP2x8(vec, vec3, vec7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_0_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec3, vec7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_1_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    VXC_DP2x8(vec, vec3, vec7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_2_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z ++;
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_DP2x8(vec, vec3, vec7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_3_2x8);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits UniReshuffle_three_0_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_three_1_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_three_2_2x8;
+
+__kernel void vxcReshuffle_8Bits_stride3x3
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_in = (int4)(0, 0, get_global_id(2), 0);
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), 0, 0);
+    vxc_uchar16 vec0, vec1, vec2, vec3, vec4, vec5, vec;
+
+    coord_in.xy  = coord_out.xy * 3;
+    coord_in.xy -= (int2)(padXLeft, padYTop);
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec1, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec2, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord_in.x += 16;
+
+    VXC_OP4(img_load_3d, vec3, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec4, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec5, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord_out.z  = coord_in.z * 9;
+
+    VXC_DP2x8(vec, vec0, vec3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_three_0_2x8);
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+    VXC_DP2x8(vec, vec0, vec3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_three_1_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+    VXC_DP2x8(vec, vec0, vec3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_three_2_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+
+    VXC_DP2x8(vec, vec1, vec4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_three_0_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+    VXC_DP2x8(vec, vec1, vec4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_three_1_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+    VXC_DP2x8(vec, vec1, vec4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_three_2_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+
+    VXC_DP2x8(vec, vec2, vec5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_three_0_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+    VXC_DP2x8(vec, vec2, vec5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_three_1_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.z++;
+    VXC_DP2x8(vec, vec2, vec5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_three_2_2x8);
+    baseAddr += output_desc.s4;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcReshuffle_8Bits_kn1x1_stride2x2
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in;
+    coord_in.xy = coord_out.xy * 2 - (int2)(padXLeft, padYTop);
+    coord_in.zw = coord_out.zw;
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    vxc_uchar16 vec0;
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    vec0 = vec0.s02468ace13579bdf;
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec0, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits UniReshuffle_quad_kn1x1_2x8;
+__kernel void vxcReshuffle_8Bits_kn1x1_stride4x4
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in;
+    coord_in.xy = coord_out.xy * 4 - (int2)(padXLeft, padYTop);
+    coord_in.zw = coord_out.zw;
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    vxc_uchar16 vec0, vec1, vec;
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord_in.x += 16;
+    VXC_OP4(img_load_3d, vec1, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(vec, vec0, vec1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_kn1x1_2x8);
+
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+
+_viv_uniform VXC_512Bits UniReshuffle_three_kn1x1_2x8;
+__kernel void vxcReshuffle_8Bits_kn1x1_stride3x3
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in;
+    coord_in.xy = coord_out.xy * 3 - (int2)(padXLeft, padYTop);
+    coord_in.zw = coord_out.zw;
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    vxc_uchar16 vec0, vec1, vec;
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    coord_in.x += 16;
+    VXC_OP4(img_load_3d, vec1, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(vec, vec0, vec1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_three_kn1x1_2x8);
+
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcReshuffle_16Bits_kn1x1_stride2x2
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in;
+    coord_in.xy = coord_out.xy * 2 - (int2)(padXLeft, padYTop);
+    coord_in.zw = coord_out.zw;
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    vxc_ushort8 vec0, vec1, dst;
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec1, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_DP2x8(dst, vec0, vec1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), uniReshuffleExtractEvenI16_2x8);
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits UniReshuffle_quad_kn1x1_4x4;
+__kernel void vxcReshuffle_16Bits_kn1x1_stride4x4
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in;
+    coord_in.xy = coord_out.xy * 4 - (int2)(padXLeft, padYTop);
+    coord_in.zw = coord_out.zw;
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    vxc_ushort8 vec0, vec1, vec;
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec1, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_DP4x4(vec, vec0, vec1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardInf, 0), UniReshuffle_quad_kn1x1_4x4);
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 3, 0,VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits UniReshuffle_three_kn1x1_16bits_0_2x8;
+_viv_uniform VXC_512Bits UniReshuffle_three_kn1x1_16bits_1_2x8;
+__kernel void vxcReshuffle_16Bits_kn1x1_stride3x3
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in;
+    coord_in.xy = coord_out.xy * 3 - (int2)(padXLeft, padYTop);
+    coord_in.zw = coord_out.zw;
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    vxc_ushort8 vec0, vec1, vec2, vec;
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, vec1, input, coord_in.xywz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in.x +=16;
+    VXC_ReadImage2DArray(vec2, input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_DP2x8(vec, vec0, vec1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_three_kn1x1_16bits_0_2x8);
+    VXC_DP2x8(vec, vec, vec2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardInf, 0), UniReshuffle_three_kn1x1_16bits_1_2x8);
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec, VXC_MODIFIER(0, 3, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcReshuffle_8Bits
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in;
+    ushort gidz = (ushort)get_global_id(2);
+    ushort tmpx = (ushort)(strideX);
+    ushort tmp_stride = (ushort)(strideXY);
+    ushort offset = gidz % tmp_stride;
+    ushort tmp_y = offset / tmpx;
+    ushort tmp_z = gidz / tmp_stride;
+
+    int2 offset_xy = (int2)(offset % tmpx, tmp_y);
+    coord_in.xy = coord_out.xy * (int2)(strideX, strideY) + offset_xy - (int2)(padXLeft, padYTop);
+    coord_in.zw = (int2)(tmp_z, 0);
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    vxc_uchar16 vec0;
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec0, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcReshuffle_16Bits
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in;
+    ushort gidz = (ushort)get_global_id(2);
+    ushort tmpx = (ushort)(strideX);
+    ushort tmp_stride = (ushort)(strideXY);
+    ushort offset = gidz % tmp_stride;
+    ushort tmp_y = offset / tmpx;
+    ushort tmp_z = gidz / tmp_stride;
+
+    int2 offset_xy = (int2)(offset % tmpx, tmp_y);
+    coord_in.xy = coord_out.xy * (int2)(strideX, strideY) + offset_xy - (int2)(padXLeft, padYTop);
+    coord_in.zw = (int2)(tmp_z, 0);
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    vxc_ushort8 vec0;
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec0, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcReshuffle_8Bits_kn1x1
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in;
+    ushort gidz = (ushort)get_global_id(2);
+    ushort tmpx = (ushort)(strideX);
+    ushort tmp_stride = (ushort)(strideXY);
+    ushort offset = gidz % tmp_stride;
+    if(offset != 0)
+        return;
+
+    ushort tmp_y = offset / tmpx;
+    ushort tmp_z = gidz / tmp_stride;
+
+    int2 offset_xy = (int2)(offset % tmpx, tmp_y);
+    coord_in.xy = coord_out.xy * (int2)(strideX, strideY) + offset_xy - (int2)(padXLeft, padYTop);
+    coord_in.zw = (int2)(tmp_z, 0);
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    vxc_uchar16 vec0;
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    coord_out.z = coord_in.z;
+
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec0, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcReshuffle_16Bits_kn1x1
+    (
+    __read_only image2d_array_t    input,
+    int    padXLeft,
+    int    padYTop,
+    __write_only image2d_array_t   output
+    )
+{
+    int4 coord_out = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0);
+    int4 coord_in;
+    ushort gidz = (ushort)get_global_id(2);
+    ushort tmpx = (ushort)(strideX);
+    ushort tmp_stride = (ushort)(strideXY);
+    ushort offset = gidz % tmp_stride;
+    if(offset != 0)
+        return;
+
+    ushort tmp_y = offset / tmpx;
+    ushort tmp_z = gidz / tmp_stride;
+
+    int2 offset_xy = (int2)(offset % tmpx, tmp_y);
+    coord_in.xy = coord_out.xy * (int2)(strideX, strideY) + offset_xy - (int2)(padXLeft, padYTop);
+    coord_in.zw = (int2)(tmp_z, 0);
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord_in.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord_in.w, baseAddr);
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+
+    vxc_ushort8 vec0;
+    VXC_OP4(img_load_3d, vec0, input, coord_in.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    coord_out.z = coord_in.z;
+
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, vec0, VXC_MODIFIER(0, 0, 0,VXC_RM_TowardZero, 0));
+}

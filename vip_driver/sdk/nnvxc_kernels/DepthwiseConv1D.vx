@@ -1,0 +1,277 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+#if (VX_VERSION==2)
+_viv_uniform VXC_512Bits uniI16ConvI16_Stpe0_8x2b;
+_viv_uniform VXC_512Bits uniI16ConvI16_Stpe1_8x2b;
+_viv_uniform VXC_512Bits uniI16ConvI16_Stpe2_8x2b;
+_viv_uniform VXC_512Bits uniI16ConvI16_Stpe3_8x2b;
+_viv_uniform VXC_512Bits uniI16ConvI16_Stpe4_4x4;
+_viv_uniform VXC_512Bits uniI16ConvI16_Stpe5_4x4;
+_viv_uniform VXC_512Bits uniExtractInteger_2x8;
+_viv_uniform float output_scale;
+_viv_uniform int pad_left;
+__kernel void depthwise_conv1d_I16_I16_I64toI16_K17_S1_D1
+    (
+    __read_only  image2d_array_t  input,
+    __read_only  image2d_array_t  weight,
+    __read_only  image2d_t        bias,
+    __write_only image2d_array_t  output
+    )
+{
+    int stride = 1;
+    int2 coord_in = (int2)(get_global_id(0) * stride - pad_left + 16, get_global_id(1));
+    int4 coord = (int4)(get_global_id(0), 16, 0, get_global_id(1));
+    vxc_short16 src0;
+    vxc_short8 src, w[3];
+    vxc_short8 coef;
+    float4 sum, sum0, sumA, sumB;
+
+    int2 coord_bias = (int2)(coord.w << 1, 0);
+    int4 tmpBias = read_imagei(bias, coord_bias);
+    long b;
+    _viv_asm(MOV_LONG, b, tmpBias.x, tmpBias.y);
+    sum = convert_float(b);
+
+    VXC_ReadImage(src0.hi, input, coord_in, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src0.lo, input, coord_in, VXC_5BITOFFSET_XY(-8,  0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src, input, coord_in, VXC_5BITOFFSET_XY(0,   0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(w[0], weight, coord.yw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(w[1], weight, coord.yw, VXC_5BITOFFSET_XY(-8,  0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(w[2], weight, coord.yw, VXC_5BITOFFSET_XY(0,   0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    sumA = sum.xxxx;
+    sumB = sum.xxxx;
+
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[0], VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe0_8x2b);
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[0], VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe1_8x2b);
+    sumA += sum0;
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[0], VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe2_8x2b);
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[0], VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe3_8x2b);
+    sumB += sum0;
+    src0.hi = src0.lo;
+    src0.lo = src;
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[1], VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe0_8x2b);
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[1], VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe1_8x2b);
+    sumA += sum0;
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[1], VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe2_8x2b);
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[1], VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe3_8x2b);
+    sumB += sum0;
+
+    VXC_DP4x4(sum0, src0.lo, w[2], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe4_4x4);
+    sumA += sum0;
+    VXC_DP4x4(sum0, src0.lo, w[2], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe5_4x4);
+    sumB += sum0;
+
+    float4 result0 = sumA * output_scale;
+    float4 result1 = sumB * output_scale;
+    int4 dst0 = convert_int4_rte(result0);
+    int4 dst1 = convert_int4_rte(result1);
+    vxc_short8 dst;
+    VXC_DP2x8(dst, dst0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniExtractInteger_2x8);
+    VXC_WriteImage(output, coord.xw, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void depthwise_conv1d_I16_I16_I64toI16_K16_S1_D1
+    (
+    __read_only  image2d_array_t  input,
+    __read_only  image2d_array_t  weight,
+    __read_only  image2d_t        bias,
+    __write_only image2d_array_t  output
+    )
+{
+    int stride = 1;
+    int2 coord_in = (int2)(get_global_id(0) * stride - pad_left + 16, get_global_id(1));
+    int4 coord = (int4)(get_global_id(0), 16, 0, get_global_id(1));
+    vxc_short16 src0;
+    vxc_short8 src, w[3];
+    vxc_short8 coef;
+    float4 sum, sum0, sumA, sumB;
+
+    int2 coord_bias = (int2)(coord.w << 1, 0);
+    int4 tmpBias = read_imagei(bias, coord_bias);
+    long b;
+    _viv_asm(MOV_LONG, b, tmpBias.x, tmpBias.y);
+    sum = convert_float(b);
+
+    VXC_ReadImage(src0.hi, input, coord_in, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src0.lo, input, coord_in, VXC_5BITOFFSET_XY(-8,  0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src, input, coord_in, VXC_5BITOFFSET_XY(0,   0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(w[0], weight, coord.yw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(w[1], weight, coord.yw, VXC_5BITOFFSET_XY(-8,  0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(w[2], weight, coord.yw, VXC_5BITOFFSET_XY(0,   0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    sumA = sum.xxxx;
+    sumB = sum.xxxx;
+
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[0], VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe0_8x2b);
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[0], VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe1_8x2b);
+    sumA += sum0;
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[0], VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe2_8x2b);
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[0], VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe3_8x2b);
+    sumB += sum0;
+    src0.hi = src0.lo;
+    src0.lo = src;
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[1], VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe0_8x2b);
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[1], VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe1_8x2b);
+    sumA += sum0;
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[1], VXC_MODIFIER(0, 1, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe2_8x2b);
+    VXC_DP8x2_b(sum0, src0.hi, src0.lo, w[1], VXC_MODIFIER(2, 3, 0, VXC_RM_TowardZero, 0), uniI16ConvI16_Stpe3_8x2b);
+    sumB += sum0;
+
+    float4 result0 = sumA * output_scale;
+    float4 result1 = sumB * output_scale;
+    int4 dst0 = convert_int4_rte(result0);
+    int4 dst1 = convert_int4_rte(result1);
+    vxc_short8 dst;
+    VXC_DP2x8(dst, dst0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniExtractInteger_2x8);
+    VXC_WriteImage(output, coord.xw, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits uniIntegerConv_d2_step0_4x4b;
+_viv_uniform VXC_512Bits uniIntegerConv_d2_step1_4x4b;
+_viv_uniform VXC_512Bits uniIntegerConv_d2_step2_4x4b;
+_viv_uniform VXC_512Bits uniIntegerConv_d2_step3_4x4b;
+_viv_uniform VXC_512Bits uniIntegerConv_d2_step4_4x4b;
+_viv_uniform VXC_512Bits uniIntegerConv_d2_step5_4x4b;
+__kernel void depthwise_conv1d_I16_I16_I64toI16_K32_S1_D2
+    (
+    __read_only  image2d_array_t  input,
+    __read_only  image2d_array_t  weight,
+    __read_only  image2d_t        bias,
+    __write_only image2d_array_t  output
+    )
+{
+    int stride = 1;
+    int2 coord_in = (int2)(get_global_id(0) * stride - pad_left + 16, get_global_id(1));
+    int4 coord = (int4)(get_global_id(0), 16, 0, get_global_id(1));
+    vxc_short16 src0;
+    vxc_short8 indata[7], w[4];
+    vxc_short8 coef;
+    float4 sum, sum0, sumA, sumB;
+
+    int2 coord_bias = (int2)(coord.w << 1, 0);
+    int4 tmpBias = read_imagei(bias, coord_bias);
+    long b;
+    _viv_asm(MOV_LONG, b, tmpBias.x, tmpBias.y);
+    sum = convert_float(b);
+
+    VXC_ReadImage(src0.hi, input, coord_in, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src0.lo, input, coord_in, VXC_5BITOFFSET_XY(-8,  0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(w[0], weight, coord.yw, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(indata[0], input, coord_in, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(indata[1], input, coord_in, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in.x += 32;
+    VXC_ReadImage(indata[2], input, coord_in, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(indata[3], input, coord_in, VXC_5BITOFFSET_XY(-8,  0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(indata[4], input, coord_in, VXC_5BITOFFSET_XY(0,   0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(indata[5], input, coord_in, VXC_5BITOFFSET_XY(8,   0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    coord_in.x += 32;
+    VXC_ReadImage(indata[6], input, coord_in, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(w[1], weight, coord.yw, VXC_5BITOFFSET_XY(-8,  0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(w[2], weight, coord.yw, VXC_5BITOFFSET_XY(0,   0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(w[3], weight, coord.yw, VXC_5BITOFFSET_XY(8,   0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    sumA = sum.xxxx;
+    sumB = sum.xxxx;
+
+    /* conv 0-3 */
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[0], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step0_4x4b);
+    sumA += sum0;
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[0], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step1_4x4b);
+    sumB += sum0;
+
+    /* conv 4-7 */
+    src0.hi = src0.lo;
+    src0.lo = indata[0];
+
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[0], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step2_4x4b);
+    sumA += sum0;
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[0], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step3_4x4b);
+    sumB += sum0;
+
+    /* conv 8-11 */
+    src0.hi = src0.lo;
+    src0.lo = indata[1];
+
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[1], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step0_4x4b);
+    sumA += sum0;
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[1], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step1_4x4b);
+    sumB += sum0;
+
+    /* conv 12-15 */
+    src0.hi = src0.lo;
+    src0.lo = indata[2];
+
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[1], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step2_4x4b);
+    sumA += sum0;
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[1], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step3_4x4b);
+    sumB += sum0;
+
+    /* conv 16-19 */
+    src0.hi = src0.lo;
+    src0.lo = indata[3];
+
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[2], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step0_4x4b);
+    sumA += sum0;
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[2], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step1_4x4b);
+    sumB += sum0;
+
+    /* conv 20-23 */
+    src0.hi = src0.lo;
+    src0.lo = indata[4];
+
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[2], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step2_4x4b);
+    sumA += sum0;
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[2], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step3_4x4b);
+    sumB += sum0;
+
+    /* conv 24-27 */
+    src0.hi = src0.lo;
+    src0.lo = indata[5];
+
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[3], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step0_4x4b);
+    sumA += sum0;
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[3], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step1_4x4b);
+    sumB += sum0;
+
+    /* conv 28 - 31 */
+    src0.hi = src0.lo;
+    src0.lo = indata[6];
+
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[3], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step4_4x4b);
+    sumA += sum0;
+    VXC_DP4x4_b(sum0, src0.hi, src0.lo, w[3], VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniIntegerConv_d2_step5_4x4b);
+    sumB += sum0;
+
+    float4 result0 = sumA * output_scale;
+    float4 result1 = sumB * output_scale;
+    int4 dst0 = convert_int4_rte(result0);
+    int4 dst1 = convert_int4_rte(result1);
+    vxc_short8 dst;
+    VXC_DP2x8(dst, dst0, dst1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniExtractInteger_2x8);
+    VXC_WriteImage(output, coord.xw, dst, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+#else
+__kernel void depthwise_conv1d_I16_I16_I64toI16_K32_S1_D2
+    (
+    __read_only  image2d_array_t  input,
+    __read_only  image2d_array_t  weight,
+    __read_only  image2d_t        bias,
+    __write_only image2d_array_t  output
+    )
+{
+    int2 coord_in = (int2)(get_global_id(0), get_global_id(1));
+    int4 coord = (int4)(get_global_id(0), 16, 0, get_global_id(1));
+    vxc_short8 src;
+
+    VXC_ReadImage(src, input, coord_in, VXC_5BITOFFSET_XY(-16, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_WriteImage(output, coord.xw, src, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+#endif

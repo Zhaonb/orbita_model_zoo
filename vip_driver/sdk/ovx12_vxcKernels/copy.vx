@@ -1,0 +1,13 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+__kernel void copy(
+    global unsigned char* in0,
+    global unsigned char* in1
+)
+{
+    const int pX = get_global_id(0);
+    const int pY = get_global_id(1);
+    in1[pX] = in0[pX];
+}

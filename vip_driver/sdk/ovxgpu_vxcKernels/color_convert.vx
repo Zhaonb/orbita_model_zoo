@@ -1,0 +1,1280 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+__constant float4 coeff2yuv[3] = {(float4)(0.2126f,  0.7152f,  0.0722f,  0.5f),
+                                  (float4)(-0.1146f, -0.3854f, 0.5f,     128.5f),
+                                  (float4)(0.5f,     -0.4542f, -0.0458f, 128.5f)};
+
+__kernel void color_convert_rgb_rgbx(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 rgb = read_imageui(input, coord);
+    rgb.w = 255;
+    write_imageui(output, coord, rgb);
+}
+
+/*  convert rgb to yuv.
+    startReg and nextReg are for this function.
+    startReg.x is for red, startReg.y is for green, startReg.z is for blue.
+    nextReg.x is for Y, nextReg.y is for U, nextReg.z is for V.
+    Y = r * 0.2126f    + g * 0.7152f    + b * 0.0722f    + 0.5f;
+    U = r * (-0.1146f) + g * (-0.3854f)  + b * 0.5f       + 128.5f;
+    V = r * 0.5f       + g * (-0.4542f) + b * (-0.0458f) + 128.5f;
+*/
+// scale 4
+__kernel void color_convert_rgb_yuv4(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 rgb = read_imageui(input, coord);
+    float4 tmpRgb = (float4)(rgb.x, rgb.y, rgb.z, 1.0f);
+    float4 yuv;
+    yuv.x = dot(tmpRgb, coeff2yuv[0]);
+    yuv.y = dot(tmpRgb, coeff2yuv[1]);
+    yuv.z = dot(tmpRgb, coeff2yuv[2]);
+    yuv = clamp(yuv, 0, 255);
+
+    uint4 dst = convert_uint4_sat_rtz(yuv);
+
+    write_imageui(output0, coord, dst.x);
+    write_imageui(output1, coord, dst.y);
+    write_imageui(output2, coord, dst.z);
+}
+
+__kernel void color_convert_rgb_nv12(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+
+    float4 rgb00 = convert_float4(read_imageui(input, coord.xy));
+    float4 rgb01 = convert_float4(read_imageui(input, coord.zy));
+    float4 rgb10 = convert_float4(read_imageui(input, coord.xw));
+    float4 rgb11 = convert_float4(read_imageui(input, coord.zw));
+    rgb00.w = 1.0f;
+    rgb01.w = 1.0f;
+    rgb10.w = 1.0f;
+    rgb11.w = 1.0f;
+
+    float4 y = (float4)(dot(rgb00, coeff2yuv[0]), dot(rgb01, coeff2yuv[0]), dot(rgb10, coeff2yuv[0]), dot(rgb11, coeff2yuv[0]));
+    float4 u = (float4)(dot(rgb00, coeff2yuv[1]), dot(rgb01, coeff2yuv[1]), dot(rgb10, coeff2yuv[1]), dot(rgb11, coeff2yuv[1]));
+    float4 v = (float4)(dot(rgb00, coeff2yuv[2]), dot(rgb01, coeff2yuv[2]), dot(rgb10, coeff2yuv[2]), dot(rgb11, coeff2yuv[2]));
+
+    y = clamp(y, 0, 255);
+    u = clamp(u, 0, 255);
+    v = clamp(v, 0, 255);
+    uint4 dstY = convert_uint4_sat_rtz(y);
+    uint4 dstU = convert_uint4_sat_rtz(u);
+    uint4 dstV = convert_uint4_sat_rtz(v);
+    dstU.x = (dstU.x + dstU.y + dstU.z + dstU.w) >> 2;
+    dstV.x = (dstV.x + dstV.y + dstV.z + dstV.w) >> 2;
+
+    write_imageui(output0, coord.xy, dstY.xxxx);
+    write_imageui(output0, coord.zy, dstY.yyyy);
+    write_imageui(output0, coord.xw, dstY.zzzz);
+    write_imageui(output0, coord.zw, dstY.wwww);
+    coord.y = get_global_id(1);
+
+    write_imageui(output1, coord.xy, dstU);
+    write_imageui(output1, coord.zy, dstV);
+}
+
+// 4:2:0
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 u1
+// v0 v1
+// reshape y width to uv width, main uv
+__kernel void color_convert_rgb_iyuv(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+
+    float4 rgb00 = convert_float4(read_imageui(input, coord.xy));
+    float4 rgb01 = convert_float4(read_imageui(input, coord.zy));
+    float4 rgb10 = convert_float4(read_imageui(input, coord.xw));
+    float4 rgb11 = convert_float4(read_imageui(input, coord.zw));
+
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1));
+
+    rgb00.w = 1.0f;
+    rgb01.w = 1.0f;
+    rgb10.w = 1.0f;
+    rgb11.w = 1.0f;
+
+    float4 y = (float4)(dot(rgb00, coeff2yuv[0]), dot(rgb01, coeff2yuv[0]), dot(rgb10, coeff2yuv[0]), dot(rgb11, coeff2yuv[0]));
+    float4 u = (float4)(dot(rgb00, coeff2yuv[1]), dot(rgb01, coeff2yuv[1]), dot(rgb10, coeff2yuv[1]), dot(rgb11, coeff2yuv[1]));
+    float4 v = (float4)(dot(rgb00, coeff2yuv[2]), dot(rgb01, coeff2yuv[2]), dot(rgb10, coeff2yuv[2]), dot(rgb11, coeff2yuv[2]));
+
+    y = clamp(y, 0, 255);
+    u = clamp(u, 0, 255);
+    v = clamp(v, 0, 255);
+
+    uint4 dstY = convert_uint4_sat_rtz(y);
+    uint4 dstU = convert_uint4_sat_rtz(u);
+    uint4 dstV = convert_uint4_sat_rtz(v);
+    dstU.x = (dstU.x + dstU.y + dstU.z + dstU.w) >> 2;
+    dstV.x = (dstV.x + dstV.y + dstV.z + dstV.w) >> 2;
+
+    write_imageui(output0, coord.xy, dstY.xxxx);
+    write_imageui(output0, coord.zy, dstY.yyyy);
+    write_imageui(output0, coord.xw, dstY.zzzz);
+    write_imageui(output0, coord.zw, dstY.wwww);
+
+    write_imageui(output1, coord_c, dstU);
+    write_imageui(output2, coord_c, dstV);
+}
+
+__kernel void color_convert_rgbx_rgb(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 rgbx = read_imageui(input, coord);
+    write_imageui(output, coord, rgbx);
+}
+
+__kernel void color_convert_rgbx_yuv4(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    uint4 rgbx = read_imageui(input, coord);
+    float4 tmpRgb = (float4)(rgbx.x, rgbx.y, rgbx.z, 1.0f);
+    float4 yuv;
+    yuv.x = dot(tmpRgb, coeff2yuv[0]);
+    yuv.y = dot(tmpRgb, coeff2yuv[1]);
+    yuv.z = dot(tmpRgb, coeff2yuv[2]);
+
+    yuv = clamp(yuv, 0, 255);
+    uint4 dst = convert_uint4_sat_rtz(yuv);
+
+    write_imageui(output0, coord, dst.x);
+    write_imageui(output1, coord, dst.y);
+    write_imageui(output2, coord, dst.z);
+}
+
+__kernel void color_convert_rgbx_nv12(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+
+    float4 rgb00 = convert_float4(read_imageui(input, coord.xy));
+    float4 rgb01 = convert_float4(read_imageui(input, coord.zy));
+    float4 rgb10 = convert_float4(read_imageui(input, coord.xw));
+    float4 rgb11 = convert_float4(read_imageui(input, coord.zw));
+    rgb00.w = 1.0f;
+    rgb01.w = 1.0f;
+    rgb10.w = 1.0f;
+    rgb11.w = 1.0f;
+
+    float4 y = (float4)(dot(rgb00, coeff2yuv[0]), dot(rgb01, coeff2yuv[0]), dot(rgb10, coeff2yuv[0]), dot(rgb11, coeff2yuv[0]));
+    float4 u = (float4)(dot(rgb00, coeff2yuv[1]), dot(rgb01, coeff2yuv[1]), dot(rgb10, coeff2yuv[1]), dot(rgb11, coeff2yuv[1]));
+    float4 v = (float4)(dot(rgb00, coeff2yuv[2]), dot(rgb01, coeff2yuv[2]), dot(rgb10, coeff2yuv[2]), dot(rgb11, coeff2yuv[2]));
+
+    y = clamp(y, 0, 255);
+    u = clamp(u, 0, 255);
+    v = clamp(v, 0, 255);
+    uint4 dstY = convert_uint4_sat_rtz(y);
+    uint4 dstU = convert_uint4_sat_rtz(u);
+    uint4 dstV = convert_uint4_sat_rtz(v);
+    dstU.x = (dstU.x + dstU.y + dstU.z + dstU.w) >> 2;
+    dstV.x = (dstV.x + dstV.y + dstV.z + dstV.w) >> 2;
+
+    write_imageui(output0, coord.xy, dstY.xxxx);
+    write_imageui(output0, coord.zy, dstY.yyyy);
+    write_imageui(output0, coord.xw, dstY.zzzz);
+    write_imageui(output0, coord.zw, dstY.wwww);
+    coord.y = get_global_id(1);
+
+    write_imageui(output1, coord.xy, dstU);
+    write_imageui(output1, coord.zy, dstV);
+}
+
+__kernel void color_convert_rgbx_iyuv(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+
+    float4 rgb00 = convert_float4(read_imageui(input, coord.xy));
+    float4 rgb01 = convert_float4(read_imageui(input, coord.zy));
+    float4 rgb10 = convert_float4(read_imageui(input, coord.xw));
+    float4 rgb11 = convert_float4(read_imageui(input, coord.zw));
+
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1));
+
+    rgb00.w = 1.0f;
+    rgb01.w = 1.0f;
+    rgb10.w = 1.0f;
+    rgb11.w = 1.0f;
+
+    float4 y = (float4)(dot(rgb00, coeff2yuv[0]), dot(rgb01, coeff2yuv[0]), dot(rgb10, coeff2yuv[0]), dot(rgb11, coeff2yuv[0]));
+    float4 u = (float4)(dot(rgb00, coeff2yuv[1]), dot(rgb01, coeff2yuv[1]), dot(rgb10, coeff2yuv[1]), dot(rgb11, coeff2yuv[1]));
+    float4 v = (float4)(dot(rgb00, coeff2yuv[2]), dot(rgb01, coeff2yuv[2]), dot(rgb10, coeff2yuv[2]), dot(rgb11, coeff2yuv[2]));
+
+    y = clamp(y, 0, 255);
+    u = clamp(u, 0, 255);
+    v = clamp(v, 0, 255);
+    uint4 dstY = convert_uint4_sat_rtz(y);
+    uint4 dstU = convert_uint4_sat_rtz(u);
+    uint4 dstV = convert_uint4_sat_rtz(v);
+    dstU.x = (dstU.x + dstU.y + dstU.z + dstU.w) >> 2;
+    dstV.x = (dstV.x + dstV.y + dstV.z + dstV.w) >> 2;
+
+    write_imageui(output0, coord.xy, dstY.xxxx);
+    write_imageui(output0, coord.zy, dstY.yyyy);
+    write_imageui(output0, coord.xw, dstY.zzzz);
+    write_imageui(output0, coord.zw, dstY.wwww);
+
+    write_imageui(output1, coord_c, dstU);
+    write_imageui(output2, coord_c, dstV);
+}
+
+/*  convert yuv to rgb.
+    startReg and nextReg are for this function.
+    startReg.x is for Y, startReg.y is for U, startReg.z is for V.
+    nextReg.x is for red, nextReg.y is for green, nextReg.z is for blue.
+    orignal formula:
+    Y' = Y + 0.5f;
+    U' = U - 128;
+    V' = V - 128;
+    r = Y' + 0.0000f * U' + 1.5748f * V';
+    g = Y' - 0.1873f * U' - 0.4681f * V';
+    b = Y' + 1.8556f * U' + 0.0000f * V';
+    transfer formula:
+    r = Y + 0.0000f * U + 1.5748f * V + 0.5f - 1.5748f * 128;
+    g = Y - 0.1873f * U - 0.4681f * V + 0.5f + 0.1873f * 128 + 0.4681f * 128;
+    b = Y + 1.8556f * U + 0.0000f * V + 0.5f - 1.8556f * 128;
+    ==>
+    r = Y + 1.5748f * V - 201.0744f;
+    g = Y - 0.1873f * U - 0.4681f * V + 84.3912f;
+    b = Y + 1.8556f * U - 237.0168f;
+*/
+//Bt601
+// R = Y + 1.402 * Cr
+// G = Y - 0.344 * Cb - 0.792 * Cr
+// B = Y + 1.772 * Cb
+__kernel void color_convert_yuyv_rgb(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 4, get_global_id(1), get_global_id(0) * 4 + 1, get_global_id(0) * 4 + 2);
+    int4 coord1 = (int4)(get_global_id(0) * 2, get_global_id(1), get_global_id(0) * 2 + 1, get_global_id(0) * 4 + 3);
+    uint4 yuyv;
+    float4 tmpYuyv;
+
+    yuyv.x = read_imageui(input, coord.xy).x;
+    yuyv.y = read_imageui(input, coord.zy).x;
+    yuyv.z = read_imageui(input, coord.wy).x;
+    yuyv.w = read_imageui(input, coord1.wy).x;
+
+    tmpYuyv = convert_float4(yuyv);
+
+    float4 tmpRgb0, tmpRgb1;
+
+    tmpRgb0.x = tmpYuyv.x + 1.5748f * tmpYuyv.w - 201.0744f;
+    tmpRgb0.y = tmpYuyv.x - 0.1873f * tmpYuyv.y - 0.4681f * tmpYuyv.w + 84.3912f;
+    tmpRgb0.z = tmpYuyv.x + 1.8556f * tmpYuyv.y - 237.0168f;
+
+    tmpRgb1.x = tmpYuyv.z + 1.5748f * tmpYuyv.w - 201.0744f;
+    tmpRgb1.y = tmpYuyv.z - 0.1873f * tmpYuyv.y - 0.4681f * tmpYuyv.w + 84.3912f;
+    tmpRgb1.z = tmpYuyv.z + 1.8556f * tmpYuyv.y - 237.0168f;
+
+    tmpRgb0 = clamp(tmpRgb0, 0, 255);
+    tmpRgb1 = clamp(tmpRgb1, 0, 255);
+    uint4 rgb0 = convert_uint4_sat_rtz(tmpRgb0);
+    uint4 rgb1 = convert_uint4_sat_rtz(tmpRgb1);
+
+    write_imageui(output, coord1.xy, rgb0);
+    write_imageui(output, coord1.zy, rgb1);
+}
+
+__kernel void color_convert_yuyv_rgbx(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 4, get_global_id(1), get_global_id(0) * 4 + 1, get_global_id(0) * 4 + 2);
+    int4 coord1 = (int4)(get_global_id(0) * 2, get_global_id(1), get_global_id(0) * 2 + 1, get_global_id(0) * 4 + 3);
+    uint4 yuyv;
+    float4 tmpYuyv;
+
+    yuyv.x = read_imageui(input, coord.xy).x;
+    yuyv.y = read_imageui(input, coord.zy).x;
+    yuyv.z = read_imageui(input, coord.wy).x;
+    yuyv.w = read_imageui(input, coord1.wy).x;
+
+    tmpYuyv = convert_float4(yuyv);
+
+    float4 tmpRgb0, tmpRgb1;
+
+    tmpRgb0.x = tmpYuyv.x + 1.5748f * tmpYuyv.w - 201.0744f;
+    tmpRgb0.y = tmpYuyv.x - 0.1873f * tmpYuyv.y - 0.4681f * tmpYuyv.w + 84.3912f;
+    tmpRgb0.z = tmpYuyv.x + 1.8556f * tmpYuyv.y - 237.0168f;
+    tmpRgb0.w = 255;
+
+    tmpRgb1.x = tmpYuyv.z + 1.5748f * tmpYuyv.w - 201.0744f;
+    tmpRgb1.y = tmpYuyv.z - 0.1873f * tmpYuyv.y - 0.4681f * tmpYuyv.w + 84.3912f;
+    tmpRgb1.z = tmpYuyv.z + 1.8556f * tmpYuyv.y - 237.0168f;
+    tmpRgb1.w = 255;
+
+    tmpRgb0 = clamp(tmpRgb0, 0, 255);
+    tmpRgb1 = clamp(tmpRgb1, 0, 255);
+    uint4 rgbx0 = convert_uint4_sat_rtz(tmpRgb0);
+    uint4 rgbx1 = convert_uint4_sat_rtz(tmpRgb1);
+
+    write_imageui(output, coord1.xy, rgbx0);
+    write_imageui(output, coord1.zy, rgbx1);
+}
+
+// y0 u0 y1 v0    y2 u1 y3 v1
+// y4 u2 y5 v2    y6 u3 y7 v3
+// ==>
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 v0 u1 v1
+__kernel void color_convert_yuyv_nv12(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 4, get_global_id(1) * 2, get_global_id(0) * 4 + 1, get_global_id(0) * 4 + 2);
+    int4 coord1 = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(0) * 4 + 3);
+
+    uint4 y00 = read_imageui(input, coord.xy);
+    uint4 u0 = read_imageui(input, coord.zy);
+    uint4 y01 = read_imageui(input, coord.wy);
+    uint4 v0 = read_imageui(input, coord1.wy);
+
+    write_imageui(output0, coord1.xy, y00);
+    write_imageui(output0, coord1.zy, y01);
+
+    coord.y++;
+    coord1.y++;
+
+    uint4 y10 = read_imageui(input, coord.xy);
+    uint4 u1 = read_imageui(input, coord.zy);
+    uint4 y11 = read_imageui(input, coord.wy);
+    uint4 v1 = read_imageui(input, coord1.wy);
+
+    write_imageui(output0, coord1.xy, y10);
+    write_imageui(output0, coord1.zy, y11);
+
+    u0.x = (u0.x + u1.x) >> 1;
+    v0.x = (v0.x + v1.x) >> 1;
+    coord1.y = get_global_id(1);
+
+    write_imageui(output1, coord1.xy, u0);
+    write_imageui(output1, coord1.zy, v0);
+}
+
+// y0 u0 y1 v0    y2 u1 y3 v1
+// y4 u2 y5 v2    y6 u3 y7 v3
+// ==>
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 u1
+// v0 v1
+__kernel void color_convert_yuyv_iyuv(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 4, get_global_id(1) * 2, get_global_id(0) * 4 + 1, get_global_id(0) * 4 + 2);
+    int4 coord1 = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(0) * 4 + 3);
+
+    uint4 y00 = read_imageui(input, coord.xy);
+    uint4 u0 = read_imageui(input, coord.zy);
+    uint4 y01 = read_imageui(input, coord.wy);
+    uint4 v0 = read_imageui(input, coord1.wy);
+
+    write_imageui(output0, coord1.xy, y00);
+    write_imageui(output0, coord1.zy, y01);
+
+    coord.y++;
+    coord1.y++;
+
+    uint4 y10 = read_imageui(input, coord.xy);
+    uint4 u1 = read_imageui(input, coord.zy);
+    uint4 y11 = read_imageui(input, coord.wy);
+    uint4 v1 = read_imageui(input, coord1.wy);
+
+    write_imageui(output0, coord1.xy, y10);
+    write_imageui(output0, coord1.zy, y11);
+
+    u0.x = (u0.x + u1.x) >> 1;
+    v0.x = (v0.x + v1.x) >> 1;
+    coord1.x = get_global_id(0);
+    coord1.y = get_global_id(1);
+
+    write_imageui(output1, coord1.xy, u0);
+    write_imageui(output2, coord1.xy, v0);
+}
+
+//    r = Y + 1.5748f * V - 201.0744f;
+//    g = Y - 0.1873f * U - 0.4681f * V + 84.3912f;
+//    b = Y + 1.8556f * U - 237.0168f;
+__kernel void color_convert_uyvy_rgb(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 4, get_global_id(1), get_global_id(0) * 4 + 1, get_global_id(0) * 4 + 2);
+    int4 coord1 = (int4)(get_global_id(0) * 2, get_global_id(1), get_global_id(0) * 2 + 1, get_global_id(0) * 4 + 3);
+    uint4 yuyv;
+    float4 tmpYuyv;
+
+    yuyv.x = read_imageui(input, coord.xy).x;
+    yuyv.y = read_imageui(input, coord.zy).x;
+    yuyv.z = read_imageui(input, coord.wy).x;
+    yuyv.w = read_imageui(input, coord1.wy).x;
+
+    tmpYuyv = convert_float4(yuyv);
+
+    float4 tmpRgb0, tmpRgb1;
+
+    tmpRgb0.x = tmpYuyv.y + 1.5748f * tmpYuyv.z - 201.0744f;
+    tmpRgb0.y = tmpYuyv.y - 0.1873f * tmpYuyv.x - 0.4681f * tmpYuyv.z + 84.3912f;
+    tmpRgb0.z = tmpYuyv.y + 1.8556f * tmpYuyv.x - 237.0168f;
+
+    tmpRgb1.x = tmpYuyv.w + 1.5748f * tmpYuyv.z - 201.0744f;
+    tmpRgb1.y = tmpYuyv.w - 0.1873f * tmpYuyv.x - 0.4681f * tmpYuyv.z + 84.3912f;
+    tmpRgb1.z = tmpYuyv.w + 1.8556f * tmpYuyv.x - 237.0168f;
+
+    tmpRgb0 = clamp(tmpRgb0, 0, 255);
+    tmpRgb1 = clamp(tmpRgb1, 0, 255);
+    uint4 rgb0 = convert_uint4_sat_rtz(tmpRgb0);
+    uint4 rgb1 = convert_uint4_sat_rtz(tmpRgb1);
+
+    write_imageui(output, coord1.xy, rgb0);
+    write_imageui(output, coord1.zy, rgb1);
+}
+
+__kernel void color_convert_uyvy_rgbx(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 4, get_global_id(1), get_global_id(0) * 4 + 1, get_global_id(0) * 4 + 2);
+    int4 coord1 = (int4)(get_global_id(0) * 2, get_global_id(1), get_global_id(0) * 2 + 1, get_global_id(0) * 4 + 3);
+    uint4 yuyv;
+    float4 tmpYuyv;
+
+    yuyv.x = read_imageui(input, coord.xy).x;
+    yuyv.y = read_imageui(input, coord.zy).x;
+    yuyv.z = read_imageui(input, coord.wy).x;
+    yuyv.w = read_imageui(input, coord1.wy).x;
+
+    tmpYuyv = convert_float4(yuyv);
+
+    float4 tmpRgbx0, tmpRgbx1;
+
+    tmpRgbx0.x = tmpYuyv.y + 1.5748f * tmpYuyv.z - 201.0744f;
+    tmpRgbx0.y = tmpYuyv.y - 0.1873f * tmpYuyv.x - 0.4681f * tmpYuyv.z + 84.3912f;
+    tmpRgbx0.z = tmpYuyv.y + 1.8556f * tmpYuyv.x - 237.0168f;
+    tmpRgbx0.w = 255;
+
+    tmpRgbx1.x = tmpYuyv.w + 1.5748f * tmpYuyv.z - 201.0744f;
+    tmpRgbx1.y = tmpYuyv.w - 0.1873f * tmpYuyv.x - 0.4681f * tmpYuyv.z + 84.3912f;
+    tmpRgbx1.z = tmpYuyv.w + 1.8556f * tmpYuyv.x - 237.0168f;
+    tmpRgbx1.w = 255;
+
+    tmpRgbx0 = clamp(tmpRgbx0, 0, 255);
+    tmpRgbx1 = clamp(tmpRgbx1, 0, 255);
+    uint4 rgbx0 = convert_uint4_sat_rtz(tmpRgbx0);
+    uint4 rgbx1 = convert_uint4_sat_rtz(tmpRgbx1);
+
+    write_imageui(output, coord1.xy, rgbx0);
+    write_imageui(output, coord1.zy, rgbx1);
+}
+
+// u0 y0 v0 y1    u1 y2 v1 y3
+// u2 y4 v2 y5    u3 y6 v3 y7
+// ==>
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 v0 u1 v1
+__kernel void color_convert_uyvy_nv12(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 4, get_global_id(1) * 2, get_global_id(0) * 4 + 1, get_global_id(0) * 4 + 2);
+    int4 coord1 = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(0) * 4 + 3);
+
+    uint4 u0 = read_imageui(input, coord.xy);
+    uint4 y00 = read_imageui(input, coord.zy);
+    uint4 v0 = read_imageui(input, coord.wy);
+    uint4 y01 = read_imageui(input, coord1.wy);
+
+    write_imageui(output0, coord1.xy, y00);
+    write_imageui(output0, coord1.zy, y01);
+
+    coord.y++;
+    coord1.y++;
+
+    uint4 u1 = read_imageui(input, coord.xy);
+    uint4 y10 = read_imageui(input, coord.zy);
+    uint4 v1 = read_imageui(input, coord.wy);
+    uint4 y11 = read_imageui(input, coord1.wy);
+
+    write_imageui(output0, coord1.xy, y10);
+    write_imageui(output0, coord1.zy, y11);
+
+    u0.x = (u0.x + u1.x) >> 1;
+    v0.x = (v0.x + v1.x) >> 1;
+    coord1.y = get_global_id(1);
+
+    write_imageui(output1, coord1.xy, u0);
+    write_imageui(output1, coord1.zy, v0);
+}
+
+// y0 u0 y1 v0    y2 u1 y3 v1
+// y4 u2 y5 v2    y6 u3 y7 v3
+// ==>
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 u1
+// v0 v1
+__kernel void color_convert_uyvy_iyuv(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 4, get_global_id(1) * 2, get_global_id(0) * 4 + 1, get_global_id(0) * 4 + 2);
+    int4 coord1 = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(0) * 4 + 3);
+
+    uint4 u0 = read_imageui(input, coord.xy);
+    uint4 y00 = read_imageui(input, coord.zy);
+    uint4 v0 = read_imageui(input, coord.wy);
+    uint4 y01 = read_imageui(input, coord1.wy);
+
+    write_imageui(output0, coord1.xy, y00);
+    write_imageui(output0, coord1.zy, y01);
+
+    coord.y++;
+    coord1.y++;
+
+    uint4 u1 = read_imageui(input, coord.xy);
+    uint4 y10 = read_imageui(input, coord.zy);
+    uint4 v1 = read_imageui(input, coord.wy);
+    uint4 y11 = read_imageui(input, coord1.wy);
+
+    write_imageui(output0, coord1.xy, y10);
+    write_imageui(output0, coord1.zy, y11);
+
+    u0.x = (u0.x + u1.x) >> 1;
+    v0.x = (v0.x + v1.x) >> 1;
+    coord1.x = get_global_id(0);
+    coord1.y = get_global_id(1);
+
+    write_imageui(output1, coord1.xy, u0);
+    write_imageui(output2, coord1.xy, v0);
+}
+
+
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 u1
+// v0 v1
+// ==>
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 v0 u1 v1
+__kernel void color_convert_iyuv_nv12(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+    int4 coord_c = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) * 2, get_global_id(0) * 2 + 1);
+
+    uint4 y00 = read_imageui(input0, coord.xy);
+    uint4 y01 = read_imageui(input0, coord.zy);
+    uint4 y10 = read_imageui(input0, coord.xw);
+    uint4 y11 = read_imageui(input0, coord.zw);
+
+    uint4 u = read_imageui(input1, coord_c.xy);
+    uint4 v = read_imageui(input2, coord_c.xy);
+
+    write_imageui(output0, coord.xy, y00);
+    write_imageui(output0, coord.zy, y01);
+    write_imageui(output0, coord.xw, y10);
+    write_imageui(output0, coord.zw, y11);
+    write_imageui(output1, coord_c.zy, u);
+    write_imageui(output1, coord_c.wy, v);
+}
+
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 u1
+// v0 v1
+// ==>
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 u0 u1 u1
+// u0 u0 u1 u1
+// v0 v0 v1 v1
+// v0 v0 v1 v1
+__kernel void color_convert_iyuv_yuv4(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 y00 = read_imageui(input0, coord.xy);
+    uint4 y01 = read_imageui(input0, coord.zy);
+    uint4 y10 = read_imageui(input0, coord.xw);
+    uint4 y11 = read_imageui(input0, coord.zw);
+
+    uint4 u = read_imageui(input1, coord_c.xy);
+    uint4 v = read_imageui(input2, coord_c.xy);
+
+    write_imageui(output0, coord.xy, y00);
+    write_imageui(output0, coord.zy, y01);
+    write_imageui(output0, coord.xw, y10);
+    write_imageui(output0, coord.zw, y11);
+    write_imageui(output1, coord.xy, u);
+    write_imageui(output1, coord.zy, u);
+    write_imageui(output1, coord.xw, u);
+    write_imageui(output1, coord.zw, u);
+    write_imageui(output2, coord.xy, v);
+    write_imageui(output2, coord.zy, v);
+    write_imageui(output2, coord.xw, v);
+    write_imageui(output2, coord.zw, v);
+}
+
+//    r = Y + 1.5748f * V - 201.0744f;
+//    g = Y - 0.1873f * U - 0.4681f * V + 84.3912f;
+//    b = Y + 1.8556f * U - 237.0168f;
+__kernel void color_convert_iyuv_rgb(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 y, uv;
+    y.x = read_imageui(input0, coord.xy).x;
+    y.y = read_imageui(input0, coord.zy).x;
+    y.z = read_imageui(input0, coord.xw).x;
+    y.w = read_imageui(input0, coord.zw).x;
+
+    uv.x = read_imageui(input1, coord_c.xy).x;
+    uv.y = read_imageui(input2, coord_c.xy).x;
+
+    float4 tmpY = convert_float4(y);
+    float4 tmpUv = convert_float4(uv);
+
+    float4 tmpRgb0, tmpRgb1, tmpRgb2, tmpRgb3;
+
+    float tmpR = 1.5748f * tmpUv.y - 201.0744f;
+    float tmpG = 84.3912f - 0.1873f * tmpUv.x - 0.4681f * tmpUv.y;
+    float tmpB = 1.8556f * tmpUv.x - 237.0168f;
+
+    tmpRgb0.x = tmpY.x + tmpR;
+    tmpRgb0.y = tmpY.x + tmpG;
+    tmpRgb0.z = tmpY.x + tmpB;
+
+    tmpRgb1.x = tmpY.y + tmpR;
+    tmpRgb1.y = tmpY.y + tmpG;
+    tmpRgb1.z = tmpY.y + tmpB;
+
+    tmpRgb2.x = tmpY.z + tmpR;
+    tmpRgb2.y = tmpY.z + tmpG;
+    tmpRgb2.z = tmpY.z + tmpB;
+
+    tmpRgb3.x = tmpY.w + tmpR;
+    tmpRgb3.y = tmpY.w + tmpG;
+    tmpRgb3.z = tmpY.w + tmpB;
+
+    tmpRgb0 = clamp(tmpRgb0, 0, 255);
+    tmpRgb1 = clamp(tmpRgb1, 0, 255);
+    tmpRgb2 = clamp(tmpRgb2, 0, 255);
+    tmpRgb3 = clamp(tmpRgb3, 0, 255);
+    uint4 rgb0 = convert_uint4_sat_rtz(tmpRgb0);
+    uint4 rgb1 = convert_uint4_sat_rtz(tmpRgb1);
+    uint4 rgb2 = convert_uint4_sat_rtz(tmpRgb2);
+    uint4 rgb3 = convert_uint4_sat_rtz(tmpRgb3);
+
+    write_imageui(output, coord.xy, rgb0);
+    write_imageui(output, coord.zy, rgb1);
+    write_imageui(output, coord.xw, rgb2);
+    write_imageui(output, coord.zw, rgb3);
+}
+
+__kernel void color_convert_iyuv_rgbx(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+    int2 coord_c = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 y, uv;
+    y.x = read_imageui(input0, coord.xy).x;
+    y.y = read_imageui(input0, coord.zy).x;
+    y.z = read_imageui(input0, coord.xw).x;
+    y.w = read_imageui(input0, coord.zw).x;
+
+    uv.x = read_imageui(input1, coord_c.xy).x;
+    uv.y = read_imageui(input2, coord_c.xy).x;
+
+    float4 tmpY = convert_float4(y);
+    float4 tmpUv = convert_float4(uv);
+
+    float4 tmpRgb0, tmpRgb1, tmpRgb2, tmpRgb3;
+
+    float tmpR = 1.5748f * tmpUv.y - 201.0744f;
+    float tmpG = 84.3912f - 0.1873f * tmpUv.x - 0.4681f * tmpUv.y;
+    float tmpB = 1.8556f * tmpUv.x - 237.0168f;
+
+    tmpRgb0.x = tmpY.x + tmpR;
+    tmpRgb0.y = tmpY.x + tmpG;
+    tmpRgb0.z = tmpY.x + tmpB;
+    tmpRgb0.w = 255;
+
+    tmpRgb1.x = tmpY.y + tmpR;
+    tmpRgb1.y = tmpY.y + tmpG;
+    tmpRgb1.z = tmpY.y + tmpB;
+    tmpRgb1.w = 255;
+
+    tmpRgb2.x = tmpY.z + tmpR;
+    tmpRgb2.y = tmpY.z + tmpG;
+    tmpRgb2.z = tmpY.z + tmpB;
+    tmpRgb2.w = 255;
+
+    tmpRgb3.x = tmpY.w + tmpR;
+    tmpRgb3.y = tmpY.w + tmpG;
+    tmpRgb3.z = tmpY.w + tmpB;
+    tmpRgb3.w = 255;
+
+    tmpRgb0 = clamp(tmpRgb0, 0, 255);
+    tmpRgb1 = clamp(tmpRgb1, 0, 255);
+    tmpRgb2 = clamp(tmpRgb2, 0, 255);
+    tmpRgb3 = clamp(tmpRgb3, 0, 255);
+    uint4 rgbx0 = convert_uint4_sat_rtz(tmpRgb0);
+    uint4 rgbx1 = convert_uint4_sat_rtz(tmpRgb1);
+    uint4 rgbx2 = convert_uint4_sat_rtz(tmpRgb2);
+    uint4 rgbx3 = convert_uint4_sat_rtz(tmpRgb3);
+
+    write_imageui(output, coord.xy, rgbx0);
+    write_imageui(output, coord.zy, rgbx1);
+    write_imageui(output, coord.xw, rgbx2);
+    write_imageui(output, coord.zw, rgbx3);
+}
+
+// y0 y1 y2 y3
+// y4 y5 y6 y7
+// u0 v0 u1 v1
+__kernel void color_convert_nv12_rgb(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+    int2 coord_c = (int2)(get_global_id(0) * 2, get_global_id(1));
+
+    uint4 y, uv;
+    y.x = read_imageui(input0, coord.xy).x;
+    y.y = read_imageui(input0, coord.zy).x;
+    y.z = read_imageui(input0, coord.xw).x;
+    y.w = read_imageui(input0, coord.zw).x;
+
+    uv.x = read_imageui(input1, coord_c.xy).x;
+    coord_c.x++;
+    uv.y = read_imageui(input1, coord_c.xy).x;
+
+    float4 tmpY = convert_float4(y);
+    float4 tmpUv = convert_float4(uv);
+
+    float4 tmpRgb0, tmpRgb1, tmpRgb2, tmpRgb3;
+
+    float tmpR = 1.5748f * tmpUv.y - 201.0744f;
+    float tmpG = 84.3912f - 0.1873f * tmpUv.x - 0.4681f * tmpUv.y;
+    float tmpB = 1.8556f * tmpUv.x - 237.0168f;
+
+    tmpRgb0.x = tmpY.x + tmpR;
+    tmpRgb0.y = tmpY.x + tmpG;
+    tmpRgb0.z = tmpY.x + tmpB;
+
+    tmpRgb1.x = tmpY.y + tmpR;
+    tmpRgb1.y = tmpY.y + tmpG;
+    tmpRgb1.z = tmpY.y + tmpB;
+
+    tmpRgb2.x = tmpY.z + tmpR;
+    tmpRgb2.y = tmpY.z + tmpG;
+    tmpRgb2.z = tmpY.z + tmpB;
+
+    tmpRgb3.x = tmpY.w + tmpR;
+    tmpRgb3.y = tmpY.w + tmpG;
+    tmpRgb3.z = tmpY.w + tmpB;
+
+    tmpRgb0 = clamp(tmpRgb0, 0, 255);
+    tmpRgb1 = clamp(tmpRgb1, 0, 255);
+    tmpRgb2 = clamp(tmpRgb2, 0, 255);
+    tmpRgb3 = clamp(tmpRgb3, 0, 255);
+
+    uint4 rgb0 = convert_uint4_sat_rtz(tmpRgb0);
+    uint4 rgb1 = convert_uint4_sat_rtz(tmpRgb1);
+    uint4 rgb2 = convert_uint4_sat_rtz(tmpRgb2);
+    uint4 rgb3 = convert_uint4_sat_rtz(tmpRgb3);
+
+    write_imageui(output, coord.xy, rgb0);
+    write_imageui(output, coord.zy, rgb1);
+    write_imageui(output, coord.xw, rgb2);
+    write_imageui(output, coord.zw, rgb3);
+}
+
+__kernel void color_convert_nv12_rgbx(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+    int2 coord_c = (int2)(get_global_id(0) * 2, get_global_id(1));
+
+    uint4 y, uv;
+    y.x = read_imageui(input0, coord.xy).x;
+    y.y = read_imageui(input0, coord.zy).x;
+    y.z = read_imageui(input0, coord.xw).x;
+    y.w = read_imageui(input0, coord.zw).x;
+
+    uv.x = read_imageui(input1, coord_c.xy).x;
+    coord_c.x++;
+    uv.y = read_imageui(input1, coord_c.xy).x;
+
+    float4 tmpY = convert_float4(y);
+    float4 tmpUv = convert_float4(uv);
+
+    float4 tmpRgb0, tmpRgb1, tmpRgb2, tmpRgb3;
+
+    float tmpR = 1.5748f * tmpUv.y - 201.0744f;
+    float tmpG = 84.3912f - 0.1873f * tmpUv.x - 0.4681f * tmpUv.y;
+    float tmpB = 1.8556f * tmpUv.x - 237.0168f;
+
+    tmpRgb0.x = tmpY.x + tmpR;
+    tmpRgb0.y = tmpY.x + tmpG;
+    tmpRgb0.z = tmpY.x + tmpB;
+    tmpRgb0.w = 255;
+
+    tmpRgb1.x = tmpY.y + tmpR;
+    tmpRgb1.y = tmpY.y + tmpG;
+    tmpRgb1.z = tmpY.y + tmpB;
+    tmpRgb1.w = 255;
+
+    tmpRgb2.x = tmpY.z + tmpR;
+    tmpRgb2.y = tmpY.z + tmpG;
+    tmpRgb2.z = tmpY.z + tmpB;
+    tmpRgb2.w = 255;
+
+    tmpRgb3.x = tmpY.w + tmpR;
+    tmpRgb3.y = tmpY.w + tmpG;
+    tmpRgb3.z = tmpY.w + tmpB;
+    tmpRgb3.w = 255;
+
+    tmpRgb0 = clamp(tmpRgb0, 0, 255);
+    tmpRgb1 = clamp(tmpRgb1, 0, 255);
+    tmpRgb2 = clamp(tmpRgb2, 0, 255);
+    tmpRgb3 = clamp(tmpRgb3, 0, 255);
+    uint4 rgb0 = convert_uint4_sat_rtz(tmpRgb0);
+    uint4 rgb1 = convert_uint4_sat_rtz(tmpRgb1);
+    uint4 rgb2 = convert_uint4_sat_rtz(tmpRgb2);
+    uint4 rgb3 = convert_uint4_sat_rtz(tmpRgb3);
+
+    write_imageui(output, coord.xy, rgb0);
+    write_imageui(output, coord.zy, rgb1);
+    write_imageui(output, coord.xw, rgb2);
+    write_imageui(output, coord.zw, rgb3);
+}
+
+__kernel void color_convert_nv12_yuv4(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+    int2 coord_c = (int2)(get_global_id(0) * 2, get_global_id(1));
+
+    uint4 y00 = read_imageui(input0, coord.xy);
+    uint4 y01 = read_imageui(input0, coord.zy);
+    uint4 y10 = read_imageui(input0, coord.xw);
+    uint4 y11 = read_imageui(input0, coord.zw);
+
+    uint4 u = read_imageui(input1, coord_c.xy);
+    coord_c.x++;
+    uint4 v = read_imageui(input1, coord_c.xy);
+
+    write_imageui(output0, coord.xy, y00);
+    write_imageui(output0, coord.zy, y01);
+    write_imageui(output0, coord.xw, y10);
+    write_imageui(output0, coord.zw, y11);
+    write_imageui(output1, coord.xy, u);
+    write_imageui(output1, coord.zy, u);
+    write_imageui(output1, coord.xw, u);
+    write_imageui(output1, coord.zw, u);
+    write_imageui(output2, coord.xy, v);
+    write_imageui(output2, coord.zy, v);
+    write_imageui(output2, coord.xw, v);
+    write_imageui(output2, coord.zw, v);
+}
+
+__kernel void color_convert_nv12_iyuv(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+    int4 coord_c = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) * 2, get_global_id(0) * 2 + 1);
+
+    uint4 y00 = read_imageui(input0, coord.xy);
+    uint4 y01 = read_imageui(input0, coord.zy);
+    uint4 y10 = read_imageui(input0, coord.xw);
+    uint4 y11 = read_imageui(input0, coord.zw);
+
+    uint4 u = read_imageui(input1, coord_c.zy);
+    uint4 v = read_imageui(input1, coord_c.wy);
+
+    write_imageui(output0, coord.xy, y00);
+    write_imageui(output0, coord.zy, y01);
+    write_imageui(output0, coord.xw, y10);
+    write_imageui(output0, coord.zw, y11);
+    write_imageui(output1, coord_c.xy, u);
+    write_imageui(output2, coord_c.xy, v);
+}
+
+__kernel void color_convert_nv21_rgb(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+    int2 coord_c = (int2)(get_global_id(0) * 2, get_global_id(1));
+
+    uint4 y, uv;
+    y.x = read_imageui(input0, coord.xy).x;
+    y.y = read_imageui(input0, coord.zy).x;
+    y.z = read_imageui(input0, coord.xw).x;
+    y.w = read_imageui(input0, coord.zw).x;
+
+    uv.y = read_imageui(input1, coord_c.xy).x;
+    coord_c.x++;
+    uv.x = read_imageui(input1, coord_c.xy).x;
+
+    float4 tmpY = convert_float4(y);
+    float4 tmpUv = convert_float4(uv);
+
+    float4 tmpRgb0, tmpRgb1, tmpRgb2, tmpRgb3;
+
+    float tmpR = 1.5748f * tmpUv.y - 201.0744f;
+    float tmpG = 84.3912f - 0.1873f * tmpUv.x - 0.4681f * tmpUv.y;
+    float tmpB = 1.8556f * tmpUv.x - 237.0168f;
+
+    tmpRgb0.x = tmpY.x + tmpR;
+    tmpRgb0.y = tmpY.x + tmpG;
+    tmpRgb0.z = tmpY.x + tmpB;
+
+    tmpRgb1.x = tmpY.y + tmpR;
+    tmpRgb1.y = tmpY.y + tmpG;
+    tmpRgb1.z = tmpY.y + tmpB;
+
+    tmpRgb2.x = tmpY.z + tmpR;
+    tmpRgb2.y = tmpY.z + tmpG;
+    tmpRgb2.z = tmpY.z + tmpB;
+
+    tmpRgb3.x = tmpY.w + tmpR;
+    tmpRgb3.y = tmpY.w + tmpG;
+    tmpRgb3.z = tmpY.w + tmpB;
+
+    tmpRgb0 = clamp(tmpRgb0, 0, 255);
+    tmpRgb1 = clamp(tmpRgb1, 0, 255);
+    tmpRgb2 = clamp(tmpRgb2, 0, 255);
+    tmpRgb3 = clamp(tmpRgb3, 0, 255);
+    uint4 rgb0 = convert_uint4_sat_rtz(tmpRgb0);
+    uint4 rgb1 = convert_uint4_sat_rtz(tmpRgb1);
+    uint4 rgb2 = convert_uint4_sat_rtz(tmpRgb2);
+    uint4 rgb3 = convert_uint4_sat_rtz(tmpRgb3);
+
+    write_imageui(output, coord.xy, rgb0);
+    write_imageui(output, coord.zy, rgb1);
+    write_imageui(output, coord.xw, rgb2);
+    write_imageui(output, coord.zw, rgb3);
+}
+
+__kernel void color_convert_nv21_rgbx(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+    int2 coord_c = (int2)(get_global_id(0) * 2, get_global_id(1));
+
+    uint4 y, uv;
+    y.x = read_imageui(input0, coord.xy).x;
+    y.y = read_imageui(input0, coord.zy).x;
+    y.z = read_imageui(input0, coord.xw).x;
+    y.w = read_imageui(input0, coord.zw).x;
+
+    uv.y = read_imageui(input1, coord_c.xy).x;
+    coord_c.x++;
+    uv.x = read_imageui(input1, coord_c.xy).x;
+
+    float4 tmpY = convert_float4(y);
+    float4 tmpUv = convert_float4(uv);
+
+    float4 tmpRgb0, tmpRgb1, tmpRgb2, tmpRgb3;
+
+    float tmpR = 1.5748f * tmpUv.y - 201.0744f;
+    float tmpG = 84.3912f - 0.1873f * tmpUv.x - 0.4681f * tmpUv.y;
+    float tmpB = 1.8556f * tmpUv.x - 237.0168f;
+
+    tmpRgb0.x = tmpY.x + tmpR;
+    tmpRgb0.y = tmpY.x + tmpG;
+    tmpRgb0.z = tmpY.x + tmpB;
+    tmpRgb0.w = 255;
+
+    tmpRgb1.x = tmpY.y + tmpR;
+    tmpRgb1.y = tmpY.y + tmpG;
+    tmpRgb1.z = tmpY.y + tmpB;
+    tmpRgb1.w = 255;
+
+    tmpRgb2.x = tmpY.z + tmpR;
+    tmpRgb2.y = tmpY.z + tmpG;
+    tmpRgb2.z = tmpY.z + tmpB;
+    tmpRgb2.w = 255;
+
+    tmpRgb3.x = tmpY.w + tmpR;
+    tmpRgb3.y = tmpY.w + tmpG;
+    tmpRgb3.z = tmpY.w + tmpB;
+    tmpRgb3.w = 255;
+
+    tmpRgb0 = clamp(tmpRgb0, 0, 255);
+    tmpRgb1 = clamp(tmpRgb1, 0, 255);
+    tmpRgb2 = clamp(tmpRgb2, 0, 255);
+    tmpRgb3 = clamp(tmpRgb3, 0, 255);
+    uint4 rgbx0 = convert_uint4_sat_rtz(tmpRgb0);
+    uint4 rgbx1 = convert_uint4_sat_rtz(tmpRgb1);
+    uint4 rgbx2 = convert_uint4_sat_rtz(tmpRgb2);
+    uint4 rgbx3 = convert_uint4_sat_rtz(tmpRgb3);
+
+    write_imageui(output, coord.xy, rgbx0);
+    write_imageui(output, coord.zy, rgbx1);
+    write_imageui(output, coord.xw, rgbx2);
+    write_imageui(output, coord.zw, rgbx3);
+}
+
+__kernel void color_convert_nv21_yuv4(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+    int2 coord_c = (int2)(get_global_id(0) * 2, get_global_id(1));
+
+    uint4 y00 = read_imageui(input0, coord.xy);
+    uint4 y01 = read_imageui(input0, coord.zy);
+    uint4 y10 = read_imageui(input0, coord.xw);
+    uint4 y11 = read_imageui(input0, coord.zw);
+
+    uint4 v = read_imageui(input1, coord_c.xy);
+    coord_c.x++;
+    uint4 u = read_imageui(input1, coord_c.xy);
+
+    write_imageui(output0, coord.xy, y00);
+    write_imageui(output0, coord.zy, y01);
+    write_imageui(output0, coord.xw, y10);
+    write_imageui(output0, coord.zw, y11);
+    write_imageui(output1, coord.xy, u);
+    write_imageui(output1, coord.zy, u);
+    write_imageui(output1, coord.xw, u);
+    write_imageui(output1, coord.zw, u);
+    write_imageui(output2, coord.xy, v);
+    write_imageui(output2, coord.zy, v);
+    write_imageui(output2, coord.xw, v);
+    write_imageui(output2, coord.zw, v);
+}
+
+__kernel void color_convert_nv21_iyuv(
+        __read_only  image2d_t input,
+        __read_only  image2d_t input0,
+        __read_only  image2d_t input1,
+        __read_only  image2d_t input2,
+        __write_only image2d_t output,
+        __write_only image2d_t output0,
+        __write_only image2d_t output1,
+        __write_only image2d_t output2)
+{
+    int4 coord = (int4)(get_global_id(0) * 2, get_global_id(1) * 2, get_global_id(0) * 2 + 1, get_global_id(1) * 2 + 1);
+    int4 coord_c = (int4)(get_global_id(0), get_global_id(1), get_global_id(0) * 2, get_global_id(0) * 2 + 1);
+
+    uint4 y00 = read_imageui(input0, coord.xy);
+    uint4 y01 = read_imageui(input0, coord.zy);
+    uint4 y10 = read_imageui(input0, coord.xw);
+    uint4 y11 = read_imageui(input0, coord.zw);
+
+    uint4 v = read_imageui(input1, coord_c.zy);
+    uint4 u = read_imageui(input1, coord_c.wy);
+
+    write_imageui(output0, coord.xy, y00);
+    write_imageui(output0, coord.zy, y01);
+    write_imageui(output0, coord.xw, y10);
+    write_imageui(output0, coord.zw, y11);
+    write_imageui(output1, coord_c.xy, u);
+    write_imageui(output2, coord_c.xy, v);
+}

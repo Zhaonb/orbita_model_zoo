@@ -1,0 +1,300 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+//#define DEBUG1
+//#define DEBUG2
+
+#define ACCUM(ptr) *((int*)(ptr))
+typedef struct{
+    float start_x;
+    float start_y;
+    float end_x;
+    float end_y;
+}vx_line2d_t;
+
+__kernel void getlines_U8(
+    __read_only image2d_t in_image,
+    global int* accum,
+    global int* acc_rows,
+    global int* acc_cols,
+    global int* threshold,
+    global int* lineLength,
+    global int* lineGap,
+    global float* theta,
+    global float* rho,
+    global void* param_arr,
+    global void* line_arr,
+    global int* line_count
+)
+{
+    const int rho_x = get_global_id(0);
+    const int angle_y = get_global_id(1);
+    int width = get_image_width(in_image);
+    int height = get_image_height(in_image);
+    int acc_step = (*acc_cols + 2) * sizeof(int);
+
+    if(angle_y < (*acc_rows))
+    {
+        int good_line = 0;
+        uchar* accptr = (uchar*)accum + (angle_y+1) * (acc_step) + (rho_x+1) * (int)sizeof(int);
+        int curVote = *(int*)accptr;
+        if(curVote >= (*threshold) /*&&
+            curVote > ACCUM(accptr - acc_step - sizeof(int)) &&
+            curVote > ACCUM(accptr - acc_step) &&
+            curVote > ACCUM(accptr - acc_step + sizeof(int)) &&
+            curVote > ACCUM(accptr - sizeof(int)) &&
+            curVote > ACCUM(accptr + sizeof(int)) &&
+            curVote > ACCUM(accptr + acc_step - sizeof(int)) &&
+            curVote > ACCUM(accptr + acc_step) &&
+            curVote > ACCUM(accptr + acc_step + sizeof(int))*/)
+        {
+            float radius = ( (float)rho_x - (float)((*acc_cols) -2 - 1)* 0.5f ) * (*rho);
+            float angle = (float)angle_y * (*theta);
+            float cosa;
+            float sina = sincos(angle, &cosa);
+            float2 p0 = (float2)(cosa * radius, sina * radius);
+            float2 dir = (float2)(-sina, cosa);
+            float2 pb[4] = { (float2)(-1,-1), (float2)(-1,-1), (float2)(-1,-1), (float2)(-1,-1) };
+            float a;
+            if(dir.x != 0){
+                a = -p0.x / dir.x;
+                pb[0].x = 0;
+                pb[0].y = p0.y + a * dir.y;
+
+                a = (width -1 - p0.x)/dir.x;
+                pb[1].x = width -1;
+                pb[1].y = p0.y + a * dir.y;
+            }
+            if(dir.y != 0){
+                a = -p0.y / dir.y;
+                pb[2].x = p0.x + a * dir.x;
+                pb[2].y = 0;
+
+                a = (height -1 -p0.y)/dir.y;
+                pb[3].x = p0.x + a * dir.x;
+                pb[3].y = height -1;
+            }
+
+            if(pb[0].x == 0 && (pb[0].y >= 0 && pb[0].y < height)){
+                p0 = pb[0];
+                if(dir.x < 0)
+                    dir = -dir;
+            }else if(pb[1].x == width -1 && (pb[1].y >= 0 && pb[1].y < height)){
+                p0 = pb[1];
+                if(dir.x > 0)
+                    dir = -dir;
+            }else if(pb[2].y == 0 && (pb[2].x >= 0 && pb[2].x < width)){
+                p0 = pb[2];
+                if(dir.y < 0)
+                    dir = -dir;
+            }else if(pb[3].y == height -1 && (pb[3].x >= 0 && pb[3].x < width)){
+                p0 = pb[3];
+                if(dir.y > 0)
+                    dir = -dir;
+            }
+
+            dir /= max(fabs(dir.x), fabs(dir.y));
+            float2 line_end[2];
+            int gap = 0;
+            bool inLine = false;
+            if(p0.x < 0 || p0.x >= width || p0.y < 0 || p0.y >= height)
+                return;
+            uchar gx = 0;
+            while(1)
+            {
+                VXC_ReadImage(gx, in_image, (int2)(p0.x, p0.y), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                if(gx){
+                    gap = 0;
+                    if(!inLine){
+                        line_end[0] = p0;
+                        line_end[1] = p0;
+                        inLine = true;
+                    }else{
+                        line_end[1] = p0;
+                    }
+                }else if(inLine){
+                    if(++gap > *lineGap){
+                        bool good_line = fabs(line_end[1].x - line_end[0].x) >= *lineLength ||
+                                         fabs(line_end[1].y - line_end[1].y) >= *lineLength;
+                        if(good_line){
+                            int index = atomic_inc(line_count);
+                            uchar* lptr = (uchar*)line_arr + index * sizeof(vx_line2d_t);
+                            vx_line2d_t* points = (vx_line2d_t*)lptr;
+                            points->start_x = (float)line_end[0].x;
+                            points->start_y = (float)line_end[0].y;
+                            points->end_x = (float)line_end[1].x;
+                            points->end_y = (float)line_end[1].y;
+                        }
+                        gap = 0;
+                        inLine = false;
+                    }
+                }
+                p0 = p0 + dir;
+                if(p0.x < 0 || p0.x >= width || p0.y < 0 || p0.y > height){
+                    if(inLine){
+                        bool good_line = fabs(line_end[1].x - line_end[0].x) >= *lineLength ||
+                                         fabs(line_end[1].y - line_end[1].y) >= *lineLength;
+                        if(good_line){
+                            int index = atomic_inc(line_count);
+                            uchar* lptr = (uchar*)line_arr + index * sizeof(vx_line2d_t);
+                            vx_line2d_t* points = (vx_line2d_t*)lptr;
+                            points->start_x = (float)line_end[0].x;
+                            points->start_y = (float)line_end[0].y;
+                            points->end_x = (float)line_end[1].x;
+                            points->end_y = (float)line_end[1].y;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+
+__kernel void getlines_U1(
+    __read_only image2d_t in_image,
+    global int* accum,
+    global int* acc_rows,
+    global int* acc_cols,
+    global int* threshold,
+    global int* lineLength,
+    global int* lineGap,
+    global float* theta,
+    global float* rho,
+    global void* param_arr,
+    global void* line_arr,
+    global int* line_count
+)
+{
+    const int rho_x = get_global_id(0);
+    const int angle_y = get_global_id(1);
+    int width = get_image_width(in_image);
+    int height = get_image_height(in_image);
+    int acc_step = (*acc_cols + 2) * sizeof(int);
+    width = width << 3;
+
+    if(angle_y < (*acc_rows))
+    {
+        int good_line = 0;
+        uchar* accptr = (uchar*)accum + (angle_y+1) * (acc_step) + (rho_x+1) * (int)sizeof(int);
+        int curVote = *(int*)accptr;
+        if(curVote >= (*threshold) /*&&
+            curVote > ACCUM(accptr - acc_step - sizeof(int)) &&
+            curVote > ACCUM(accptr - acc_step) &&
+            curVote > ACCUM(accptr - acc_step + sizeof(int)) &&
+            curVote > ACCUM(accptr - sizeof(int)) &&
+            curVote > ACCUM(accptr + sizeof(int)) &&
+            curVote > ACCUM(accptr + acc_step - sizeof(int)) &&
+            curVote > ACCUM(accptr + acc_step) &&
+            curVote > ACCUM(accptr + acc_step + sizeof(int))*/)
+        {
+            float radius = ( (float)rho_x - (float)((*acc_cols) -2 - 1)* 0.5f ) * (*rho);
+            float angle = (float)angle_y * (*theta);
+            float cosa;
+            float sina = sincos(angle, &cosa);
+            float2 p0 = (float2)(cosa * radius, sina * radius);
+            float2 dir = (float2)(-sina, cosa);
+            float2 pb[4] = { (float2)(-1,-1), (float2)(-1,-1), (float2)(-1,-1), (float2)(-1,-1) };
+            float a;
+            if(dir.x != 0){
+                a = -p0.x / dir.x;
+                pb[0].x = 0;
+                pb[0].y = p0.y + a * dir.y;
+
+                a = (width -1 - p0.x)/dir.x;
+                pb[1].x = width -1;
+                pb[1].y = p0.y + a * dir.y;
+            }
+            if(dir.y != 0){
+                a = -p0.y / dir.y;
+                pb[2].x = p0.x + a * dir.x;
+                pb[2].y = 0;
+
+                a = (height -1 -p0.y)/dir.y;
+                pb[3].x = p0.x + a * dir.x;
+                pb[3].y = height -1;
+            }
+
+            if(pb[0].x == 0 && (pb[0].y >= 0 && pb[0].y < height)){
+                p0 = pb[0];
+                if(dir.x < 0)
+                    dir = -dir;
+            }else if(pb[1].x == width -1 && (pb[1].y >= 0 && pb[1].y < height)){
+                p0 = pb[1];
+                if(dir.x > 0)
+                    dir = -dir;
+            }else if(pb[2].y == 0 && (pb[2].x >= 0 && pb[2].x < width)){
+                p0 = pb[2];
+                if(dir.y < 0)
+                    dir = -dir;
+            }else if(pb[3].y == height -1 && (pb[3].x >= 0 && pb[3].x < width)){
+                p0 = pb[3];
+                if(dir.y > 0)
+                    dir = -dir;
+            }
+
+            dir /= max(fabs(dir.x), fabs(dir.y));
+            float2 line_end[2];
+            int gap = 0;
+            bool inLine = false;
+            if(p0.x < 0 || p0.x >= width || p0.y < 0 || p0.y >= height)
+                return;
+            uchar gx = 0;
+
+            while(1)
+            {
+                int2  coord = (int2)(0, p0.y);
+                int posx = (int)p0.x;
+                coord.x = posx >> 3;
+                int offset = posx & 7;
+
+                VXC_ReadImage(gx, in_image, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                gx = gx & (1 << offset);
+                if(gx){
+                    gap = 0;
+                    if(!inLine){
+                        line_end[0] = p0;
+                        line_end[1] = p0;
+                        inLine = true;
+                    }else{
+                        line_end[1] = p0;
+                    }
+                }else if(inLine){
+                    if(++gap > *lineGap){
+                        bool good_line = fabs(line_end[1].x - line_end[0].x) >= *lineLength ||
+                                         fabs(line_end[1].y - line_end[1].y) >= *lineLength;
+                        if(good_line){
+                            int index = atomic_inc(line_count);
+                            uchar* lptr = (uchar*)line_arr + index * sizeof(vx_line2d_t);
+                            vx_line2d_t* points = (vx_line2d_t*)lptr;
+                            points->start_x = (float)line_end[0].x;
+                            points->start_y = (float)line_end[0].y;
+                            points->end_x = (float)line_end[1].x;
+                            points->end_y = (float)line_end[1].y;
+                        }
+                        gap = 0;
+                        inLine = false;
+                    }
+                }
+                p0 = p0 + dir;
+                if(p0.x < 0 || p0.x >= width || p0.y < 0 || p0.y > height){
+                    if(inLine){
+                        bool good_line = fabs(line_end[1].x - line_end[0].x) >= *lineLength ||
+                                         fabs(line_end[1].y - line_end[1].y) >= *lineLength;
+                        if(good_line){
+                            int index = atomic_inc(line_count);
+                            uchar* lptr = (uchar*)line_arr + index * sizeof(vx_line2d_t);
+                            vx_line2d_t* points = (vx_line2d_t*)lptr;
+                            points->start_x = (float)line_end[0].x;
+                            points->start_y = (float)line_end[0].y;
+                            points->end_x = (float)line_end[1].x;
+                            points->end_y = (float)line_end[1].y;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}

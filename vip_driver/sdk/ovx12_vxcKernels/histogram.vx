@@ -1,0 +1,1082 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform VXC_512Bits uniConvert1stUint8SubZpToFp32_4x4;
+_viv_uniform VXC_512Bits uniConvert2ndUint8SubZpToFp32_4x4;
+_viv_uniform VXC_512Bits uniConvert3rdUint8SubZpToFp32_4x4;
+_viv_uniform VXC_512Bits uniConvert4thUint8SubZpToFp32_4x4;
+_viv_uniform VXC_512Bits uniMoveU8Hi2Lo_2x8;
+_viv_uniform int offset;
+_viv_uniform int numBins;
+_viv_uniform int range;
+_viv_uniform int range_evis1;
+_viv_uniform VXC_512Bits histBin8_0;
+_viv_uniform VXC_512Bits histBin8_1;
+_viv_uniform VXC_512Bits histBin8_2;
+_viv_uniform VXC_512Bits histBin8_3;
+_viv_uniform VXC_512Bits histBin8_4;
+_viv_uniform VXC_512Bits histBin8_5;
+_viv_uniform VXC_512Bits histBin8_6;
+_viv_uniform VXC_512Bits histBin8_7;
+_viv_uniform VXC_512Bits histBin8_8;
+_viv_uniform VXC_512Bits histBin8_9;
+_viv_uniform VXC_512Bits histBin8_10;
+_viv_uniform VXC_512Bits histBin8_11;
+_viv_uniform VXC_512Bits histBin8_12;
+_viv_uniform VXC_512Bits histBin8_13;
+_viv_uniform VXC_512Bits histBin8_14;
+_viv_uniform VXC_512Bits histBin8_15;
+_viv_uniform VXC_512Bits histBin8_16;
+_viv_uniform VXC_512Bits histBin8_17;
+_viv_uniform VXC_512Bits histBin8_18;
+_viv_uniform VXC_512Bits histBin8_19;
+_viv_uniform VXC_512Bits histBin8_20;
+_viv_uniform VXC_512Bits histBin8_21;
+_viv_uniform VXC_512Bits histBin8_22;
+_viv_uniform VXC_512Bits histBin8_23;
+_viv_uniform VXC_512Bits histBin8_24;
+_viv_uniform VXC_512Bits histBin8_25;
+_viv_uniform VXC_512Bits histBin8_26;
+_viv_uniform VXC_512Bits histBin8_27;
+_viv_uniform VXC_512Bits histBin8_28;
+_viv_uniform VXC_512Bits histBin8_29;
+_viv_uniform VXC_512Bits histBin8_30;
+_viv_uniform VXC_512Bits histBin8_31;
+
+_viv_uniform VXC_512Bits uniConvert1stI16ToI32_4x4;
+
+_viv_uniform int height;
+_viv_uniform int iter;
+_viv_uniform float scale;
+_viv_uniform VXC_512Bits uniConvert1stU8ToFp32_4x4;
+_viv_uniform VXC_512Bits uniConvert2ndU8ToFp32_4x4;
+_viv_uniform VXC_512Bits uniConvert1stU8SubToFp32_4x4;
+_viv_uniform VXC_512Bits uniConvert2ndU8SubToFp32_4x4;
+_viv_uniform VXC_512Bits uniConvertUI32toU16_2x8;
+#define DIFF  0.00002
+
+#if (VX_VERSION==1)
+__kernel void histogram_offset0_256(
+        image2d_t src,
+        __global int* out_hist)
+{
+
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 val0, val1, val2, val3;
+    vxc_uchar8 val4, val5, val6, val7;
+    VXC_ReadImage(val0, src, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val1, src, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val2, src, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val3, src, coord, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    short zp = 0;
+    vxc_uchar16 weight = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    vxc_ushort8 hists0, hists1, hists2, hists3, hists4, hists5, hists6, hists7;
+    hists0 = (vxc_ushort8)(0);
+    hists1 = (vxc_ushort8)(0);
+    hists2 = (vxc_ushort8)(0);
+    hists3 = (vxc_ushort8)(0);
+    hists4 = (vxc_ushort8)(0);
+    hists5 = (vxc_ushort8)(0);
+    hists6 = (vxc_ushort8)(0);
+    hists7 = (vxc_ushort8)(0);
+    VXC_DP2x8(val4, val0, val0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMoveU8Hi2Lo_2x8);
+    VXC_DP2x8(val5, val1, val1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMoveU8Hi2Lo_2x8);
+    VXC_DP2x8(val6, val2, val2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMoveU8Hi2Lo_2x8);
+    VXC_DP2x8(val7, val3, val3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniMoveU8Hi2Lo_2x8);
+
+    vxc_int4 data0, data1, data2, data3, data4, data5, data6, data7;
+    VXC_SelectAdd(hists0, val0, weight, histBin8_0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val1, weight, histBin8_0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val2, weight, histBin8_0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val3, weight, histBin8_0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val4, weight, histBin8_0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val5, weight, histBin8_0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val6, weight, histBin8_0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val7, weight, histBin8_0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists1, val0, weight, histBin8_1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val1, weight, histBin8_1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val2, weight, histBin8_1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val3, weight, histBin8_1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val4, weight, histBin8_1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val5, weight, histBin8_1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val6, weight, histBin8_1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val7, weight, histBin8_1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists2, val0, weight, histBin8_2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val1, weight, histBin8_2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val2, weight, histBin8_2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val3, weight, histBin8_2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val4, weight, histBin8_2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val5, weight, histBin8_2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val6, weight, histBin8_2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val7, weight, histBin8_2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists3, val0, weight, histBin8_3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val1, weight, histBin8_3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val2, weight, histBin8_3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val3, weight, histBin8_3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val4, weight, histBin8_3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val5, weight, histBin8_3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val6, weight, histBin8_3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val7, weight, histBin8_3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists4, val0, weight, histBin8_4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val1, weight, histBin8_4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val2, weight, histBin8_4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val3, weight, histBin8_4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val4, weight, histBin8_4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val5, weight, histBin8_4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val6, weight, histBin8_4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val7, weight, histBin8_4, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists5, val0, weight, histBin8_5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val1, weight, histBin8_5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val2, weight, histBin8_5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val3, weight, histBin8_5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val4, weight, histBin8_5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val5, weight, histBin8_5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val6, weight, histBin8_5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val7, weight, histBin8_5, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists6, val0, weight, histBin8_6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val1, weight, histBin8_6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val2, weight, histBin8_6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val3, weight, histBin8_6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val4, weight, histBin8_6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val5, weight, histBin8_6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val6, weight, histBin8_6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val7, weight, histBin8_6, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists7, val0, weight, histBin8_7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val1, weight, histBin8_7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val2, weight, histBin8_7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val3, weight, histBin8_7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val4, weight, histBin8_7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val5, weight, histBin8_7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val6, weight, histBin8_7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val7, weight, histBin8_7, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    int tmpOffset = 0;
+    {
+        VXC_DP4x4(data0, hists0, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data1, hists0, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data2, hists1, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data3, hists1, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data4, hists2, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data5, hists2, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data6, hists3, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data7, hists3, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        atom_add(out_hist + tmpOffset, data0.x);
+        atom_add(out_hist + tmpOffset + 1, data0.y);
+        atom_add(out_hist + tmpOffset + 2, data0.z);
+        atom_add(out_hist + tmpOffset + 3, data0.w);
+        atom_add(out_hist + tmpOffset + 4, data1.x);
+        atom_add(out_hist + tmpOffset + 5, data1.y);
+        atom_add(out_hist + tmpOffset + 6, data1.z);
+        atom_add(out_hist + tmpOffset + 7, data1.w);
+        atom_add(out_hist + tmpOffset + 8, data2.x);
+        atom_add(out_hist + tmpOffset + 9, data2.y);
+        atom_add(out_hist + tmpOffset + 10, data2.z);
+        atom_add(out_hist + tmpOffset + 11, data2.w);
+        atom_add(out_hist + tmpOffset + 12, data3.x);
+        atom_add(out_hist + tmpOffset + 13, data3.y);
+        atom_add(out_hist + tmpOffset + 14, data3.z);
+        atom_add(out_hist + tmpOffset + 15, data3.w);
+        atom_add(out_hist + tmpOffset + 16, data4.x);
+        atom_add(out_hist + tmpOffset + 17, data4.y);
+        atom_add(out_hist + tmpOffset + 18, data4.z);
+        atom_add(out_hist + tmpOffset + 19, data4.w);
+        atom_add(out_hist + tmpOffset + 20, data5.x);
+        atom_add(out_hist + tmpOffset + 21, data5.y);
+        atom_add(out_hist + tmpOffset + 22, data5.z);
+        atom_add(out_hist + tmpOffset + 23, data5.w);
+        atom_add(out_hist + tmpOffset + 24, data6.x);
+        atom_add(out_hist + tmpOffset + 25, data6.y);
+        atom_add(out_hist + tmpOffset + 26, data6.z);
+        atom_add(out_hist + tmpOffset + 27, data6.w);
+        atom_add(out_hist + tmpOffset + 28, data7.x);
+        atom_add(out_hist + tmpOffset + 29, data7.y);
+        atom_add(out_hist + tmpOffset + 30, data7.z);
+        atom_add(out_hist + tmpOffset + 31, data7.w);
+        tmpOffset += 32;
+
+        VXC_DP4x4(data0, hists4, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data1, hists4, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data2, hists5, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data3, hists5, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data4, hists6, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data5, hists6, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data6, hists7, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data7, hists7, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        atom_add(out_hist + tmpOffset, data0.x);
+        atom_add(out_hist + tmpOffset + 1, data0.y);
+        atom_add(out_hist + tmpOffset + 2, data0.z);
+        atom_add(out_hist + tmpOffset + 3, data0.w);
+        atom_add(out_hist + tmpOffset + 4, data1.x);
+        atom_add(out_hist + tmpOffset + 5, data1.y);
+        atom_add(out_hist + tmpOffset + 6, data1.z);
+        atom_add(out_hist + tmpOffset + 7, data1.w);
+        atom_add(out_hist + tmpOffset + 8, data2.x);
+        atom_add(out_hist + tmpOffset + 9, data2.y);
+        atom_add(out_hist + tmpOffset + 10, data2.z);
+        atom_add(out_hist + tmpOffset + 11, data2.w);
+        atom_add(out_hist + tmpOffset + 12, data3.x);
+        atom_add(out_hist + tmpOffset + 13, data3.y);
+        atom_add(out_hist + tmpOffset + 14, data3.z);
+        atom_add(out_hist + tmpOffset + 15, data3.w);
+        atom_add(out_hist + tmpOffset + 16, data4.x);
+        atom_add(out_hist + tmpOffset + 17, data4.y);
+        atom_add(out_hist + tmpOffset + 18, data4.z);
+        atom_add(out_hist + tmpOffset + 19, data4.w);
+        atom_add(out_hist + tmpOffset + 20, data5.x);
+        atom_add(out_hist + tmpOffset + 21, data5.y);
+        atom_add(out_hist + tmpOffset + 22, data5.z);
+        atom_add(out_hist + tmpOffset + 23, data5.w);
+        atom_add(out_hist + tmpOffset + 24, data6.x);
+        atom_add(out_hist + tmpOffset + 25, data6.y);
+        atom_add(out_hist + tmpOffset + 26, data6.z);
+        atom_add(out_hist + tmpOffset + 27, data6.w);
+        atom_add(out_hist + tmpOffset + 28, data7.x);
+        atom_add(out_hist + tmpOffset + 29, data7.y);
+        atom_add(out_hist + tmpOffset + 30, data7.z);
+        atom_add(out_hist + tmpOffset + 31, data7.w);
+        tmpOffset += 32;
+        hists0 = (vxc_ushort8)(0);
+        hists1 = (vxc_ushort8)(0);
+        hists2 = (vxc_ushort8)(0);
+        hists3 = (vxc_ushort8)(0);
+        hists4 = (vxc_ushort8)(0);
+        hists5 = (vxc_ushort8)(0);
+        hists6 = (vxc_ushort8)(0);
+        hists7 = (vxc_ushort8)(0);
+    }
+
+    VXC_SelectAdd(hists0, val0, weight, histBin8_8, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val1, weight, histBin8_8, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val2, weight, histBin8_8, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val3, weight, histBin8_8, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val4, weight, histBin8_8, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val5, weight, histBin8_8, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val6, weight, histBin8_8, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val7, weight, histBin8_8, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists1, val0, weight, histBin8_9, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val1, weight, histBin8_9, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val2, weight, histBin8_9, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val3, weight, histBin8_9, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val4, weight, histBin8_9, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val5, weight, histBin8_9, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val6, weight, histBin8_9, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val7, weight, histBin8_9, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists2, val0, weight, histBin8_10, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val1, weight, histBin8_10, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val2, weight, histBin8_10, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val3, weight, histBin8_10, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val4, weight, histBin8_10, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val5, weight, histBin8_10, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val6, weight, histBin8_10, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val7, weight, histBin8_10, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists3, val0, weight, histBin8_11, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val1, weight, histBin8_11, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val2, weight, histBin8_11, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val3, weight, histBin8_11, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val4, weight, histBin8_11, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val5, weight, histBin8_11, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val6, weight, histBin8_11, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val7, weight, histBin8_11, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists4, val0, weight, histBin8_12, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val1, weight, histBin8_12, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val2, weight, histBin8_12, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val3, weight, histBin8_12, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val4, weight, histBin8_12, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val5, weight, histBin8_12, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val6, weight, histBin8_12, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val7, weight, histBin8_12, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists5, val0, weight, histBin8_13, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val1, weight, histBin8_13, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val2, weight, histBin8_13, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val3, weight, histBin8_13, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val4, weight, histBin8_13, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val5, weight, histBin8_13, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val6, weight, histBin8_13, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val7, weight, histBin8_13, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists6, val0, weight, histBin8_14, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val1, weight, histBin8_14, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val2, weight, histBin8_14, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val3, weight, histBin8_14, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val4, weight, histBin8_14, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val5, weight, histBin8_14, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val6, weight, histBin8_14, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val7, weight, histBin8_14, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists7, val0, weight, histBin8_15, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val1, weight, histBin8_15, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val2, weight, histBin8_15, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val3, weight, histBin8_15, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val4, weight, histBin8_15, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val5, weight, histBin8_15, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val6, weight, histBin8_15, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val7, weight, histBin8_15, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    {
+        VXC_DP4x4(data0, hists0, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data1, hists0, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data2, hists1, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data3, hists1, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data4, hists2, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data5, hists2, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data6, hists3, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data7, hists3, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        atom_add(out_hist + tmpOffset, data0.x);
+        atom_add(out_hist + tmpOffset + 1, data0.y);
+        atom_add(out_hist + tmpOffset + 2, data0.z);
+        atom_add(out_hist + tmpOffset + 3, data0.w);
+        atom_add(out_hist + tmpOffset + 4, data1.x);
+        atom_add(out_hist + tmpOffset + 5, data1.y);
+        atom_add(out_hist + tmpOffset + 6, data1.z);
+        atom_add(out_hist + tmpOffset + 7, data1.w);
+        atom_add(out_hist + tmpOffset + 8, data2.x);
+        atom_add(out_hist + tmpOffset + 9, data2.y);
+        atom_add(out_hist + tmpOffset + 10, data2.z);
+        atom_add(out_hist + tmpOffset + 11, data2.w);
+        atom_add(out_hist + tmpOffset + 12, data3.x);
+        atom_add(out_hist + tmpOffset + 13, data3.y);
+        atom_add(out_hist + tmpOffset + 14, data3.z);
+        atom_add(out_hist + tmpOffset + 15, data3.w);
+        atom_add(out_hist + tmpOffset + 16, data4.x);
+        atom_add(out_hist + tmpOffset + 17, data4.y);
+        atom_add(out_hist + tmpOffset + 18, data4.z);
+        atom_add(out_hist + tmpOffset + 19, data4.w);
+        atom_add(out_hist + tmpOffset + 20, data5.x);
+        atom_add(out_hist + tmpOffset + 21, data5.y);
+        atom_add(out_hist + tmpOffset + 22, data5.z);
+        atom_add(out_hist + tmpOffset + 23, data5.w);
+        atom_add(out_hist + tmpOffset + 24, data6.x);
+        atom_add(out_hist + tmpOffset + 25, data6.y);
+        atom_add(out_hist + tmpOffset + 26, data6.z);
+        atom_add(out_hist + tmpOffset + 27, data6.w);
+        atom_add(out_hist + tmpOffset + 28, data7.x);
+        atom_add(out_hist + tmpOffset + 29, data7.y);
+        atom_add(out_hist + tmpOffset + 30, data7.z);
+        atom_add(out_hist + tmpOffset + 31, data7.w);
+        tmpOffset += 32;
+
+        VXC_DP4x4(data0, hists4, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data1, hists4, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data2, hists5, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data3, hists5, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data4, hists6, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data5, hists6, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data6, hists7, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data7, hists7, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        atom_add(out_hist + tmpOffset, data0.x);
+        atom_add(out_hist + tmpOffset + 1, data0.y);
+        atom_add(out_hist + tmpOffset + 2, data0.z);
+        atom_add(out_hist + tmpOffset + 3, data0.w);
+        atom_add(out_hist + tmpOffset + 4, data1.x);
+        atom_add(out_hist + tmpOffset + 5, data1.y);
+        atom_add(out_hist + tmpOffset + 6, data1.z);
+        atom_add(out_hist + tmpOffset + 7, data1.w);
+        atom_add(out_hist + tmpOffset + 8, data2.x);
+        atom_add(out_hist + tmpOffset + 9, data2.y);
+        atom_add(out_hist + tmpOffset + 10, data2.z);
+        atom_add(out_hist + tmpOffset + 11, data2.w);
+        atom_add(out_hist + tmpOffset + 12, data3.x);
+        atom_add(out_hist + tmpOffset + 13, data3.y);
+        atom_add(out_hist + tmpOffset + 14, data3.z);
+        atom_add(out_hist + tmpOffset + 15, data3.w);
+        atom_add(out_hist + tmpOffset + 16, data4.x);
+        atom_add(out_hist + tmpOffset + 17, data4.y);
+        atom_add(out_hist + tmpOffset + 18, data4.z);
+        atom_add(out_hist + tmpOffset + 19, data4.w);
+        atom_add(out_hist + tmpOffset + 20, data5.x);
+        atom_add(out_hist + tmpOffset + 21, data5.y);
+        atom_add(out_hist + tmpOffset + 22, data5.z);
+        atom_add(out_hist + tmpOffset + 23, data5.w);
+        atom_add(out_hist + tmpOffset + 24, data6.x);
+        atom_add(out_hist + tmpOffset + 25, data6.y);
+        atom_add(out_hist + tmpOffset + 26, data6.z);
+        atom_add(out_hist + tmpOffset + 27, data6.w);
+        atom_add(out_hist + tmpOffset + 28, data7.x);
+        atom_add(out_hist + tmpOffset + 29, data7.y);
+        atom_add(out_hist + tmpOffset + 30, data7.z);
+        atom_add(out_hist + tmpOffset + 31, data7.w);
+        tmpOffset += 32;
+        hists0 = (vxc_ushort8)(0);
+        hists1 = (vxc_ushort8)(0);
+        hists2 = (vxc_ushort8)(0);
+        hists3 = (vxc_ushort8)(0);
+        hists4 = (vxc_ushort8)(0);
+        hists5 = (vxc_ushort8)(0);
+        hists6 = (vxc_ushort8)(0);
+        hists7 = (vxc_ushort8)(0);
+    }
+
+    VXC_SelectAdd(hists0, val0, weight, histBin8_16, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val1, weight, histBin8_16, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val2, weight, histBin8_16, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val3, weight, histBin8_16, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val4, weight, histBin8_16, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val5, weight, histBin8_16, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val6, weight, histBin8_16, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val7, weight, histBin8_16, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists1, val0, weight, histBin8_17, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val1, weight, histBin8_17, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val2, weight, histBin8_17, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val3, weight, histBin8_17, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val4, weight, histBin8_17, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val5, weight, histBin8_17, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val6, weight, histBin8_17, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val7, weight, histBin8_17, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists2, val0, weight, histBin8_18, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val1, weight, histBin8_18, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val2, weight, histBin8_18, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val3, weight, histBin8_18, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val4, weight, histBin8_18, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val5, weight, histBin8_18, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val6, weight, histBin8_18, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val7, weight, histBin8_18, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists3, val0, weight, histBin8_19, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val1, weight, histBin8_19, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val2, weight, histBin8_19, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val3, weight, histBin8_19, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val4, weight, histBin8_19, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val5, weight, histBin8_19, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val6, weight, histBin8_19, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val7, weight, histBin8_19, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists4, val0, weight, histBin8_20, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val1, weight, histBin8_20, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val2, weight, histBin8_20, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val3, weight, histBin8_20, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val4, weight, histBin8_20, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val5, weight, histBin8_20, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val6, weight, histBin8_20, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val7, weight, histBin8_20, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists5, val0, weight, histBin8_21, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val1, weight, histBin8_21, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val2, weight, histBin8_21, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val3, weight, histBin8_21, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val4, weight, histBin8_21, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val5, weight, histBin8_21, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val6, weight, histBin8_21, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val7, weight, histBin8_21, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists6, val0, weight, histBin8_22, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val1, weight, histBin8_22, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val2, weight, histBin8_22, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val3, weight, histBin8_22, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val4, weight, histBin8_22, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val5, weight, histBin8_22, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val6, weight, histBin8_22, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val7, weight, histBin8_22, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists7, val0, weight, histBin8_23, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val1, weight, histBin8_23, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val2, weight, histBin8_23, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val3, weight, histBin8_23, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val4, weight, histBin8_23, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val5, weight, histBin8_23, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val6, weight, histBin8_23, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val7, weight, histBin8_23, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    {
+        VXC_DP4x4(data0, hists0, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data1, hists0, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data2, hists1, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data3, hists1, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data4, hists2, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data5, hists2, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data6, hists3, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data7, hists3, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        atom_add(out_hist + tmpOffset, data0.x);
+        atom_add(out_hist + tmpOffset + 1, data0.y);
+        atom_add(out_hist + tmpOffset + 2, data0.z);
+        atom_add(out_hist + tmpOffset + 3, data0.w);
+        atom_add(out_hist + tmpOffset + 4, data1.x);
+        atom_add(out_hist + tmpOffset + 5, data1.y);
+        atom_add(out_hist + tmpOffset + 6, data1.z);
+        atom_add(out_hist + tmpOffset + 7, data1.w);
+        atom_add(out_hist + tmpOffset + 8, data2.x);
+        atom_add(out_hist + tmpOffset + 9, data2.y);
+        atom_add(out_hist + tmpOffset + 10, data2.z);
+        atom_add(out_hist + tmpOffset + 11, data2.w);
+        atom_add(out_hist + tmpOffset + 12, data3.x);
+        atom_add(out_hist + tmpOffset + 13, data3.y);
+        atom_add(out_hist + tmpOffset + 14, data3.z);
+        atom_add(out_hist + tmpOffset + 15, data3.w);
+        atom_add(out_hist + tmpOffset + 16, data4.x);
+        atom_add(out_hist + tmpOffset + 17, data4.y);
+        atom_add(out_hist + tmpOffset + 18, data4.z);
+        atom_add(out_hist + tmpOffset + 19, data4.w);
+        atom_add(out_hist + tmpOffset + 20, data5.x);
+        atom_add(out_hist + tmpOffset + 21, data5.y);
+        atom_add(out_hist + tmpOffset + 22, data5.z);
+        atom_add(out_hist + tmpOffset + 23, data5.w);
+        atom_add(out_hist + tmpOffset + 24, data6.x);
+        atom_add(out_hist + tmpOffset + 25, data6.y);
+        atom_add(out_hist + tmpOffset + 26, data6.z);
+        atom_add(out_hist + tmpOffset + 27, data6.w);
+        atom_add(out_hist + tmpOffset + 28, data7.x);
+        atom_add(out_hist + tmpOffset + 29, data7.y);
+        atom_add(out_hist + tmpOffset + 30, data7.z);
+        atom_add(out_hist + tmpOffset + 31, data7.w);
+        tmpOffset += 32;
+
+        VXC_DP4x4(data0, hists4, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data1, hists4, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data2, hists5, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data3, hists5, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data4, hists6, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data5, hists6, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data6, hists7, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data7, hists7, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        atom_add(out_hist + tmpOffset, data0.x);
+        atom_add(out_hist + tmpOffset + 1, data0.y);
+        atom_add(out_hist + tmpOffset + 2, data0.z);
+        atom_add(out_hist + tmpOffset + 3, data0.w);
+        atom_add(out_hist + tmpOffset + 4, data1.x);
+        atom_add(out_hist + tmpOffset + 5, data1.y);
+        atom_add(out_hist + tmpOffset + 6, data1.z);
+        atom_add(out_hist + tmpOffset + 7, data1.w);
+        atom_add(out_hist + tmpOffset + 8, data2.x);
+        atom_add(out_hist + tmpOffset + 9, data2.y);
+        atom_add(out_hist + tmpOffset + 10, data2.z);
+        atom_add(out_hist + tmpOffset + 11, data2.w);
+        atom_add(out_hist + tmpOffset + 12, data3.x);
+        atom_add(out_hist + tmpOffset + 13, data3.y);
+        atom_add(out_hist + tmpOffset + 14, data3.z);
+        atom_add(out_hist + tmpOffset + 15, data3.w);
+        atom_add(out_hist + tmpOffset + 16, data4.x);
+        atom_add(out_hist + tmpOffset + 17, data4.y);
+        atom_add(out_hist + tmpOffset + 18, data4.z);
+        atom_add(out_hist + tmpOffset + 19, data4.w);
+        atom_add(out_hist + tmpOffset + 20, data5.x);
+        atom_add(out_hist + tmpOffset + 21, data5.y);
+        atom_add(out_hist + tmpOffset + 22, data5.z);
+        atom_add(out_hist + tmpOffset + 23, data5.w);
+        atom_add(out_hist + tmpOffset + 24, data6.x);
+        atom_add(out_hist + tmpOffset + 25, data6.y);
+        atom_add(out_hist + tmpOffset + 26, data6.z);
+        atom_add(out_hist + tmpOffset + 27, data6.w);
+        atom_add(out_hist + tmpOffset + 28, data7.x);
+        atom_add(out_hist + tmpOffset + 29, data7.y);
+        atom_add(out_hist + tmpOffset + 30, data7.z);
+        atom_add(out_hist + tmpOffset + 31, data7.w);
+        tmpOffset += 32;
+        hists0 = (vxc_ushort8)(0);
+        hists1 = (vxc_ushort8)(0);
+        hists2 = (vxc_ushort8)(0);
+        hists3 = (vxc_ushort8)(0);
+        hists4 = (vxc_ushort8)(0);
+        hists5 = (vxc_ushort8)(0);
+        hists6 = (vxc_ushort8)(0);
+        hists7 = (vxc_ushort8)(0);
+    }
+
+    VXC_SelectAdd(hists0, val0, weight, histBin8_24, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val1, weight, histBin8_24, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val2, weight, histBin8_24, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val3, weight, histBin8_24, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val4, weight, histBin8_24, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val5, weight, histBin8_24, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val6, weight, histBin8_24, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists0, val7, weight, histBin8_24, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists1, val0, weight, histBin8_25, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val1, weight, histBin8_25, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val2, weight, histBin8_25, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val3, weight, histBin8_25, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val4, weight, histBin8_25, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val5, weight, histBin8_25, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val6, weight, histBin8_25, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists1, val7, weight, histBin8_25, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists2, val0, weight, histBin8_26, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val1, weight, histBin8_26, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val2, weight, histBin8_26, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val3, weight, histBin8_26, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val4, weight, histBin8_26, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val5, weight, histBin8_26, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val6, weight, histBin8_26, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists2, val7, weight, histBin8_26, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists3, val0, weight, histBin8_27, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val1, weight, histBin8_27, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val2, weight, histBin8_27, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val3, weight, histBin8_27, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val4, weight, histBin8_27, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val5, weight, histBin8_27, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val6, weight, histBin8_27, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists3, val7, weight, histBin8_27, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists4, val0, weight, histBin8_28, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val1, weight, histBin8_28, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val2, weight, histBin8_28, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val3, weight, histBin8_28, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val4, weight, histBin8_28, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val5, weight, histBin8_28, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val6, weight, histBin8_28, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists4, val7, weight, histBin8_28, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists5, val0, weight, histBin8_29, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val1, weight, histBin8_29, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val2, weight, histBin8_29, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val3, weight, histBin8_29, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val4, weight, histBin8_29, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val5, weight, histBin8_29, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val6, weight, histBin8_29, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists5, val7, weight, histBin8_29, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists6, val0, weight, histBin8_30, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val1, weight, histBin8_30, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val2, weight, histBin8_30, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val3, weight, histBin8_30, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val4, weight, histBin8_30, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val5, weight, histBin8_30, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val6, weight, histBin8_30, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists6, val7, weight, histBin8_30, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_SelectAdd(hists7, val0, weight, histBin8_31, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val1, weight, histBin8_31, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val2, weight, histBin8_31, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val3, weight, histBin8_31, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val4, weight, histBin8_31, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val5, weight, histBin8_31, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val6, weight, histBin8_31, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_SelectAdd(hists7, val7, weight, histBin8_31, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    {
+        VXC_DP4x4(data0, hists0, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data1, hists0, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data2, hists1, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data3, hists1, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data4, hists2, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data5, hists2, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data6, hists3, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data7, hists3, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        atom_add(out_hist + tmpOffset, data0.x);
+        atom_add(out_hist + tmpOffset + 1, data0.y);
+        atom_add(out_hist + tmpOffset + 2, data0.z);
+        atom_add(out_hist + tmpOffset + 3, data0.w);
+        atom_add(out_hist + tmpOffset + 4, data1.x);
+        atom_add(out_hist + tmpOffset + 5, data1.y);
+        atom_add(out_hist + tmpOffset + 6, data1.z);
+        atom_add(out_hist + tmpOffset + 7, data1.w);
+        atom_add(out_hist + tmpOffset + 8, data2.x);
+        atom_add(out_hist + tmpOffset + 9, data2.y);
+        atom_add(out_hist + tmpOffset + 10, data2.z);
+        atom_add(out_hist + tmpOffset + 11, data2.w);
+        atom_add(out_hist + tmpOffset + 12, data3.x);
+        atom_add(out_hist + tmpOffset + 13, data3.y);
+        atom_add(out_hist + tmpOffset + 14, data3.z);
+        atom_add(out_hist + tmpOffset + 15, data3.w);
+        atom_add(out_hist + tmpOffset + 16, data4.x);
+        atom_add(out_hist + tmpOffset + 17, data4.y);
+        atom_add(out_hist + tmpOffset + 18, data4.z);
+        atom_add(out_hist + tmpOffset + 19, data4.w);
+        atom_add(out_hist + tmpOffset + 20, data5.x);
+        atom_add(out_hist + tmpOffset + 21, data5.y);
+        atom_add(out_hist + tmpOffset + 22, data5.z);
+        atom_add(out_hist + tmpOffset + 23, data5.w);
+        atom_add(out_hist + tmpOffset + 24, data6.x);
+        atom_add(out_hist + tmpOffset + 25, data6.y);
+        atom_add(out_hist + tmpOffset + 26, data6.z);
+        atom_add(out_hist + tmpOffset + 27, data6.w);
+        atom_add(out_hist + tmpOffset + 28, data7.x);
+        atom_add(out_hist + tmpOffset + 29, data7.y);
+        atom_add(out_hist + tmpOffset + 30, data7.z);
+        atom_add(out_hist + tmpOffset + 31, data7.w);
+        tmpOffset += 32;
+
+        VXC_DP4x4(data0, hists4, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data1, hists4, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data2, hists5, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data3, hists5, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data4, hists6, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data5, hists6, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data6, hists7, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+        VXC_DP4x4(data7, hists7, zp, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndUint8SubZpToFp32_4x4);
+        atom_add(out_hist + tmpOffset, data0.x);
+        atom_add(out_hist + tmpOffset + 1, data0.y);
+        atom_add(out_hist + tmpOffset + 2, data0.z);
+        atom_add(out_hist + tmpOffset + 3, data0.w);
+        atom_add(out_hist + tmpOffset + 4, data1.x);
+        atom_add(out_hist + tmpOffset + 5, data1.y);
+        atom_add(out_hist + tmpOffset + 6, data1.z);
+        atom_add(out_hist + tmpOffset + 7, data1.w);
+        atom_add(out_hist + tmpOffset + 8, data2.x);
+        atom_add(out_hist + tmpOffset + 9, data2.y);
+        atom_add(out_hist + tmpOffset + 10, data2.z);
+        atom_add(out_hist + tmpOffset + 11, data2.w);
+        atom_add(out_hist + tmpOffset + 12, data3.x);
+        atom_add(out_hist + tmpOffset + 13, data3.y);
+        atom_add(out_hist + tmpOffset + 14, data3.z);
+        atom_add(out_hist + tmpOffset + 15, data3.w);
+        atom_add(out_hist + tmpOffset + 16, data4.x);
+        atom_add(out_hist + tmpOffset + 17, data4.y);
+        atom_add(out_hist + tmpOffset + 18, data4.z);
+        atom_add(out_hist + tmpOffset + 19, data4.w);
+        atom_add(out_hist + tmpOffset + 20, data5.x);
+        atom_add(out_hist + tmpOffset + 21, data5.y);
+        atom_add(out_hist + tmpOffset + 22, data5.z);
+        atom_add(out_hist + tmpOffset + 23, data5.w);
+        atom_add(out_hist + tmpOffset + 24, data6.x);
+        atom_add(out_hist + tmpOffset + 25, data6.y);
+        atom_add(out_hist + tmpOffset + 26, data6.z);
+        atom_add(out_hist + tmpOffset + 27, data6.w);
+        atom_add(out_hist + tmpOffset + 28, data7.x);
+        atom_add(out_hist + tmpOffset + 29, data7.y);
+        atom_add(out_hist + tmpOffset + 30, data7.z);
+        atom_add(out_hist + tmpOffset + 31, data7.w);
+    }
+}
+
+#elif (VX_VERSION==2)
+
+__kernel void histogram_offset0_256(
+        image2d_t src,
+        __global int* out_hist)
+{
+
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 val0, val1, val2, val3;
+    VXC_ReadImage(val0, src, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val1, src, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val2, src, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val3, src, coord, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    vxc_uchar16 weight = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    vxc_ushort8 src2 = {0};
+
+    for(int i = 0; i < 256; i+=4, src2.x+=4)
+    {
+        vxc_int4    value = {0};
+        VXC_IndexAdd(value, val0, weight, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val0, weight, src2, VXC_MODIFIER(0, 3, 8, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val1, weight, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val1, weight, src2, VXC_MODIFIER(0, 3, 8, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val2, weight, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val2, weight, src2, VXC_MODIFIER(0, 3, 8, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val3, weight, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val3, weight, src2, VXC_MODIFIER(0, 3, 8, VXC_RM_TowardZero, 0));
+
+        atom_add(out_hist + i, value.x);
+        atom_add(out_hist + i + 1, value.y);
+        atom_add(out_hist + i + 2, value.z);
+        atom_add(out_hist + i + 3, value.w);
+    }
+}
+
+__kernel void histogram_offset0(
+        image2d_t src,
+        __global int* out_hist)
+{
+
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 val0, val1, val2, val3;
+    VXC_ReadImage(val0, src, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val1, src, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val2, src, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val3, src, coord, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    int4 tmpOffset = (int4)(0, 1, 2, 3);
+    vxc_uchar16 weight = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    vxc_ushort8 src2 = {0};
+    for(; src2.x < range; src2.x += 4)
+    {
+        vxc_ushort8    value = {0};
+        vxc_int4       tmpVal;
+        int4 tmpIdx = (tmpOffset * numBins) / range;
+        VXC_IndexAdd(value, val0, weight, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val0, weight, src2, VXC_MODIFIER(0, 3, 8, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val1, weight, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val1, weight, src2, VXC_MODIFIER(0, 3, 8, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val2, weight, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val2, weight, src2, VXC_MODIFIER(0, 3, 8, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val3, weight, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val3, weight, src2, VXC_MODIFIER(0, 3, 8, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(tmpVal, value, value, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stI16ToI32_4x4);
+        atomic_add(out_hist + tmpIdx.x, tmpVal.x);
+        atomic_add(out_hist + tmpIdx.y, tmpVal.y);
+        atomic_add(out_hist + tmpIdx.z, tmpVal.z);
+        atomic_add(out_hist + tmpIdx.w, tmpVal.w);
+        tmpOffset += 4;
+    }
+}
+
+__kernel void histogram_offset0_range256(
+        image2d_t src,
+        __global int* out_hist)
+{
+
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 val0, val1, val2, val3;
+    VXC_ReadImage(val0, src, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val1, src, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val2, src, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val3, src, coord, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    int4 tmpOffset = (int4)(0, 1, 2, 3);
+    //vxc_uchar16 weight = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    vxc_ushort8 weight = {1, 1, 1, 1, 1, 1, 1, 1};
+    vxc_ushort8 src2 = {0};
+    for(; src2.x < range; src2.x += 4)
+    {
+        vxc_ushort8    value = {0};
+        vxc_int4       tmpVal;
+        int4 tmpIdx = (tmpOffset * numBins) >> 8;
+        VXC_IndexAdd(value, val0, weight, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val1, weight, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val2, weight, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, val3, weight, src2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_DP4x4(tmpVal, value, value, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stI16ToI32_4x4);
+        atomic_add(out_hist + tmpIdx.x, tmpVal.x);
+        atomic_add(out_hist + tmpIdx.y, tmpVal.y);
+        atomic_add(out_hist + tmpIdx.z, tmpVal.z);
+        atomic_add(out_hist + tmpIdx.w, tmpVal.w);
+        tmpOffset += 4;
+    }
+}
+
+__kernel void histogram_b1(
+        image2d_t src,
+        __global int* out_hist)
+{
+
+    int2 coord = (int2)(get_global_id(0), 0);
+    vxc_uchar16 val0, val1, val2, val3;
+    vxc_ushort8 weight = {1, 1, 1, 1, 1, 1, 1, 1};
+    vxc_ushort8 tmpVal;
+    vxc_ushort8 value = {0};
+    float4 data0, data1;
+    vxc_int4 tmpDst;
+    short tmpOffset = offset;
+    uint4 tmp0, tmp1;
+
+    for(; coord.y < height;)
+    {
+        VXC_ReadImage(val0, src, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord.y++;
+        VXC_DP4x4(data0, val0, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stU8SubToFp32_4x4);
+        VXC_DP4x4(data1, val0, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndU8SubToFp32_4x4);
+
+        int4 tmpData0 = convert_int4_rtz(floor(data0 * scale + DIFF));
+        int4 tmpData1 = convert_int4_rtz(floor(data1 * scale + DIFF));
+        _viv_asm(COPY, tmp0, tmpData0, 16);
+        _viv_asm(COPY, tmp1, tmpData1, 16);
+
+        VXC_DP2x8(tmpVal, tmp0, tmp1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvertUI32toU16_2x8);
+
+        VXC_IndexAdd(value, tmpVal, weight, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    }
+    VXC_DP4x4(tmpDst, value, value, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stI16ToI32_4x4);
+
+    atomic_add(out_hist, tmpDst.x);
+    atomic_add(out_hist + 1, tmpDst.y);
+    atomic_add(out_hist + 2, tmpDst.z);
+    atomic_add(out_hist + 3, tmpDst.w);
+}
+
+__kernel void histogram_b2(
+        image2d_t src,
+        __global int* out_hist)
+{
+
+    int2 coord = (int2)(get_global_id(0), 0);
+    vxc_uchar16 val0, val1, val2, val3;
+    vxc_ushort8 weight = {1, 1, 1, 1, 1, 1, 1, 1};
+    vxc_ushort8 tmpVal;
+    vxc_ushort8 value0 = {0}, value1 = {0};
+    float4 data0, data1;
+    vxc_int4 tmpDst0, tmpDst1;
+    short tmpOffset = offset;
+    uint4 tmp0, tmp1;
+
+    for(; coord.y < height;)
+    {
+        VXC_ReadImage(val0, src, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord.y++;
+        VXC_DP4x4(data0, val0, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stU8SubToFp32_4x4);
+        VXC_DP4x4(data1, val0, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndU8SubToFp32_4x4);
+
+        int4 tmpData0 = convert_int4_rtz(floor(data0 * scale + DIFF));
+        int4 tmpData1 = convert_int4_rtz(floor(data1 * scale + DIFF));
+        _viv_asm(COPY, tmp0, tmpData0, 16);
+        _viv_asm(COPY, tmp1, tmpData1, 16);
+
+        VXC_DP2x8(tmpVal, tmp0, tmp1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvertUI32toU16_2x8);
+
+        VXC_IndexAdd(value0, tmpVal, weight, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value1, tmpVal, weight, 4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    }
+    VXC_DP4x4(tmpDst0, value0, value0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stI16ToI32_4x4);
+    VXC_DP4x4(tmpDst1, value1, value1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stI16ToI32_4x4);
+
+    atomic_add(out_hist, tmpDst0.x);
+    atomic_add(out_hist + 1, tmpDst0.y);
+    atomic_add(out_hist + 2, tmpDst0.z);
+    atomic_add(out_hist + 3, tmpDst0.w);
+
+    atomic_add(out_hist + 4, tmpDst1.x);
+    atomic_add(out_hist + 5, tmpDst1.y);
+    atomic_add(out_hist + 6, tmpDst1.z);
+    atomic_add(out_hist + 7, tmpDst1.w);
+}
+
+__kernel void histogram_b4(
+        image2d_t src,
+        __global int* out_hist)
+{
+
+    int2 coord = (int2)(get_global_id(0), 0);
+    vxc_uchar16 val0, val1, val2, val3;
+    vxc_ushort8 weight = {1, 1, 1, 1, 1, 1, 1, 1};
+    vxc_ushort8 tmpVal;
+    vxc_ushort8 value0 = {0}, value1 = {0}, value2 = {0}, value3 = {0};
+    float4 data0, data1;
+    vxc_int4 tmpDst0, tmpDst1, tmpDst2, tmpDst3;
+    short tmpOffset = offset;
+    uint4 tmp0, tmp1;
+
+    for(; coord.y < height;)
+    {
+        VXC_ReadImage(val0, src, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+        coord.y++;
+        VXC_DP4x4(data0, val0, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stU8SubToFp32_4x4);
+        VXC_DP4x4(data1, val0, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndU8SubToFp32_4x4);
+
+        int4 tmpData0 = convert_int4_rtz(floor(data0 * scale + DIFF));
+        int4 tmpData1 = convert_int4_rtz(floor(data1 * scale + DIFF));
+        _viv_asm(COPY, tmp0, tmpData0, 16);
+        _viv_asm(COPY, tmp1, tmpData1, 16);
+
+        VXC_DP2x8(tmpVal, tmp0, tmp1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvertUI32toU16_2x8);
+
+        VXC_IndexAdd(value0, tmpVal, weight, 0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value1, tmpVal, weight, 4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value2, tmpVal, weight, 8, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value3, tmpVal, weight, 12, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    }
+    VXC_DP4x4(tmpDst0, value0, value0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stI16ToI32_4x4);
+    VXC_DP4x4(tmpDst1, value1, value1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stI16ToI32_4x4);
+    VXC_DP4x4(tmpDst2, value2, value2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stI16ToI32_4x4);
+    VXC_DP4x4(tmpDst3, value3, value3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stI16ToI32_4x4);
+
+    atomic_add(out_hist, tmpDst0.x);
+    atomic_add(out_hist + 1, tmpDst0.y);
+    atomic_add(out_hist + 2, tmpDst0.z);
+    atomic_add(out_hist + 3, tmpDst0.w);
+
+    atomic_add(out_hist + 4, tmpDst1.x);
+    atomic_add(out_hist + 5, tmpDst1.y);
+    atomic_add(out_hist + 6, tmpDst1.z);
+    atomic_add(out_hist + 7, tmpDst1.w);
+
+    atomic_add(out_hist + 8, tmpDst2.x);
+    atomic_add(out_hist + 9, tmpDst2.y);
+    atomic_add(out_hist + 10, tmpDst2.z);
+    atomic_add(out_hist + 11, tmpDst2.w);
+
+    atomic_add(out_hist + 12, tmpDst3.x);
+    atomic_add(out_hist + 13, tmpDst3.y);
+    atomic_add(out_hist + 14, tmpDst3.z);
+    atomic_add(out_hist + 15, tmpDst3.w);
+}
+
+__kernel void histogram_evis2(
+        image2d_t src,
+        __global int* out_hist)
+{
+
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 val0, val1, val2, val3;
+    VXC_ReadImage(val0, src, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val1, src, coord, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val2, src, coord, VXC_5BITOFFSET_XY(0, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(val3, src, coord, VXC_5BITOFFSET_XY(0, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    short tmpOffset = offset;
+    vxc_ushort8 weight = {1, 1, 1, 1, 1, 1, 1, 1};
+    float4 data00, data01, data10, data11, data20, data21, data30, data31;
+    uint4 tmp0, tmp1, tmp2, tmp3;
+    vxc_ushort8 tmpVal0, tmpVal1, tmpVal2, tmpVal3;
+
+    VXC_DP4x4(data00, val0, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stU8SubToFp32_4x4);
+    VXC_DP4x4(data01, val0, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndU8SubToFp32_4x4);
+    VXC_DP4x4(data10, val1, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stU8SubToFp32_4x4);
+    VXC_DP4x4(data11, val1, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndU8SubToFp32_4x4);
+    VXC_DP4x4(data20, val2, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stU8SubToFp32_4x4);
+    VXC_DP4x4(data21, val2, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndU8SubToFp32_4x4);
+    VXC_DP4x4(data30, val3, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stU8SubToFp32_4x4);
+    VXC_DP4x4(data31, val3, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert2ndU8SubToFp32_4x4);
+
+    int4 tmpData0 = convert_int4_rtz(floor(data00 * scale + DIFF));
+    int4 tmpData1 = convert_int4_rtz(floor(data01 * scale + DIFF));
+    int4 tmpData2 = convert_int4_rtz(floor(data10 * scale + DIFF));
+    int4 tmpData3 = convert_int4_rtz(floor(data11 * scale + DIFF));
+    _viv_asm(COPY, tmp0, tmpData0, 16);
+    _viv_asm(COPY, tmp1, tmpData1, 16);
+    _viv_asm(COPY, tmp2, tmpData2, 16);
+    _viv_asm(COPY, tmp3, tmpData3, 16);
+    VXC_DP2x8(tmpVal0, tmp0, tmp1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvertUI32toU16_2x8);
+    VXC_DP2x8(tmpVal1, tmp2, tmp3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvertUI32toU16_2x8);
+
+    tmpData0 = convert_int4_rtz(floor(data20 * scale + DIFF));
+    tmpData1 = convert_int4_rtz(floor(data21 * scale + DIFF));
+    tmpData2 = convert_int4_rtz(floor(data30 * scale + DIFF));
+    tmpData3 = convert_int4_rtz(floor(data31 * scale + DIFF));
+    _viv_asm(COPY, tmp0, tmpData0, 16);
+    _viv_asm(COPY, tmp1, tmpData1, 16);
+    _viv_asm(COPY, tmp2, tmpData2, 16);
+    _viv_asm(COPY, tmp3, tmpData3, 16);
+    VXC_DP2x8(tmpVal2, tmp0, tmp1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvertUI32toU16_2x8);
+    VXC_DP2x8(tmpVal3, tmp2, tmp3, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniConvertUI32toU16_2x8);
+
+    vxc_ushort8 cnt = {0};
+    vxc_int4 tmpDst;
+
+    for(int i = 0; i < iter; i+=4)
+    {
+        vxc_ushort8 value = {0};
+        VXC_IndexAdd(value, tmpVal0, weight, i, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, tmpVal1, weight, i, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, tmpVal2, weight, i, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+        VXC_IndexAdd(value, tmpVal3, weight, i, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+        VXC_DP4x4(tmpDst, value, value, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stI16ToI32_4x4);
+        atomic_add(out_hist + i, tmpDst.x);
+        atomic_add(out_hist + i + 1, tmpDst.y);
+        atomic_add(out_hist + i + 2, tmpDst.z);
+        atomic_add(out_hist + i + 3, tmpDst.w);
+    }
+}
+
+#endif
+
+
+__kernel void histogram(
+        __read_only  image2d_t input,
+        __global int* out_hist)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    vxc_uchar16 src0;
+    VXC_ReadImage(src0, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    short tmpOffset = offset;
+    int4  tmpData0;
+    VXC_DP4x4(tmpData0, src0, tmpOffset, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniConvert1stUint8SubZpToFp32_4x4);
+
+    if(tmpData0.x >= 0 && tmpData0.x < range)
+    {
+        int index = (tmpData0.x * numBins) / range;
+        atomic_inc(out_hist + index);
+    }
+}

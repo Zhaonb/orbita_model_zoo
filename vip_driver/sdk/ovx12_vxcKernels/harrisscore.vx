@@ -1,0 +1,296 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform float scale_pw2;
+_viv_uniform VXC_512Bits  sum_of_multiply_4x4;
+_viv_uniform VXC_512Bits  multiply_4x4;
+_viv_uniform VXC_512Bits  sum_of_multiply_4x4_2;
+_viv_uniform VXC_512Bits  multiply_4x4_2;
+
+__kernel void harris_score_3x3
+(
+    __read_only  image2d_t gradx,
+    __read_only  image2d_t grady,
+                 float     sensitive,
+                 int       win,
+                 int       block,
+                 float     shift,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0),get_global_id(1));
+    float4 gx0, gx1, gx2, gy0, gy1, gy2;
+    vxc_ushort4 pregx0, pregx1, pregx2, pregy0, pregy1, pregy2;
+    vxc_half4 gx_half0, gx_half1, gx_half2, gy_half0, gy_half1, gy_half2;
+    float k = sensitive;
+    float sum_ix2 = 0.0f;
+    float sum_iy2 = 0.0f;
+    float sum_ixy = 0.0f;
+    float det_A   = 0.0f;
+    float trace_A = 0.0f;
+    float M_c     = 0.0f;
+    float ktrace_A2 = 0.0f;
+    float4 gx, gy, gxy;
+    float4 gx_temp01, gx_temp2;
+    float4 gy_temp01, gy_temp2;
+    float4 gxy_temp0, gxy_temp1, gxy_temp2;
+
+    VXC_ReadImage(pregx0, gradx, coord, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregx1, gradx, coord, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregx2, gradx, coord, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(pregy0, grady, coord, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregy1, grady, coord, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregy2, grady, coord, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(COPY, gx_half0, pregx0, 8);
+    _viv_asm(COPY, gx_half1, pregx1, 8);
+    _viv_asm(COPY, gx_half2, pregx2, 8);
+    _viv_asm(COPY, gy_half0, pregy0, 8);
+    _viv_asm(COPY, gy_half1, pregy1, 8);
+    _viv_asm(COPY, gy_half2, pregy2, 8);
+
+    VXC_DP4x4(gx_temp01, gx_half0, gx_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4);
+    VXC_DP4x4(gx_temp2, gx_half2, gx_half2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gy_temp01, gy_half0, gy_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4);
+    VXC_DP4x4(gy_temp2, gy_half2, gy_half2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp0, gx_half0, gy_half0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp1, gx_half1, gy_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp2, gx_half2, gy_half2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+
+    gx = (gx_temp01 + gx_temp2) * scale_pw2;
+    gy = (gy_temp01 + gy_temp2) * scale_pw2;
+    gxy = (gxy_temp0 + gxy_temp1 + gxy_temp2) * scale_pw2;
+
+    sum_ix2 = gx.x + gx.y + gx.z;
+    sum_iy2 = gy.x + gy.y + gy.z;
+    sum_ixy = gxy.x + gxy.y + gxy.z;
+
+    det_A = (sum_ix2 * sum_iy2) - (sum_ixy * sum_ixy);
+    trace_A = sum_ix2 + sum_iy2;
+    ktrace_A2 = (k * (trace_A * trace_A));
+    M_c = det_A - ktrace_A2;
+
+    Image img = create_image_from_image2d(output, 4);
+    uchar* ptr = get_image_ptr_from_coord(img, coord);
+    *((float*)ptr) = M_c;
+}
+
+__kernel void harris_score_5x5
+(
+    __read_only  image2d_t gradx,
+    __read_only  image2d_t grady,
+                 float     sensitive,
+                 int       win,
+                 int       block,
+                 float     shift,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0),get_global_id(1));
+    float4 gx0, gx1, gx2, gx3, gx4, gy0, gy1, gy2, gy3, gy4;
+    float gx0_2, gx1_2, gx2_2, gx3_2, gx4_2, gy0_2, gy1_2, gy2_2, gy3_2, gy4_2;
+    vxc_ushort8 pregx0, pregx1, pregx2, pregx3, pregx4;
+    vxc_ushort8 pregy0, pregy1, pregy2, pregy3, pregy4;
+    vxc_half8  gx_half0, gx_half1, gx_half2, gx_half3, gx_half4;
+    vxc_half8  gy_half0, gy_half1, gy_half2, gy_half3, gy_half4;
+    float k = sensitive;
+    float sum_ix2 = 0.0f;
+    float sum_iy2 = 0.0f;
+    float sum_ixy = 0.0f;
+    float det_A   = 0.0f;
+    float trace_A = 0.0f;
+    float M_c     = 0.0f;
+    float ktrace_A2 = 0.0f;
+    float4 gx, gy, gxy;
+    float4 gx_temp01,gx_temp23,gx_temp4, gx_temp01_2, gx_temp23_2,gx_temp4_2;
+    float4 gy_temp01,gy_temp23,gy_temp4, gy_temp01_2, gy_temp23_2,gy_temp4_2;
+    float4 gxy_temp0, gxy_temp1, gxy_temp2, gxy_temp3, gxy_temp4, gxy_temp0_2, gxy_temp1_2, gxy_temp2_2, gxy_temp3_2, gxy_temp4_2;
+
+    VXC_ReadImage(pregx0, gradx, coord, VXC_5BITOFFSET_XY(-2, -2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregx1, gradx, coord, VXC_5BITOFFSET_XY(-2, -1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregx2, gradx, coord, VXC_5BITOFFSET_XY(-2, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregx3, gradx, coord, VXC_5BITOFFSET_XY(-2, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregx4, gradx, coord, VXC_5BITOFFSET_XY(-2, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(pregy0, grady, coord, VXC_5BITOFFSET_XY(-2, -2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregy1, grady, coord, VXC_5BITOFFSET_XY(-2, -1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregy2, grady, coord, VXC_5BITOFFSET_XY(-2, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregy3, grady, coord, VXC_5BITOFFSET_XY(-2, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregy4, grady, coord, VXC_5BITOFFSET_XY(-2, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(COPY, gx_half0, pregx0, 16);
+    _viv_asm(COPY, gx_half1, pregx1, 16);
+    _viv_asm(COPY, gx_half2, pregx2, 16);
+    _viv_asm(COPY, gx_half3, pregx3, 16);
+    _viv_asm(COPY, gx_half4, pregx4, 16);
+    _viv_asm(COPY, gy_half0, pregy0, 16);
+    _viv_asm(COPY, gy_half1, pregy1, 16);
+    _viv_asm(COPY, gy_half2, pregy2, 16);
+    _viv_asm(COPY, gy_half3, pregy3, 16);
+    _viv_asm(COPY, gy_half4, pregy4, 16);
+
+    VXC_DP4x4(gx_temp01, gx_half0, gx_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4);
+    VXC_DP4x4(gx_temp01_2, gx_half0, gx_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4_2);
+    VXC_DP4x4(gx_temp23, gx_half2, gx_half3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4);
+    VXC_DP4x4(gx_temp23_2, gx_half2, gx_half3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4_2);
+    VXC_DP4x4(gx_temp4, gx_half4, gx_half4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gx_temp4_2, gx_half4, gx_half4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+
+    VXC_DP4x4(gy_temp01, gy_half0, gy_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4);
+    VXC_DP4x4(gy_temp01_2, gy_half0, gy_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4_2);
+    VXC_DP4x4(gy_temp23, gy_half2, gy_half3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4);
+    VXC_DP4x4(gy_temp23_2, gy_half2, gy_half3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4_2);
+    VXC_DP4x4(gy_temp4, gy_half4, gy_half4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gy_temp4_2, gy_half4, gy_half4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+
+    VXC_DP4x4(gxy_temp0, gx_half0, gy_half0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp0_2, gx_half0, gy_half0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+    VXC_DP4x4(gxy_temp1, gx_half1, gy_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp1_2, gx_half1, gy_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+    VXC_DP4x4(gxy_temp2, gx_half2, gy_half2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp2_2, gx_half2, gy_half2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+    VXC_DP4x4(gxy_temp3, gx_half3, gy_half3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp3_2, gx_half3, gy_half3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+    VXC_DP4x4(gxy_temp4, gx_half4, gy_half4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp4_2, gx_half4, gy_half4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+
+    gx = (gx_temp01 + gx_temp23 + gx_temp4) * scale_pw2;
+    gx.x = gx.x + ((gx_temp01_2 + gx_temp23_2 + gx_temp4_2) * scale_pw2).x;
+    gy = (gy_temp01 + gy_temp23 + gy_temp4) * scale_pw2;
+    gy.x = gy.x + ((gy_temp01_2 + gy_temp23_2 + gy_temp4_2) * scale_pw2).x;
+    gxy = (gxy_temp0 + gxy_temp1 + gxy_temp2 + gxy_temp3 + gxy_temp4) * scale_pw2;
+    gxy.x = gxy.x + ((gxy_temp0_2 + gxy_temp1_2 + gxy_temp2_2 + gxy_temp3_2 + gxy_temp4_2) * scale_pw2).x;
+
+    sum_ix2 = gx.x + gx.y + gx.z + gx.w;
+    sum_iy2 = gy.x + gy.y + gy.z + gy.w;
+    sum_ixy = gxy.x + gxy.y + gxy.z + gxy.w;
+
+    det_A = (sum_ix2 * sum_iy2) - (sum_ixy * sum_ixy);
+    trace_A = sum_ix2 + sum_iy2;
+    ktrace_A2 = (k * (trace_A * trace_A));
+    M_c = det_A - ktrace_A2;
+
+    Image img = create_image_from_image2d(output, 4);
+    uchar* ptr = get_image_ptr_from_coord(img, coord);
+    *((float*)ptr) = M_c;
+}
+
+__kernel void harris_score_7x7
+(
+    __read_only  image2d_t gradx,
+    __read_only  image2d_t grady,
+                 float     sensitive,
+                 int       win,
+                 int       block,
+                 float     shift,
+    __write_only image2d_t output
+)
+{
+    int2 coord = (int2)(get_global_id(0),get_global_id(1));
+    float4 gx0, gx1, gx2, gx3, gx4, gx5, gx6, gy0, gy1, gy2, gy3, gy4, gy5, gy6;
+    float4 gx0_2, gx1_2, gx2_2, gx3_2, gx4_2, gx5_2, gx6_2, gy0_2, gy1_2, gy2_2, gy3_2, gy4_2, gy5_2, gy6_2;
+    vxc_ushort8 pregx0, pregx1, pregx2, pregx3, pregx4, pregx5, pregx6;
+    vxc_ushort8 pregy0, pregy1, pregy2, pregy3, pregy4, pregy5, pregy6;
+    vxc_half8  gx_half0, gx_half1, gx_half2, gx_half3, gx_half4, gx_half5, gx_half6;
+    vxc_half8  gy_half0, gy_half1, gy_half2, gy_half3, gy_half4, gy_half5, gy_half6;
+    float k = sensitive;
+    float sum_ix2 = 0.0f;
+    float sum_iy2 = 0.0f;
+    float sum_ixy = 0.0f;
+    float det_A   = 0.0f;
+    float trace_A = 0.0f;
+    float M_c     = 0.0f;
+    float ktrace_A2 = 0.0f;
+    float4 gx, gy, gxy;
+    float4 gx_temp01, gx_temp23, gx_temp45, gx_temp6;
+    float4 gx_temp01_2, gx_temp23_2, gx_temp45_2, gx_temp6_2;
+    float4 gy_temp01, gy_temp23, gy_temp45, gy_temp6;
+    float4 gy_temp01_2, gy_temp23_2, gy_temp45_2, gy_temp6_2;
+    float4 gxy_temp0, gxy_temp1, gxy_temp2, gxy_temp3, gxy_temp4, gxy_temp5, gxy_temp6;
+    float4 gxy_temp0_2, gxy_temp1_2, gxy_temp2_2, gxy_temp3_2, gxy_temp4_2, gxy_temp5_2, gxy_temp6_2;
+
+    VXC_ReadImage(pregx0, gradx, coord, VXC_5BITOFFSET_XY(-3, -3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregx1, gradx, coord, VXC_5BITOFFSET_XY(-3, -2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregx2, gradx, coord, VXC_5BITOFFSET_XY(-3, -1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregx3, gradx, coord, VXC_5BITOFFSET_XY(-3, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregx4, gradx, coord, VXC_5BITOFFSET_XY(-3, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregx5, gradx, coord, VXC_5BITOFFSET_XY(-3, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregx6, gradx, coord, VXC_5BITOFFSET_XY(-3, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    VXC_ReadImage(pregy0, grady, coord, VXC_5BITOFFSET_XY(-3, -3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregy1, grady, coord, VXC_5BITOFFSET_XY(-3, -2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregy2, grady, coord, VXC_5BITOFFSET_XY(-3, -1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregy3, grady, coord, VXC_5BITOFFSET_XY(-3, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregy4, grady, coord, VXC_5BITOFFSET_XY(-3, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregy5, grady, coord, VXC_5BITOFFSET_XY(-3, 2), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(pregy6, grady, coord, VXC_5BITOFFSET_XY(-3, 3), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    _viv_asm(COPY, gx_half0, pregx0, 16);
+    _viv_asm(COPY, gx_half1, pregx1, 16);
+    _viv_asm(COPY, gx_half2, pregx2, 16);
+    _viv_asm(COPY, gx_half3, pregx3, 16);
+    _viv_asm(COPY, gx_half4, pregx4, 16);
+    _viv_asm(COPY, gx_half5, pregx5, 16);
+    _viv_asm(COPY, gx_half6, pregx6, 16);
+    _viv_asm(COPY, gy_half0, pregy0, 16);
+    _viv_asm(COPY, gy_half1, pregy1, 16);
+    _viv_asm(COPY, gy_half2, pregy2, 16);
+    _viv_asm(COPY, gy_half3, pregy3, 16);
+    _viv_asm(COPY, gy_half4, pregy4, 16);
+    _viv_asm(COPY, gy_half5, pregy5, 16);
+    _viv_asm(COPY, gy_half6, pregy6, 16);
+
+    VXC_DP4x4(gx_temp01, gx_half0, gx_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4);
+    VXC_DP4x4(gx_temp01_2, gx_half0, gx_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4_2);
+    VXC_DP4x4(gx_temp23, gx_half2, gx_half3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4);
+    VXC_DP4x4(gx_temp23_2, gx_half2, gx_half3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4_2);
+    VXC_DP4x4(gx_temp45, gx_half4, gx_half5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4);
+    VXC_DP4x4(gx_temp45_2, gx_half4, gx_half5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4_2);
+    VXC_DP4x4(gx_temp6, gx_half6, gx_half6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gx_temp6_2, gx_half6, gx_half6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+
+    VXC_DP4x4(gy_temp01, gy_half0, gy_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4);
+    VXC_DP4x4(gy_temp01_2, gy_half0, gy_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4_2);
+    VXC_DP4x4(gy_temp23, gy_half2, gy_half3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4);
+    VXC_DP4x4(gy_temp23_2, gy_half2, gy_half3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4_2);
+    VXC_DP4x4(gy_temp45, gy_half4, gy_half5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4);
+    VXC_DP4x4(gy_temp45_2, gy_half4, gy_half5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), sum_of_multiply_4x4_2);
+    VXC_DP4x4(gy_temp6, gy_half6, gy_half6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gy_temp6_2, gy_half6, gy_half6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+
+    VXC_DP4x4(gxy_temp0, gx_half0, gy_half0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp0_2, gx_half0, gy_half0, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+    VXC_DP4x4(gxy_temp1, gx_half1, gy_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp1_2, gx_half1, gy_half1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+    VXC_DP4x4(gxy_temp2, gx_half2, gy_half2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp2_2, gx_half2, gy_half2, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+    VXC_DP4x4(gxy_temp3, gx_half3, gy_half3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp3_2, gx_half3, gy_half3, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+    VXC_DP4x4(gxy_temp4, gx_half4, gy_half4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp4_2, gx_half4, gy_half4, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+    VXC_DP4x4(gxy_temp5, gx_half5, gy_half5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp5_2, gx_half5, gy_half5, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+    VXC_DP4x4(gxy_temp6, gx_half6, gy_half6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4);
+    VXC_DP4x4(gxy_temp6_2, gx_half6, gy_half6, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), multiply_4x4_2);
+
+    gx = (gx_temp01 + gx_temp23 + gx_temp45 + gx_temp6) * scale_pw2;
+    gx.xyz = gx.xyz + ((gx_temp01_2 + gx_temp23_2 + gx_temp45_2 + gx_temp6_2) * scale_pw2).xyz;
+    gy = (gy_temp01 + gy_temp23 + gy_temp45 + gy_temp6) * scale_pw2;
+    gy.xyz = gy.xyz + ((gy_temp01_2 + gy_temp23_2 + gy_temp45_2 + gy_temp6_2) * scale_pw2).xyz;
+    gxy = (gxy_temp0 + gxy_temp1 + gxy_temp2 + gxy_temp3 + gxy_temp4 + gxy_temp5 + gxy_temp6) * scale_pw2;
+    gxy.xyz = gxy.xyz + ((gxy_temp0_2 + gxy_temp1_2 + gxy_temp2_2 + gxy_temp3_2 + gxy_temp4_2 + gxy_temp5_2 + gxy_temp6_2) * scale_pw2).xyz;
+
+    sum_ix2 = gx.x + gx.y + gx.z + gx.w;
+    sum_iy2 = gy.x + gy.y + gy.z + gy.w;
+    sum_ixy = gxy.x + gxy.y + gxy.z + gxy.w;
+
+    det_A = (sum_ix2 * sum_iy2) - (sum_ixy * sum_ixy);
+    trace_A = sum_ix2 + sum_iy2;
+    ktrace_A2 = (k * (trace_A * trace_A));
+    M_c = det_A - ktrace_A2;
+    Image img = create_image_from_image2d(output, 4);
+    uchar* ptr = get_image_ptr_from_coord(img, coord);
+    *((float*)ptr) = M_c;
+}

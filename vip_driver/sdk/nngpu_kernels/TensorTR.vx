@@ -1,0 +1,702 @@
+//#define VX_NN_SUPPORT_EXP_LOG_SIN_OP
+
+float4 sigmoid_(float4 x, float logE, float a_val)
+{
+    x *= -logE;
+    x = 1 + exp2(x);
+    return 1 / x;
+}
+
+float4 sqrt_(float4 x, float logE, float a_val)
+{
+    return sqrt(x);
+}
+
+float4 rsqrt_(float4 x, float logE, float a_val)
+{
+    return rsqrt(x);
+}
+
+float4 tanh_(float4 x, float twoLogE, float a_val)
+{
+    x *= -twoLogE;
+    x = 1 + exp2(x);
+    x = 1 / x;
+    return a_val * (2 * x - 1);
+}
+
+float4 softRelu_(float4 x, float logE, float rlogE)
+{
+    x *= logE;
+    x = exp2(x);
+    x += 1;
+    x = log2(x);
+    return x * rlogE;
+}
+
+float4 square_(float4 x, float logE, float rlogE)
+{
+    return x * x;
+}
+
+/**************Float to Float****************************/
+#define GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4X(funcName) \
+__kernel void gpuActivation_##funcName##_F32toF32_3D_4x \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output, \
+                 float           s0, \
+                 float           s1, \
+                 float           input_scale, \
+                 float           input_tail, \
+                 float           output_scale, \
+                 float           output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    float4 src; \
+    src = read_imagef(input, coord); \
+ \
+    float4 dst = funcName##_(src, s0, s1); \
+ \
+    write_imagef(output, coord, dst); \
+}
+
+#define GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4S(funcName) \
+__kernel void gpuActivation_##funcName##_F32toF32_3D_4s \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output, \
+                 float           s0, \
+                 float           s1, \
+                 float           input_scale, \
+                 float           input_tail, \
+                 float           output_scale, \
+                 float           output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    float4 src; \
+    src = read_imagef(input, coord); \
+    coord.x *= 4; \
+ \
+    float4 dst = funcName##_(src, s0, s1); \
+ \
+    write_imagef(output, coord, dst.xxxx); \
+    coord.x++; \
+    write_imagef(output, coord, dst.yyyy); \
+    coord.x++; \
+    write_imagef(output, coord, dst.zzzz); \
+    coord.x++; \
+    write_imagef(output, coord, dst.wwww); \
+}
+
+#define GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4X(funcName) \
+__kernel void gpuActivation_##funcName##_F32toF32_2D_4x \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 float     s0, \
+                 float     s1, \
+                 float     input_scale, \
+                 float     input_tail, \
+                 float     output_scale, \
+                 float     output_zp \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    float4 src; \
+    src = read_imagef(input, coord); \
+ \
+    float4 dst = funcName##_(src, s0, s1); \
+ \
+    write_imagef(output, coord, dst); \
+}
+
+#define GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4S(funcName) \
+__kernel void gpuActivation_##funcName##_F32toF32_2D_4s \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 float     s0, \
+                 float     s1, \
+                 float     input_scale, \
+                 float     input_tail, \
+                 float     output_scale, \
+                 float     output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1)); \
+    float4 src; \
+    src = read_imagef(input, coord.xy); \
+    coord.x = coord.x * 4; \
+    coord.zw = coord.xx + (int2)(1, 2); \
+ \
+    float4 dst = funcName##_(src, s0, s1); \
+ \
+    write_imagef(output, coord.xy, dst.xxxx); \
+    write_imagef(output, coord.zy, dst.yyyy); \
+    write_imagef(output, coord.wy, dst.zzzz); \
+    coord.x += 3; \
+    write_imagef(output, coord.xy, dst.wwww); \
+}
+
+#define GPU_U32_TENSOR_TRANSCENDENTAL_3D_4X(funcName) \
+__kernel void gpuActivation_##funcName##_U32toU32_3D_4x \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output, \
+                 float           s0, \
+                 float           s1, \
+                 float           input_scale, \
+                 float           input_tail, \
+                 float           output_scale, \
+                 float           output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    uint4 src; \
+    src = read_imageui(input, coord); \
+    float4 dst0 = convert_float4(src) * input_scale + input_tail; \
+ \
+    dst0 = funcName##_(dst0, s0, s1); \
+    uint4 dst = convert_uint4(dst0 * output_scale + output_zp); \
+ \
+    write_imageui(output, coord, dst); \
+}
+
+#define GPU_U32_TENSOR_TRANSCENDENTAL_3D_4S(funcName) \
+__kernel void gpuActivation_##funcName##_U32toU32_3D_4s \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output, \
+                 float           s0, \
+                 float           s1, \
+                 float           input_scale, \
+                 float           input_tail, \
+                 float           output_scale, \
+                 float           output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    uint4 src; \
+    src = read_imageui(input, coord); \
+    coord.x *= 4; \
+    float4 dst0 = convert_float4(src) * input_scale + input_tail; \
+ \
+    dst0 = funcName##_(dst0, s0, s1); \
+    uint4 dst = convert_uint4(dst0 * output_scale + output_zp); \
+ \
+    write_imageui(output, coord, dst.xxxx); \
+    coord.x++; \
+    write_imageui(output, coord, dst.yyyy); \
+    coord.x++; \
+    write_imageui(output, coord, dst.zzzz); \
+    coord.x++; \
+    write_imageui(output, coord, dst.wwww); \
+}
+
+#define GPU_U32_TENSOR_TRANSCENDENTAL_2D_4X(funcName) \
+__kernel void gpuActivation_##funcName##_U32toU32_2D_4x \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 float     s0, \
+                 float     s1, \
+                 float     input_scale, \
+                 float     input_tail, \
+                 float     output_scale, \
+                 float     output_zp \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    uint4 src; \
+    src = read_imageui(input, coord); \
+    float4 dst0 = convert_float4(src) * input_scale + input_tail; \
+ \
+    dst0 = funcName##_(dst0, s0, s1); \
+    uint4 dst = convert_uint4(dst0 * output_scale + output_zp); \
+ \
+    write_imageui(output, coord, dst); \
+}
+
+#define GPU_U32_TENSOR_TRANSCENDENTAL_2D_4S(funcName) \
+__kernel void gpuActivation_##funcName##_U32toU32_2D_4s \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 float     s0, \
+                 float     s1, \
+                 float     input_scale, \
+                 float     input_tail, \
+                 float     output_scale, \
+                 float     output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1)); \
+    uint4 src; \
+    src = read_imageui(input, coord.xy); \
+    coord.x = coord.x * 4; \
+    coord.zw = coord.xx + (int2)(1, 2); \
+    float4 dst0 = convert_float4(src) * input_scale + input_tail; \
+ \
+    dst0 = funcName##_(dst0, s0, s1); \
+    uint4 dst = convert_uint4(dst0 * output_scale + output_zp); \
+ \
+    write_imageui(output, coord.xy, dst.xxxx); \
+    write_imageui(output, coord.zy, dst.yyyy); \
+    write_imageui(output, coord.wy, dst.zzzz); \
+    coord.x += 3; \
+    write_imageui(output, coord.xy, dst.wwww); \
+}
+/**************Q8 to Float****************************/
+#define GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4X(funcName) \
+__kernel void gpuActivation_##funcName##_U32toF32_3D_4x \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output, \
+                 float           s0, \
+                 float           s1, \
+                 float           input_scale, \
+                 float           input_tail, \
+                 float           output_scale, \
+                 float           output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    uint4 src; \
+    src = read_imageui(input, coord); \
+    float4 dst = convert_float4(src) * input_scale + input_tail; \
+ \
+    dst = funcName##_(dst, s0, s1); \
+ \
+    write_imagef(output, coord, dst); \
+}
+
+#define GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4S(funcName) \
+__kernel void gpuActivation_##funcName##_U32toF32_3D_4s \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output, \
+                 float           s0, \
+                 float           s1, \
+                 float           input_scale, \
+                 float           input_tail, \
+                 float           output_scale, \
+                 float           output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    uint4 src; \
+    src = read_imageui(input, coord); \
+    coord.x *= 4; \
+    float4 dst = convert_float4(src) * input_scale + input_tail; \
+ \
+    dst = funcName##_(dst, s0, s1); \
+ \
+    write_imagef(output, coord, dst.xxxx); \
+    coord.x++; \
+    write_imagef(output, coord, dst.yyyy); \
+    coord.x++; \
+    write_imagef(output, coord, dst.zzzz); \
+    coord.x++; \
+    write_imagef(output, coord, dst.wwww); \
+}
+
+#define GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4X(funcName) \
+__kernel void gpuActivation_##funcName##_U32toF32_2D_4x \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 float     s0, \
+                 float     s1, \
+                 float     input_scale, \
+                 float     input_tail, \
+                 float     output_scale, \
+                 float     output_zp \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    uint4 src; \
+    src = read_imageui(input, coord); \
+    float4 dst = convert_float4(src) * input_scale + input_tail; \
+ \
+    dst = funcName##_(dst, s0, s1); \
+ \
+    write_imagef(output, coord, dst); \
+}
+
+#define GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4S(funcName) \
+__kernel void gpuActivation_##funcName##_U32toF32_2D_4s \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 float     s0, \
+                 float     s1, \
+                 float     input_scale, \
+                 float     input_tail, \
+                 float     output_scale, \
+                 float     output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1)); \
+    uint4 src; \
+    src = read_imageui(input, coord.xy); \
+    coord.x = coord.x * 4; \
+    coord.zw = coord.xx + (int2)(1, 2); \
+    float4 dst = convert_float4(src) * input_scale + input_tail; \
+ \
+    dst = funcName##_(dst, s0, s1); \
+ \
+    write_imagef(output, coord.xy, dst.xxxx); \
+    write_imagef(output, coord.zy, dst.yyyy); \
+    write_imagef(output, coord.wy, dst.zzzz); \
+    coord.x += 3; \
+    write_imagef(output, coord.xy, dst.wwww); \
+}
+
+/**************Float to Quant8****************************/
+#define GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4X(funcName) \
+__kernel void gpuActivation_##funcName##_F32toU32_3D_4x \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output, \
+                 float           s0, \
+                 float           s1, \
+                 float           input_scale, \
+                 float           input_tail, \
+                 float           output_scale, \
+                 float           output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    float4 src; \
+    src = read_imagef(input, coord); \
+ \
+    float4 dst0 = funcName##_(src, s0, s1); \
+ \
+    uint4 dst = convert_uint4(dst0 * output_scale + output_zp); \
+ \
+    write_imageui(output, coord, dst); \
+}
+
+#define GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4S(funcName) \
+__kernel void gpuActivation_##funcName##_F32toU32_3D_4s \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output, \
+                 float           s0, \
+                 float           s1, \
+                 float           input_scale, \
+                 float           input_tail, \
+                 float           output_scale, \
+                 float           output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    float4 src; \
+    src = read_imagef(input, coord); \
+    coord.x *= 4; \
+ \
+    float4 dst0 = funcName##_(src, s0, s1); \
+ \
+    uint4 dst = convert_uint4(dst0 * output_scale + output_zp); \
+ \
+    write_imageui(output, coord, dst.xxxx); \
+    coord.x++; \
+    write_imageui(output, coord, dst.yyyy); \
+    coord.x++; \
+    write_imageui(output, coord, dst.zzzz); \
+    coord.x++; \
+    write_imageui(output, coord, dst.wwww); \
+}
+
+#define GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4X(funcName) \
+__kernel void gpuActivation_##funcName##_F32toU32_2D_4x \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 float     s0, \
+                 float     s1, \
+                 float     input_scale, \
+                 float     input_tail, \
+                 float     output_scale, \
+                 float     output_zp \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    float4 src; \
+    src = read_imagef(input, coord); \
+ \
+    float4 dst0 = funcName##_(src, s0, s1); \
+ \
+    uint4 dst = convert_uint4(dst0 * output_scale + output_zp); \
+ \
+    write_imageui(output, coord, dst); \
+}
+
+#define GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4S(funcName) \
+__kernel void gpuActivation_##funcName##_F32toU32_2D_4s \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 float     s0, \
+                 float     s1, \
+                 float     input_scale, \
+                 float     input_tail, \
+                 float     output_scale, \
+                 float     output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1)); \
+    float4 src; \
+    src = read_imagef(input, coord.xy); \
+    coord.x = coord.x * 4; \
+    coord.zw = coord.xx + (int2)(1, 2); \
+ \
+    float4 dst0 = funcName##_(src, s0, s1); \
+    uint4 dst = convert_uint4(dst0 * output_scale + output_zp); \
+ \
+    write_imageui(output, coord.xy, dst.xxxx); \
+    write_imageui(output, coord.zy, dst.yyyy); \
+    write_imageui(output, coord.wy, dst.zzzz); \
+    coord.x += 3; \
+    write_imageui(output, coord.xy, dst.wwww); \
+}
+
+#define GPU_I32_TENSOR_TRANSCENDENTAL_3D_4X(funcName) \
+__kernel void gpuActivation_##funcName##_I32toI32_3D_4x \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output, \
+                 float           s0, \
+                 float           s1, \
+                 float           input_scale, \
+                 float           input_tail, \
+                 float           output_scale, \
+                 float           output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    int4 src; \
+    src = read_imagei(input, coord); \
+    float4 dst0 = convert_float4(src) * input_scale + input_tail; \
+ \
+    dst0 = funcName##_(dst0, s0, s1); \
+    int4 dst = convert_int4(dst0 * output_scale + output_zp); \
+ \
+    write_imagei(output, coord, dst); \
+}
+
+#define GPU_I32_TENSOR_TRANSCENDENTAL_3D_4S(funcName) \
+__kernel void gpuActivation_##funcName##_I32toI32_3D_4s \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output, \
+                 float           s0, \
+                 float           s1, \
+                 float           input_scale, \
+                 float           input_tail, \
+                 float           output_scale, \
+                 float           output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), 0); \
+    int4 src; \
+    src = read_imagei(input, coord); \
+    coord.x *= 4; \
+    float4 dst0 = convert_float4(src) * input_scale + input_tail; \
+ \
+    dst0 = funcName##_(dst0, s0, s1); \
+    int4 dst = convert_int4(dst0 * output_scale + output_zp); \
+ \
+    write_imagei(output, coord, dst.xxxx); \
+    coord.x++; \
+    write_imagei(output, coord, dst.yyyy); \
+    coord.x++; \
+    write_imagei(output, coord, dst.zzzz); \
+    coord.x++; \
+    write_imagei(output, coord, dst.wwww); \
+}
+
+#define GPU_I32_TENSOR_TRANSCENDENTAL_2D_4X(funcName) \
+__kernel void gpuActivation_##funcName##_I32toI32_2D_4x \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 float     s0, \
+                 float     s1, \
+                 float     input_scale, \
+                 float     input_tail, \
+                 float     output_scale, \
+                 float     output_zp \
+    ) \
+{ \
+    int2 coord = (int2)(get_global_id(0), get_global_id(1)); \
+    int4 src; \
+    src = read_imagei(input, coord); \
+    float4 dst0 = convert_float4(src) * input_scale + input_tail; \
+ \
+    dst0 = funcName##_(dst0, s0, s1); \
+    int4 dst = convert_int4(dst0 * output_scale + output_zp); \
+ \
+    write_imagei(output, coord, dst); \
+}
+
+#define GPU_I32_TENSOR_TRANSCENDENTAL_2D_4S(funcName) \
+__kernel void gpuActivation_##funcName##_I32toI32_2D_4s \
+    ( \
+    __read_only  image2d_t input, \
+    __write_only image2d_t output, \
+                 float     s0, \
+                 float     s1, \
+                 float     input_scale, \
+                 float     input_tail, \
+                 float     output_scale, \
+                 float     output_zp \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(0), get_global_id(1)); \
+    int4 src; \
+    src = read_imagei(input, coord.xy); \
+    coord.x = coord.x * 4; \
+    coord.zw = coord.xx + (int2)(1, 2); \
+    float4 dst0 = convert_float4(src) * input_scale + input_tail; \
+ \
+    dst0 = funcName##_(dst0, s0, s1); \
+    int4 dst = convert_int4(dst0 * output_scale + output_zp); \
+ \
+    write_imagei(output, coord.xy, dst.xxxx); \
+    write_imagei(output, coord.zy, dst.yyyy); \
+    write_imagei(output, coord.wy, dst.zzzz); \
+    coord.x += 3; \
+    write_imagei(output, coord.xy, dst.wwww); \
+}
+
+
+//SIGMOID
+GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4X(sigmoid)
+GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4S(sigmoid)
+GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4X(sigmoid)
+GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4S(sigmoid)
+GPU_U32_TENSOR_TRANSCENDENTAL_3D_4X(sigmoid)
+GPU_U32_TENSOR_TRANSCENDENTAL_3D_4S(sigmoid)
+GPU_U32_TENSOR_TRANSCENDENTAL_2D_4X(sigmoid)
+GPU_U32_TENSOR_TRANSCENDENTAL_2D_4S(sigmoid)
+GPU_I32_TENSOR_TRANSCENDENTAL_3D_4X(sigmoid)
+GPU_I32_TENSOR_TRANSCENDENTAL_3D_4S(sigmoid)
+GPU_I32_TENSOR_TRANSCENDENTAL_2D_4X(sigmoid)
+GPU_I32_TENSOR_TRANSCENDENTAL_2D_4S(sigmoid)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4X(sigmoid)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4S(sigmoid)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4X(sigmoid)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4S(sigmoid)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4X(sigmoid)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4S(sigmoid)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4X(sigmoid)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4S(sigmoid)
+//SQRT
+GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4X(sqrt)
+GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4S(sqrt)
+GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4X(sqrt)
+GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4S(sqrt)
+GPU_U32_TENSOR_TRANSCENDENTAL_3D_4X(sqrt)
+GPU_U32_TENSOR_TRANSCENDENTAL_3D_4S(sqrt)
+GPU_U32_TENSOR_TRANSCENDENTAL_2D_4X(sqrt)
+GPU_U32_TENSOR_TRANSCENDENTAL_2D_4S(sqrt)
+GPU_I32_TENSOR_TRANSCENDENTAL_3D_4X(sqrt)
+GPU_I32_TENSOR_TRANSCENDENTAL_3D_4S(sqrt)
+GPU_I32_TENSOR_TRANSCENDENTAL_2D_4X(sqrt)
+GPU_I32_TENSOR_TRANSCENDENTAL_2D_4S(sqrt)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4X(sqrt)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4S(sqrt)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4X(sqrt)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4S(sqrt)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4X(sqrt)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4S(sqrt)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4X(sqrt)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4S(sqrt)
+//RSQRT
+GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4X(rsqrt)
+GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4S(rsqrt)
+GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4X(rsqrt)
+GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4S(rsqrt)
+GPU_U32_TENSOR_TRANSCENDENTAL_3D_4X(rsqrt)
+GPU_U32_TENSOR_TRANSCENDENTAL_3D_4S(rsqrt)
+GPU_U32_TENSOR_TRANSCENDENTAL_2D_4X(rsqrt)
+GPU_U32_TENSOR_TRANSCENDENTAL_2D_4S(rsqrt)
+GPU_I32_TENSOR_TRANSCENDENTAL_3D_4X(rsqrt)
+GPU_I32_TENSOR_TRANSCENDENTAL_3D_4S(rsqrt)
+GPU_I32_TENSOR_TRANSCENDENTAL_2D_4X(rsqrt)
+GPU_I32_TENSOR_TRANSCENDENTAL_2D_4S(rsqrt)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4X(rsqrt)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4S(rsqrt)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4X(rsqrt)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4S(rsqrt)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4X(rsqrt)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4S(rsqrt)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4X(rsqrt)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4S(rsqrt)
+//TANH
+GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4X(tanh)
+GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4S(tanh)
+GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4X(tanh)
+GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4S(tanh)
+GPU_U32_TENSOR_TRANSCENDENTAL_3D_4X(tanh)
+GPU_U32_TENSOR_TRANSCENDENTAL_3D_4S(tanh)
+GPU_U32_TENSOR_TRANSCENDENTAL_2D_4X(tanh)
+GPU_U32_TENSOR_TRANSCENDENTAL_2D_4S(tanh)
+GPU_I32_TENSOR_TRANSCENDENTAL_3D_4X(tanh)
+GPU_I32_TENSOR_TRANSCENDENTAL_3D_4S(tanh)
+GPU_I32_TENSOR_TRANSCENDENTAL_2D_4X(tanh)
+GPU_I32_TENSOR_TRANSCENDENTAL_2D_4S(tanh)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4X(tanh)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4S(tanh)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4X(tanh)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4S(tanh)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4X(tanh)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4S(tanh)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4X(tanh)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4S(tanh)
+//SOFTRELU
+GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4X(softRelu)
+GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4S(softRelu)
+GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4X(softRelu)
+GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4S(softRelu)
+GPU_U32_TENSOR_TRANSCENDENTAL_3D_4X(softRelu)
+GPU_U32_TENSOR_TRANSCENDENTAL_3D_4S(softRelu)
+GPU_U32_TENSOR_TRANSCENDENTAL_2D_4X(softRelu)
+GPU_U32_TENSOR_TRANSCENDENTAL_2D_4S(softRelu)
+GPU_I32_TENSOR_TRANSCENDENTAL_3D_4X(softRelu)
+GPU_I32_TENSOR_TRANSCENDENTAL_3D_4S(softRelu)
+GPU_I32_TENSOR_TRANSCENDENTAL_2D_4X(softRelu)
+GPU_I32_TENSOR_TRANSCENDENTAL_2D_4S(softRelu)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4X(softRelu)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4S(softRelu)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4X(softRelu)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4S(softRelu)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4X(softRelu)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4S(softRelu)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4X(softRelu)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4S(softRelu)
+//SQUARE
+GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4X(square)
+GPU_FP32_TENSOR_TRANSCENDENTAL_3D_4S(square)
+GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4X(square)
+GPU_FP32_TENSOR_TRANSCENDENTAL_2D_4S(square)
+GPU_U32_TENSOR_TRANSCENDENTAL_3D_4X(square)
+GPU_U32_TENSOR_TRANSCENDENTAL_3D_4S(square)
+GPU_U32_TENSOR_TRANSCENDENTAL_2D_4X(square)
+GPU_U32_TENSOR_TRANSCENDENTAL_2D_4S(square)
+GPU_I32_TENSOR_TRANSCENDENTAL_3D_4X(square)
+GPU_I32_TENSOR_TRANSCENDENTAL_3D_4S(square)
+GPU_I32_TENSOR_TRANSCENDENTAL_2D_4X(square)
+GPU_I32_TENSOR_TRANSCENDENTAL_2D_4S(square)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4X(square)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_3D_4S(square)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4X(square)
+GPU_FP32TOU32_TENSOR_TRANSCENDENTAL_2D_4S(square)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4X(square)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_3D_4S(square)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4X(square)
+GPU_U32TOFP32_TENSOR_TRANSCENDENTAL_2D_4S(square)

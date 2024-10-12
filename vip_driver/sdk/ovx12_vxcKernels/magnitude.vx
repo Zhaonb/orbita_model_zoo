@@ -1,0 +1,75 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+#if !(VX_VERSION==1)
+_viv_uniform VXC_512Bits uniASquarePlusBSquare_0_4x4;
+_viv_uniform VXC_512Bits uniASquarePlusBSquare_1_4x4;
+_viv_uniform VXC_512Bits uniExtract8Bin_2x8;
+#endif
+__kernel void magnitude_I16_I16toI16
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_short8 src0, src1, mp0, mp1;
+
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input1, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+#if (VX_VERSION==1)
+    VXC_MagPhase(mp0, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_MagPhase(mp1, src0, src1, VXC_MODIFIER(0, 7, 4, VXC_RM_TowardZero, 0));
+    mp0.hi = mp1.lo;
+#else
+    float4 grad0, grad1;
+    int4 v0, v1;
+    VXC_DP4x4(grad0, src0, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniASquarePlusBSquare_0_4x4);
+    VXC_DP4x4(grad1, src0, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniASquarePlusBSquare_1_4x4);
+    grad0 = sqrt(grad0) + 0.5f;
+    grad1 = sqrt(grad1) + 0.5f;
+    v0 = convert_int4(grad0);
+    v1 = convert_int4(grad1);
+    VXC_DP2x8(mp0, v0, v1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniExtract8Bin_2x8);
+#endif
+
+    VXC_WriteImage(output, coord, mp0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void magnitude_I16_I16toU8
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_short8 src0, src1;
+    vxc_uchar16 mp0, mp1;
+
+    VXC_ReadImage(src0, input0, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input1, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+#if (VX_VERSION==1)
+
+    VXC_MagPhase(mp0, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_MagPhase(mp1, src0, src1, VXC_MODIFIER(0, 7, 4, VXC_RM_TowardZero, 0));
+    mp0.s4567 = mp1.s0123;
+#else
+    float4 grad0, grad1;
+    int4 v0, v1;
+    VXC_DP4x4(grad0, src0, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniASquarePlusBSquare_0_4x4);
+    VXC_DP4x4(grad1, src0, src1, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), uniASquarePlusBSquare_1_4x4);
+    grad0 = sqrt(grad0) + 0.5f;
+    grad1 = sqrt(grad1) + 0.5f;
+    v0 = convert_int4(grad0);
+    v1 = convert_int4(grad1);
+    VXC_DP2x8(mp0, v0, v1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 1), uniExtract8Bin_2x8);
+#endif
+
+    VXC_WriteImage(output, coord, mp0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+}
+

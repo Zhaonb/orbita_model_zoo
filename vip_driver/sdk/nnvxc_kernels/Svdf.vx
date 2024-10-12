@@ -1,0 +1,254 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+#define ACTIVATION_RELU      1
+#define ACTIVATION_RELU1     2
+#define ACTIVATION_RELU6     3
+_viv_uniform VXC_512Bits uniMulAccAddFp16Fp16_8x2;
+_viv_uniform int memory_size;
+_viv_uniform int memory_size_minus1;
+_viv_uniform int input_size;
+_viv_uniform int num_filter;
+_viv_uniform int num_unit;
+_viv_uniform int stride;
+_viv_uniform int rank;
+
+__kernel void vxcSvdf_fp16(
+    image2d_array_t input,
+    image2d_array_t bias,
+    image2d_array_t weight,
+    image2d_array_t recurrent,
+    image2d_array_t act,
+    image2d_array_t ranks,
+    image2d_array_t state_in,
+    image2d_array_t state_out,
+    image2d_array_t output
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int2 coord = (int2)(0, gidy);
+    int4 coord_bias = (int4)(gidx, 0, 0, 0);
+    int2 coord_out = (int2)(gidx, gidy);
+    int2 coord_weight = (int2)(0, 0);
+    short bias_val;
+    half bias_fp16;
+    short last_recur;
+    float last_recur_fp16;
+    vxc_int4 act_val = (vxc_int4)(0);
+    VXC_ReadImage(bias_val, bias, coord_bias.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, bias_fp16, bias_val, 2);
+    float sum = convert_float(bias_fp16);
+
+    coord_bias.x = 0;
+    act_val = read_imagei(act, coord_bias);
+    vxc_int4 rank = read_imagei(ranks, coord_bias);
+    int rankVal = rank.x > 0 ? rank.x : 1;
+
+    vxc_short8 inputVal, weightVal;
+    short tmpVal0, tmpVal1;
+    vxc_half8 input_fp16, weight_fp16;
+    float tmpSum, tmpData0, tmpData1;
+    half tmpOut;
+    vxc_short4 result;
+    short stride_s = (short)stride;
+    short index_s = 0;
+    for(int r = 0; r < rankVal; r++)
+    {
+        float activation = 0.0f;
+        int idx = gidx * rankVal + r;
+        coord_weight.x = 0;
+        coord_weight.y = idx;
+        coord.x = 0;
+        for(int i = 0; i < input_size; i+=8)
+        {
+            VXC_ReadImage(inputVal, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(weightVal, weight, coord_weight, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            coord.x += 8;
+            coord_weight.x += 8;
+            _viv_asm(COPY, input_fp16, inputVal, 16);
+            _viv_asm(COPY, weight_fp16, weightVal, 16);
+            VXC_DP8x2(tmpSum, input_fp16, weight_fp16, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccAddFp16Fp16_8x2);
+            activation += tmpSum;
+        }
+
+        coord_weight.x = memory_size_minus1;
+        VXC_ReadImage(last_recur, recurrent, coord_weight, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, bias_fp16, last_recur, 2);
+        last_recur_fp16 = convert_float(bias_fp16);
+        sum += activation * last_recur_fp16;
+
+        //
+        coord_weight.x = 0;
+        int offset = idx * memory_size;
+        int index = 0;
+
+        for(int i = 0; i < memory_size_minus1; ++i)
+        {
+            index = offset + i;
+            index_s = (short)(index);
+            //coord_bias.x = index % stride;
+            //coord_bias.y = index / stride;
+            coord_bias.x = (index_s % stride_s);
+            coord_bias.y = (index_s / stride_s);
+            VXC_ReadImage(tmpVal0, recurrent, coord_weight, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(tmpVal1, state_in, coord_bias.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            coord_weight.x++;
+            _viv_asm(COPY, bias_fp16, tmpVal0, 2);
+            _viv_asm(COPY, tmpOut, tmpVal1, 2);
+            tmpData0 = convert_float(bias_fp16);
+            tmpData1 = convert_float(tmpOut);
+            sum += tmpData0 * tmpData1;
+        }
+
+        coord_bias.y = gidy;
+        coord_out.y = gidy;
+        for(int i = 0; i < memory_size_minus1 - 1; i++)
+        {
+            index = offset + i;
+            coord_bias.x = (index + 1);
+            coord_out.x = (index);
+            VXC_ReadImage(tmpVal0, state_in, coord_bias.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_WriteImage(state_out, coord_out, tmpVal0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        }
+        _viv_asm(CONV, tmpOut, activation);
+        _viv_asm(COPY, result, tmpOut, 2);
+        index = offset + memory_size_minus1 - 1;
+        coord_out.x = (index);
+        VXC_WriteImage(state_out, coord_out, result, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        coord_out.x = (index + 1);
+        result.x = 0;
+        VXC_WriteImage(state_out, coord_out, result, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+    coord_out = (int2)(gidx, gidy);
+
+    if(act_val.s0 == ACTIVATION_RELU)
+        sum = fmax(0.0f, sum);
+    else if(act_val.s0 == ACTIVATION_RELU1)
+        sum = fmin(fmax(sum, -1), 1.0f);
+    else if(act_val.s0 == ACTIVATION_RELU6)
+        sum = fmin(fmax(sum, 0.0f), 6.0f);
+
+    _viv_asm(CONV, tmpOut, sum);
+    _viv_asm(COPY, result, tmpOut, 2);
+    VXC_WriteImage(output, coord_out, result, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void vxcSvdf_fp16_biasFp32(
+    image2d_array_t input,
+    image2d_array_t bias,
+    image2d_array_t weight,
+    image2d_array_t recurrent,
+    image2d_array_t act,
+    image2d_array_t ranks,
+    image2d_array_t state_in,
+    image2d_array_t state_out,
+    image2d_array_t output
+    )
+{
+    int gidx = get_global_id(0);
+    int gidy = get_global_id(1);
+    int2 coord = (int2)(0, gidy);
+    int4 coord_bias = (int4)(gidx, 0, 0, 0);
+    int2 coord_out = (int2)(gidx, gidy);
+    int2 coord_weight = (int2)(0, 0);
+    half bias_fp16;
+    short last_recur;
+    float last_recur_fp16;
+    vxc_int4 act_val = (vxc_int4)(0);
+    float4 bias_fp32 = read_imagef(bias, coord_bias);
+    float sum = bias_fp32.s0;
+
+    coord_bias.x = 0;
+    act_val = read_imagei(act, coord_bias);
+    vxc_int4 rank = read_imagei(ranks, coord_bias);
+    int rankVal = rank.x > 0 ? rank.x : 1;
+
+    vxc_short8 inputVal, weightVal;
+    short tmpVal0, tmpVal1;
+    vxc_half8 input_fp16, weight_fp16;
+    float tmpSum, tmpData0, tmpData1;
+    half tmpOut;
+    vxc_short4 result;
+    short stride_s = (short)stride;
+    short index_s = 0;
+    for(int r = 0; r < rankVal; r++)
+    {
+        float activation = 0.0f;
+        int idx = gidx * rankVal + r;
+        coord_weight.x = 0;
+        coord_weight.y = idx;
+        coord.x = 0;
+        for(int i = 0; i < input_size; i+=8)
+        {
+            VXC_ReadImage(inputVal, input, coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(weightVal, weight, coord_weight, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+            coord.x += 8;
+            coord_weight.x += 8;
+            _viv_asm(COPY, input_fp16, inputVal, 16);
+            _viv_asm(COPY, weight_fp16, weightVal, 16);
+            VXC_DP8x2(tmpSum, input_fp16, weight_fp16, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniMulAccAddFp16Fp16_8x2);
+            activation += tmpSum;
+        }
+
+        coord_weight.x = memory_size_minus1;
+        VXC_ReadImage(last_recur, recurrent, coord_weight, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        _viv_asm(COPY, bias_fp16, last_recur, 2);
+        last_recur_fp16 = convert_float(bias_fp16);
+        sum += activation * last_recur_fp16;
+
+        //
+        coord_weight.x = 0;
+        int offset = idx * memory_size;
+        int index = 0;
+        for(int i = 0; i < memory_size_minus1; ++i)
+        {
+            index = offset + i;
+            index_s = (short)index;
+            //coord_bias.x = index % stride;
+            //coord_bias.y = index / stride;
+            coord_bias.x = (index_s % stride_s);
+            coord_bias.y = (index_s / stride_s);
+            VXC_ReadImage(tmpVal0, recurrent, coord_weight, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(tmpVal1, state_in, coord_bias.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            coord_weight.x++;
+            _viv_asm(COPY, bias_fp16, tmpVal0, 2);
+            _viv_asm(COPY, tmpOut, tmpVal1, 2);
+            tmpData0 = convert_float(bias_fp16);
+            tmpData1 = convert_float(tmpOut);
+            sum += tmpData0 * tmpData1;
+        }
+
+        coord_bias.y = gidy;
+        coord_out.y = gidy;
+        for(int i = 0; i < memory_size_minus1 - 1; i++)
+        {
+            index = offset + i;
+            coord_bias.x = (index + 1);
+            coord_out.x = (index);
+            VXC_ReadImage(tmpVal0, state_in, coord_bias.xy, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_WriteImage(state_out, coord_out, tmpVal0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        }
+        _viv_asm(CONV, tmpOut, activation);
+        _viv_asm(COPY, result, tmpOut, 2);
+        index = offset + memory_size_minus1 - 1;
+        coord_out.x = (index);
+        VXC_WriteImage(state_out, coord_out, result, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+        coord_out.x = (index + 1);
+        result.x = 0;
+        VXC_WriteImage(state_out, coord_out, result, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+    }
+    coord_out = (int2)(gidx, gidy);
+
+    if(act_val.s0 == ACTIVATION_RELU)
+        sum = fmax(0.0f, sum);
+    else if(act_val.s0 == ACTIVATION_RELU1)
+        sum = fmin(fmax(sum, -1), 1.0f);
+    else if(act_val.s0 == ACTIVATION_RELU6)
+        sum = fmin(fmax(sum, 0.0f), 6.0f);
+
+    _viv_asm(CONV, tmpOut, sum);
+    _viv_asm(COPY, result, tmpOut, 2);
+    VXC_WriteImage(output, coord_out, result, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}

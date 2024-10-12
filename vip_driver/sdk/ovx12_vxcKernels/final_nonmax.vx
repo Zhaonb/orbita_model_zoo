@@ -1,0 +1,100 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+#define WORKGROUP_SIZE    32
+
+_viv_uniform int width;
+_viv_uniform int height;
+_viv_uniform int r;
+_viv_uniform float r2;
+_viv_uniform int area;
+
+
+__kernel __attribute__((reqd_work_group_size(WORKGROUP_SIZE, 1, 1))) void final_nonmaxsuppression
+(
+    __read_only  image2d_t input,
+    __read_only  image2d_t tmp_input,
+    __write_only image2d_t output,
+                 float     radius
+)
+{
+    Image img_in0 = create_image_from_image2d(input, 4);
+    Image img_in1 = create_image_from_image2d(tmp_input, 4);
+    Image img_out = create_image_from_image2d(output, 4);
+    __global float* input_ptr = (__global float*)img_in0.ptr;
+    __global int* mask_ptr = (__global int*)img_in1.ptr;
+    __global float* dst_ptr = (__global float*)img_out.ptr;
+
+    __local int lcl_flg[1];
+    float4 zero = (float4)(0);
+    do
+    {
+        if(get_local_id(0) == 0)
+            lcl_flg[0] = 0;
+        int updateFlg = 0;
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        for(int row = 0; row < height; row++)
+        {
+            for(int col = get_local_id(0); col < width; col += WORKGROUP_SIZE)
+            {
+                int index = col + row * width;
+                float data = input_ptr[index];
+                int mask = mask_ptr[index];
+                if(mask == 2)
+                {
+                    dst_ptr[index] = data;
+                    mask_ptr[index] = 1;
+                }
+                else if(data > 0 && mask == 0)
+                {
+                    int max_flg = 1;
+
+                    for(int j = -r; j <= r; j++)
+                    {
+                        for(int i = -r; i <= r; i++)
+                        {
+                            float d = (float)i * i + j * j;
+                            int offset = index + i + j * width;
+                            if(d < r2 && d > 2.0f && offset < area && offset >= 0)
+                            {
+                                float data1 = input_ptr[offset];
+                                if(data1 > data)
+                                {
+                                    max_flg = 0;
+                                    j = r + 1;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if(max_flg)
+                    {
+                        mask_ptr[index] = 1;
+                        updateFlg |= 1;
+                        dst_ptr[index] = data;
+                        for(int j = -r; j <= r; j++)
+                        {
+                            for(int i = -r; i <= r; i++)
+                            {
+                                float d = (float)i * i + j * j;
+                                int offset = index + i + j * width;
+                                if(d < r2 && d != 0 && offset < area && offset >= 0)
+                                {
+                                    input_ptr[offset] = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        atom_add(lcl_flg, updateFlg);
+        barrier(CLK_LOCAL_MEM_FENCE);
+        if(lcl_flg[0] == 0)
+            break;
+        barrier(CLK_LOCAL_MEM_FENCE);
+   } while(1);
+}

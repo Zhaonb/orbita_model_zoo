@@ -1,0 +1,94 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+float mysqrt(float x)
+{
+    float xhalf = 0.5f*x;
+    int i = *(int*)&x;
+    i = 0x5f375a86-(i>>1);
+    x = *(float*)&i;
+    x = x*(1.5f-xhalf*x*x);
+    x = x*(1.5f-xhalf*x*x);
+    x = x*(1.5f-xhalf*x*x);
+    return 1/x;
+}
+
+__kernel void hog_cells(
+    __read_only image2d_t in_image,
+    global int* cell_width,
+    global int* cell_height,
+    global int* num_bins,
+    global void* magnitudes,
+    global void* bins,
+    global int* data_type
+)
+{
+
+    const int cellx = get_global_id(0);
+    const int celly = get_global_id(1);
+    unsigned char gx1, gx2, gy1, gy2;
+    float gx;
+    float gy;
+    float orientation;
+    float magnitude;
+    char bin;
+    int width, height;
+    int cell_w, cell_h, num_orientations, num_cellw;
+    float num_div_360;
+    int dataType;
+
+    dataType = *data_type;
+    cell_w = *cell_width;
+    cell_h = *cell_height;
+    num_orientations = *num_bins;
+    width = get_image_width(in_image);
+    height = get_image_height(in_image);
+    num_div_360 = (float)num_orientations / 360.0f;
+    num_cellw = (int)floor(((float)width) / ((float)cell_w));
+    for(int y=0; y<cell_h; y++){
+        for(int x=0; x<cell_w; x++){
+            //calculating gx and gy
+            int i = cellx * cell_w + x;
+            int j = celly * cell_h + y;
+            int x1 = i - 1 < 0 ? 0 : i - 1;
+            int x2 = i + 1 >= width ? width - 1 : i + 1;
+            VXC_ReadImage(gx1, in_image, (int2)(x1, j), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(gx2, in_image, (int2)(x2, j), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            int tempgx = (int)gx2-(int)gx1;
+            gx = (float)tempgx;
+
+            int y1 = j - 1 < 0 ? 0 : j - 1;
+            int y2 = j + 1 >= height ? height - 1 : j + 1;
+            VXC_ReadImage(gy1, in_image, (int2)(i, y1), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(gy2, in_image, (int2)(i, y2), VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+            int tempgy = (int)gy2 - (int)gy1;
+            gy = (float)tempgy;
+
+            //calculating mag and orientation
+            magnitude = sqrt(gx*gx + gy*gy);//sqrt(pow(gx, 2) + pow(gy, 2));
+            orientation = fmod(atan2(gy, gx + 0.00000000000001)
+                * (180 / 3.14159265), 360);
+            if (orientation < 0) {
+                orientation += 360;
+            }
+
+            //calculating bin.
+            bin = (char)floor(orientation * num_div_360);
+
+            //calculating which cell it belongs to
+            int magnitudes_index = celly * num_cellw + cellx;
+            int bins_index = (celly * num_cellw + cellx) * num_orientations + bin;
+            int magnitudes_pos = magnitudes_index * sizeof(short);
+            int bins_pos = bins_index * sizeof(char) * dataType;
+            void *mag_ptr = (char *)magnitudes + magnitudes_pos;
+            void *bins_ptr = (char *)bins + bins_pos;
+            *(short *)(mag_ptr) += (short)((int)magnitude / (cell_w * cell_h));
+            if(dataType == 1){
+                *(char *)(bins_ptr) += (char)((int)magnitude / (cell_w * cell_h));
+            }else{
+                *(short *)(bins_ptr) += (short)((int)magnitude / (cell_w * cell_h));
+            }
+        }//end for1
+    }//end for2
+}

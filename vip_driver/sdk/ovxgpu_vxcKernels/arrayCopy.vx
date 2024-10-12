@@ -1,0 +1,70 @@
+
+__kernel void copy_16Bto16B(
+    global unsigned char* input,
+    global unsigned char* output,
+    global int* siSize,
+    global int* diSize,
+    global int* outNum
+)
+{
+    const int idx = get_global_id(0);
+    int4* input_ptr = (int4*)input + idx;
+    int4  output_data = input_ptr[0];
+    *((int4*)output + idx) = output_data;
+}
+
+__kernel void copy_8Bto8B(
+    global unsigned char* input,
+    global unsigned char* output,
+    global int* siSize,
+    global int* diSize,
+    global int* outNum
+)
+{
+    const int idx = get_global_id(0);
+    int2* input_ptr = (int2*)input + idx;
+    int2  output_data = input_ptr[0];
+    *((int2*)output + idx) = output_data;
+}
+
+__kernel void copy_4Bto4B(
+    global unsigned int* input,
+    global unsigned int* output,
+    global int* siSize,
+    global int* diSize,
+    global int* outNum
+)
+{
+    const int idx = get_global_id(0);
+    int* input_ptr = (int*)input + idx;
+    int  output_data = input_ptr[0];
+    *((int*)output + idx) = output_data;
+}
+
+__kernel void copy_2Bto2B(
+    global unsigned short* input,
+    global unsigned short* output,
+    global int* siSize,
+    global int* diSize,
+    global int* outNum
+)
+{
+    const int idx = get_global_id(0);
+    short* input_ptr = (short*)input + idx;
+    short  output_data = input_ptr[0];
+    *((short*)output + idx) = output_data;
+}
+
+__kernel void copy_1Bto1B(
+    global unsigned char* input,
+    global unsigned char* output,
+    global int* siSize,
+    global int* diSize,
+    global int* outNum
+)
+{
+    const int idx = get_global_id(0);
+    char* input_ptr = (char*)input + idx;
+    char  output_data = input_ptr[0];
+    *((char*)output + idx) = output_data;
+}

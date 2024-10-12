@@ -1,0 +1,171 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform int originx;
+_viv_uniform int originy;
+_viv_uniform int mrows;
+_viv_uniform int mcols;
+_viv_uniform int low_x;
+_viv_uniform int low_y;
+_viv_uniform int high_x;
+_viv_uniform int high_y;
+
+__kernel void non_linear_filter_u1_min
+(
+                       int func,
+    __read_only  image2d_t input,
+             global uchar* matrix,
+    __write_only image2d_t output
+)
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    uint dst[8];
+    uint4 dst0 = (uint4)(0,0,0,0);
+    uint4 src;
+    int i,j,k;
+    for (k = 0; k < 8; k++)
+    {
+        if (pix + k < low_x || pix + k > high_x || piy < low_y || piy > high_y)
+        {
+            src = read_imageui(input, (int2)(pix >> 3, piy));
+            dst[k] = (src.x >> k) & 1;
+        }
+        else
+        {
+            uint min_data = 2;
+            uchar *conv_ptr;
+            uchar mask_data;
+            for (j = -originy; j < mcols - originy; j++)
+            {
+                for (i = -originx; i < mrows - originx; i++)
+                {
+                    conv_ptr = (uchar*)matrix + mrows * (j + originy) + (i + originx);
+                    mask_data = conv_ptr[0];
+                    if (mask_data != 0)
+                    {
+                        src = read_imageui(input, (int2)((pix + k + i) >> 3, piy + j));
+                        min_data = min(min_data, ((src.x >> ((pix + k + i) & 7)) & 1));
+                    }
+               }
+            }
+            dst[k] = min_data;
+        }
+    }
+    for (int i = 0; i < 8; i++)
+    {
+        dst0.x += exp2(i) * dst[i];
+    }
+    write_imageui(output, (int2)(pix >> 3,piy), dst0);
+}
+
+__kernel void non_linear_filter_u1_max
+(
+                       int func,
+    __read_only  image2d_t input,
+             global uchar* matrix,
+    __write_only image2d_t output
+)
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    uint dst[8];
+    uint4 dst0 = (uint4)(0,0,0,0);
+    uint4 src;
+    int i,j,k;
+    for (k = 0; k < 8; k++)
+    {
+        if (pix + k < low_x || pix + k > high_x || piy < low_y || piy > high_y)
+        {
+            src = read_imageui(input, (int2)(pix >> 3, piy));
+            dst[k] = (src.x >> k) & 1;
+        }
+        else
+        {
+            uint max_data = 0;
+            uchar *conv_ptr;
+            uchar mask_data;
+            for (j = -originy; j < mcols - originy; j++)
+            {
+                for (i = -originx; i < mrows - originx; i++)
+                {
+                    conv_ptr = (uchar*)matrix + mrows * (j + originy) + (i + originx);
+                    mask_data = conv_ptr[0];
+                    if (mask_data != 0)
+                    {
+                        src = read_imageui(input, (int2)((pix + k + i) >> 3, piy + j));
+                        max_data = max(max_data, ((src.x >> ((pix + k + i) & 7)) & 1));
+                    }
+               }
+            }
+            dst[k] = max_data;
+        }
+    }
+    for (int i = 0; i < 8; i++)
+    {
+        dst0.x += exp2(i) * dst[i];
+    }
+    write_imageui(output, (int2)(pix >> 3,piy), dst0);
+}
+__kernel void non_linear_filter_u1_median
+(
+                       int func,
+    __read_only  image2d_t input,
+             global uchar* matrix,
+    __write_only image2d_t output
+)
+{
+    int pix = get_global_id(0);
+    int piy = get_global_id(1);
+    uint dst[8];
+    uint4 dst0 = (uint4)(0,0,0,0);
+    uint4 src;
+    int i,j,k;
+    for (k = 0; k < 8; k++)
+    {
+        if (pix + k < low_x || pix + k > high_x || piy < low_y || piy > high_y)
+        {
+            src = read_imageui(input, (int2)(pix >> 3, piy));
+            dst[k] = (src.x >> k) & 1;
+        }
+        else
+        {
+            uint replace;
+            uint order[25] = {0};
+            uint count = 0;
+            uchar *conv_ptr;
+            uchar mask_data;
+            for (j = -originy; j < mcols - originy; j++)
+            {
+                for (i = -originx; i < mrows - originx; i++)
+                {
+                    conv_ptr = (uchar*)matrix + mrows * (j + originy) + (i + originx);
+                    mask_data = conv_ptr[0];
+                    if (mask_data != 0)
+                    {
+                        src = read_imageui(input, (int2)((pix + k + i) >> 3, piy + j));
+                        order[count] = ((src.x >> ((pix + k + i) & 7)) & 1);
+                        count++;
+                    }
+               }
+            }
+            for (i = 0; i < count - 1; i++)
+            {
+                for (j = i + 1; j < count; j++)
+                {
+                    if (order[j] > order[i])
+                    {
+                        replace = order[j];
+                        order[j] = order[i];
+                        order[i] = replace;
+                    }
+               }
+            }
+            dst[k] = order[(count-1) >> 1];
+        }
+    }
+    for (int i = 0; i < 8; i++)
+    {
+        dst0.x += exp2(i) * dst[i];
+    }
+    write_imageui(output, (int2)(pix >> 3,piy), dst0);
+}

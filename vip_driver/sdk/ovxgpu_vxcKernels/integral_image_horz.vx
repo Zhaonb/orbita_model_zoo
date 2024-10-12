@@ -1,0 +1,71 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+_viv_uniform int stride;
+
+__kernel __attribute__((reqd_work_group_size(32, 1, 1))) void integral_image_horz(
+        __read_only  image2d_t input,
+        __write_only image2d_t output)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int4 coord1 = (int4)(get_global_id(0) + 1, get_global_id(1), get_global_id(0) + 2, get_global_id(0) + 3);
+    int lidx = get_local_id(0);
+
+    uint4 src0 = read_imageui(input, coord);
+    uint4 src1 = read_imageui(input, coord1.xy);
+    uint4 src2 = read_imageui(input, coord1.zy);
+    uint4 src3 = read_imageui(input, coord1.wy);
+
+    __local uint cur_sum[32];
+    __local uint last_round[1];
+
+    uint4 sum = (uint4)0;
+    sum.x = src0.x;
+    sum.y = src0.x + src1.x;
+    sum.z = src2.x + sum.y;
+    sum.w = src3.x + sum.z;
+
+    cur_sum[lidx] = sum.w;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for(int i = 0; i < lidx; i++)
+    {
+        sum += cur_sum[i];
+    }
+    if(lidx == 31)
+    {
+        last_round[0] = sum.w;
+    }
+    write_imageui(output, coord, sum.xxxx);
+    write_imageui(output, coord1.xy, sum.yyyy);
+    write_imageui(output, coord1.zy, sum.zzzz);
+    write_imageui(output, coord1.wy, sum.wwww);
+
+    for(coord.x += 128; coord.x < stride; coord.x += 128)
+    {
+        src0 = read_imageui(input, coord);
+        coord1.xzw += 128;
+        src1 = read_imageui(input, coord1.xy);
+        src2 = read_imageui(input, coord1.zy);
+        src3 = read_imageui(input, coord1.wy);
+        sum.x = src0.x;
+        sum.y = src0.x + src1.x;
+        sum.z = src2.x + sum.y;
+        sum.w = src3.x + sum.z;
+        barrier(CLK_LOCAL_MEM_FENCE);
+        cur_sum[lidx] = sum.w;
+        barrier(CLK_LOCAL_MEM_FENCE);
+        sum += last_round[0];
+        for(int i = 0; i < lidx; i++)
+        {
+            sum += cur_sum[i];
+        }
+        if(lidx == 31)
+        {
+            last_round[0] = sum.w;
+        }
+        write_imageui(output, coord, sum.xxxx);
+        write_imageui(output, coord1.xy, sum.yyyy);
+        write_imageui(output, coord1.zy, sum.zzzz);
+        write_imageui(output, coord1.wy, sum.wwww);
+    }
+}

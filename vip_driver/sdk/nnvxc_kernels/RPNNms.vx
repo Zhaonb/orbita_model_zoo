@@ -1,0 +1,79 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+#define MAX(a,b) ((a)>(b)?(a):(b))
+#define MIN(a,b) ((a)<(b)?(a):(b))
+#define THREAD_NUM 32
+_viv_uniform VXC_512Bits UniformDp4x4_cvtF16toF32Score;
+_viv_uniform VXC_512Bits UniformDp4x4_cvtF16toF32Info;
+
+__kernel __attribute__((reqd_work_group_size(32,1,1)))
+    void NmsVXC(image2d_array_t proposal,
+    image2d_array_t roi_indices,
+    global unsigned int * real_roi_t,
+    global int * pre_nms_topn,
+    global int * post_nms_topn,
+    global float * nms_thresh){
+        int x = get_global_id(0);
+        float score,score1;
+        int offset,offset1;
+
+        int2 coord  = (int2)(0,0);
+        int2 coord1 = (int2)(0,0);
+        const short sneg1 = -17408;
+        int i, r, p=0;
+        r = *pre_nms_topn ;
+        int post_nms_topn1 = *post_nms_topn - 1;
+        while ( p < r){
+            vxc_short8 rect_s8;
+            vxc_half8 rect_h8;
+            float4 rt_p;
+            coord.y = p;
+            VXC_ReadImage(rect_s8, proposal,  coord, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+            _viv_asm(COPY, rect_h8, rect_s8, 16);
+            VXC_DP4x4(score, rect_h8, rect_h8, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), UniformDp4x4_cvtF16toF32Score);
+            VXC_DP4x4(rt_p, rect_h8, rect_h8, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDp4x4_cvtF16toF32Info);
+            barrier(CLK_GLOBAL_MEM_FENCE);
+            if (score > 0.0){
+                for (i= p+1+x; i<r; i+=THREAD_NUM ){
+                    vxc_short8 rect1_s8;
+                    vxc_half8 rect1_h8;
+                    coord1.y = i;
+                    VXC_ReadImage(rect1_s8, proposal, coord1, VXC_5BITOFFSET_XY(0,0), VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+                    _viv_asm(COPY,rect1_h8,rect1_s8,16);
+                    VXC_DP4x4(score1, rect1_h8, rect1_h8, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), UniformDp4x4_cvtF16toF32Score);
+                    if (score1 > 0.0){
+                        float4 rt_i;
+                        VXC_DP4x4(rt_i, rect1_h8, rect1_h8, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0), UniformDp4x4_cvtF16toF32Info);
+                        float4 xy0  = MAX(rt_p,rt_i);
+                        float4 xy1  = MIN(rt_p,rt_i);
+                        float2 m1 = xy1.zw-xy0.xy+(float2)(1.0f,1.0f);
+                        float2 sz = MAX((float2)(0.0f,0.0f), m1);
+                        float area_inter = sz.x*sz.y;
+                        m1 = rt_i.zw-rt_i.xy+(float2)(1.0f,1.0f);
+                        sz = MAX((float2)(0.0f,0.0f), m1);
+                        float area_i =  sz.x*sz.y;
+                        m1 = rt_p.zw-rt_p.xy+(float2)(1.0f,1.0f);
+                        sz = MAX((float2)(0.0f,0.0f), m1);
+                        float area_p =  sz.x*sz.y;
+                        float rate = area_inter/(area_i + area_p - area_inter);
+                        if (rate > *nms_thresh) {
+                            int2 coord2 =  (int2)(4, coord1.y);
+                            VXC_WriteImage(proposal, coord2, sneg1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+                        }
+                    }
+                }
+                barrier(CLK_GLOBAL_MEM_FENCE);
+                if(x==0){
+                    int4 coord_out = (int4)(*real_roi_t,0,0,0);
+                    float p_f = (float)p;
+                    write_imagef(roi_indices,coord_out,p_f);
+                    int num = atomic_inc(real_roi_t);
+                    if(num >= post_nms_topn1)
+                        break;
+                }
+            }
+            p++;
+        }
+        return;
+}

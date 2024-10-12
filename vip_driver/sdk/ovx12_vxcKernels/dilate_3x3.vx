@@ -1,0 +1,138 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+__kernel void dilate_3x3_U8toU8
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(1), get_global_id(1));
+
+    vxc_uchar16 src0, src1, src2, src3, src4, src5;
+    vxc_uchar16 dst0, dst1;
+
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord.xy, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input, coord.xy, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src4, input, coord.xy, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src5, input, coord.xy, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.zw += (int2)(1, 2);
+
+#if (VX_VERSION==1)
+    VXC_Filter(dst0, src0, src1, src2, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Max, 1));
+#else
+    VXC_VertMax3(dst0, src0, src1, src2, VXC_MODIFIER_CLAMP(0, 15, 0, 0));
+    VXC_HorzMax3(dst0, dst0, VXC_MODIFIER_CLAMP(0, 13, 0, 0));
+#endif
+    VXC_WriteImage(output, coord.xy, dst0, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+
+    coord.y += 3;
+
+#if (VX_VERSION==1)
+    VXC_Filter(dst1, src1, src2, src3, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Max, 1));
+#else
+    VXC_VertMax3(dst1, src1, src2, src3, VXC_MODIFIER_CLAMP(0, 15, 0, 0));
+    VXC_HorzMax3(dst1, dst1, VXC_MODIFIER_CLAMP(0, 13, 0, 0));
+#endif
+    VXC_WriteImage(output, coord.xz, dst1, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+
+#if (VX_VERSION==1)
+    VXC_Filter(dst0, src2, src3, src4, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Max, 1));
+#else
+    VXC_VertMax3(dst0, src2, src3, src4, VXC_MODIFIER_CLAMP(0, 15, 0, 0));
+    VXC_HorzMax3(dst0, dst0, VXC_MODIFIER_CLAMP(0, 13, 0, 0));
+#endif
+    VXC_WriteImage(output, coord.xw, dst0, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+
+#if (VX_VERSION==1)
+    VXC_Filter(dst1, src3, src4, src5, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Max, 1));
+#else
+    VXC_VertMax3(dst1, src3, src4, src5, VXC_MODIFIER_CLAMP(0, 15, 0, 0));
+    VXC_HorzMax3(dst1, dst1, VXC_MODIFIER_CLAMP(0, 13, 0, 0));
+#endif
+    VXC_WriteImage(output, coord.xy, dst1, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void dilate_3x3_U1toU1
+    (
+    __read_only  image2d_t input,
+    __write_only image2d_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(1), get_global_id(1));
+
+    vxc_uchar16 src0, src1, src2, src3, src4, src5;
+    vxc_uchar16 dst0, dst1;
+
+    VXC_ReadImage(src0, input, coord.xy, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src1, input, coord.xy, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src2, input, coord.xy, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src3, input, coord.xy, VXC_5BITOFFSET_XY(-1, 2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src4, input, coord.xy, VXC_5BITOFFSET_XY(-1, 3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(src5, input, coord.xy, VXC_5BITOFFSET_XY(-1, 4), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    coord.zw += (int2)(1, 2);
+
+    dst0 = src1 | src2;
+    dst1 = dst0 | src0;
+
+    vxc_ushort8 v, v0, v1, v2;
+    vxc_uchar16 a, b, c;
+    vxc_ushort8 config0 = {0x1707, 0x3727, 0x5747, 0x7767, 0x1010, 0x1010, 0x1010, 0x1010};
+    vxc_ushort8 config1 = {0x1808, 0x3828, 0x5848, 0x7868, 0x1010, 0x1010, 0x1010, 0x1010};
+    vxc_ushort8 config2 = {0x1909, 0x3929, 0x5949, 0x7969, 0x1010, 0x1010, 0x1010, 0x1010};
+
+    _viv_asm(COPY, v, dst1, 16);
+    VXC_BitExtract(v0, v, v, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(v1, v, v, config1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(v2, v, v, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, a, v0, 16);
+    _viv_asm(COPY, b, v1, 16);
+    _viv_asm(COPY, c, v2, 16);
+    dst1 = a | b | c;
+    VXC_WriteImage(output, coord.xy, dst1, VXC_MODIFIER(0, 14, 0, VXC_RM_TowardZero, 0));
+    coord.y += 3;
+
+    dst1 = dst0 | src3;
+    _viv_asm(COPY, v, dst1, 16);
+    VXC_BitExtract(v0, v, v, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(v1, v, v, config1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(v2, v, v, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, a, v0, 16);
+    _viv_asm(COPY, b, v1, 16);
+    _viv_asm(COPY, c, v2, 16);
+    dst1 = a | b | c;
+
+    VXC_WriteImage(output, coord.xz, dst1, VXC_MODIFIER(0, 14, 0, VXC_RM_TowardZero, 0));
+
+    dst0 = src3 | src4;
+    dst1 = dst0 | src2;
+    _viv_asm(COPY, v, dst1, 16);
+    VXC_BitExtract(v0, v, v, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(v1, v, v, config1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(v2, v, v, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, a, v0, 16);
+    _viv_asm(COPY, b, v1, 16);
+    _viv_asm(COPY, c, v2, 16);
+    dst1 = a | b | c;
+
+    VXC_WriteImage(output, coord.xw, dst1, VXC_MODIFIER(0, 14, 0, VXC_RM_TowardZero, 0));
+
+
+    dst1 = dst0 | src5;
+    _viv_asm(COPY, v, dst1, 16);
+    VXC_BitExtract(v0, v, v, config0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(v1, v, v, config1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(v2, v, v, config2, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    _viv_asm(COPY, a, v0, 16);
+    _viv_asm(COPY, b, v1, 16);
+    _viv_asm(COPY, c, v2, 16);
+    dst1 = a | b | c;
+
+    VXC_WriteImage(output, coord.xy, dst1, VXC_MODIFIER(0, 14, 0, VXC_RM_TowardZero, 0));
+}
+

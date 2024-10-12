@@ -1,0 +1,239 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int input_depth;
+_viv_uniform int dual_depth;
+
+__kernel void reorg_8Bitsto8Bits_S2
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+
+    vxc_uchar16 src0, src1;
+    vxc_uchar8 dst;
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord.w, baseAddr);
+
+    VXC_OP4(img_load_3d, src0, input, coord.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, src1, input, coord.xywz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    int4 coord_out;
+
+    coord_out.xy = coord.xy >> 1;
+    coord_out.z = coord.z + (coord.x & 1) * input_depth + (coord.y & 1) * dual_depth;
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+
+    dst = src0.s02468ace;
+
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.zw  = coord_out.zw + (int2)(input_depth, output_desc.s4 * input_depth);
+
+    dst = src0.s13579bdf;
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+
+    //coord_out.y = coord_out.y + 1;
+    coord_out.zw  = coord_out.zw + (int2)(input_depth, output_desc.s4 * input_depth);
+
+    dst = src1.s02468ace;
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.zw  = coord_out.zw + (int2)(input_depth, output_desc.s4 * input_depth);
+    dst = src1.s13579bdf;
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+_viv_uniform VXC_512Bits uniU8MulAndPostShift_2x8;
+_viv_uniform int2 multAndoutZP;//[0:15] multiplier, [31:63] output zp
+#define REORG_INPUT_8BITS(name0, name1, src_type, dst_type, save_type, cp_bytes) \
+__kernel void reorg_##name0##to##name1##_S2 \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2)); \
+ \
+    src_type src0, src1, src2; \
+    dst_type dst0; \
+ \
+    int8 input_desc; \
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc)); \
+    int baseAddr = (int)coord.z * input_desc.s4 + input_desc.s0; \
+    _viv_asm(MOV, coord.w, baseAddr); \
+ \
+    VXC_OP4(img_load_3d, src0, input, coord.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+    VXC_OP4(img_load_3d, src1, input, coord.xywz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0)); \
+ \
+    int4 coord_out; \
+ \
+    coord_out.xy = coord.xy >> 1; \
+    coord_out.z = coord.z + (coord.x & 1) * input_depth + (coord.y & 1) * dual_depth; \
+ \
+    int8 output_desc; \
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc)); \
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0; \
+    _viv_asm(MOV, coord_out.w, baseAddr); \
+ \
+    src2.lo = src0.s02468ace; \
+    vxc_ushort8 multiplier; \
+    _viv_asm(COPY, multiplier, multAndoutZP, 16); \
+    VXC_DP2x8(dst0, src2, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_2x8); \
+    save_type dst; \
+    _viv_asm(COPY, dst, dst0, cp_bytes); \
+ \
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+    coord_out.zw  = coord_out.zw + (int2)(input_depth, output_desc.s4 * input_depth); \
+ \
+    src2.lo = src0.s13579bdf; \
+    VXC_DP2x8(dst0, src2, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_2x8); \
+    _viv_asm(COPY, dst, dst0, cp_bytes); \
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+    coord_out.zw  = coord_out.zw + (int2)(input_depth, output_desc.s4 * input_depth); \
+ \
+    src2.lo = src1.s02468ace; \
+    VXC_DP2x8(dst0, src2, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_2x8); \
+    _viv_asm(COPY, dst, dst0, cp_bytes); \
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+    coord_out.zw  = coord_out.zw + (int2)(input_depth, output_desc.s4 * input_depth); \
+ \
+    src2.lo = src1.s13579bdf; \
+    VXC_DP2x8(dst0, src2, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_2x8); \
+    _viv_asm(COPY, dst, dst0, cp_bytes); \
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));\
+}
+REORG_INPUT_8BITS(U8, U8,  vxc_uchar16, vxc_uchar8, vxc_uchar8, 8)
+REORG_INPUT_8BITS(U8, F16, vxc_uchar16, vxc_half8,  vxc_short8, 16)
+REORG_INPUT_8BITS(I8, I8,  vxc_char16,  vxc_char8,  vxc_char8,  8)
+REORG_INPUT_8BITS(I8, F16, vxc_char16,  vxc_half8,  vxc_short8, 16)
+
+_viv_uniform VXC_512Bits uniPackEvenData_2x8;
+_viv_uniform VXC_512Bits uniPackOddData_2x8;
+__kernel void reorg_16Bitsto16Bits_S2
+    (
+    __read_only  image2d_array_t input,
+    __write_only image2d_array_t output
+    )
+{
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2));
+
+    vxc_ushort8 src0, src1, src2, src3;
+    vxc_ushort8 dst;
+
+    int8 input_desc;
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc));
+    int baseAddr = (int)coord.z * input_desc.s4 + input_desc.s0;
+    _viv_asm(MOV, coord.w, baseAddr);
+
+    VXC_OP4(img_load_3d, src0, input, coord.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, src1, input, coord.xywz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, src2, input, coord.xywz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_OP4(img_load_3d, src3, input, coord.xywz, VXC_5BITOFFSET_XY(8, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    int4 coord_out;
+
+    coord_out.xy = coord.xy >> 1;
+    coord_out.z = coord.z + (coord.x & 1) * input_depth + (coord.y & 1) * dual_depth;
+
+    int8 output_desc;
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc));
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0;
+    _viv_asm(MOV, coord_out.w, baseAddr);
+
+    VXC_DP2x8(dst, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniPackEvenData_2x8);
+
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.zw  = coord_out.zw + (int2)(input_depth, output_desc.s4 * input_depth);
+
+    VXC_DP2x8(dst, src0, src1, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniPackOddData_2x8);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+
+    coord_out.zw  = coord_out.zw + (int2)(input_depth, output_desc.s4 * input_depth);
+
+    VXC_DP2x8(dst, src2, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniPackEvenData_2x8);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+    coord_out.zw  = coord_out.zw + (int2)(input_depth, output_desc.s4 * input_depth);
+
+    VXC_DP2x8(dst, src2, src3, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniPackOddData_2x8);
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));
+}
+
+#define REORG_INPUT_16BITS(name0, name1, src_type, dst_type, save_type, cp_bytes) \
+__kernel void reorg_##name0##to##name1##_S2 \
+    ( \
+    __read_only  image2d_array_t input, \
+    __write_only image2d_array_t output \
+    ) \
+{ \
+    int4 coord = (int4)(get_global_id(0), get_global_id(1), get_global_id(2), get_global_id(2)); \
+ \
+    vxc_short8 v0, v1, v2, v3, v; \
+    src_type src; \
+    dst_type dst0; \
+ \
+    int8 input_desc; \
+    _viv_asm(COPY, input_desc, input, sizeof(input_desc)); \
+    int baseAddr = (int)coord.z * input_desc.s4 + input_desc.s0; \
+    _viv_asm(MOV, coord.w, baseAddr); \
+ \
+    VXC_OP4(img_load_3d, v0, input, coord.xywz, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    VXC_OP4(img_load_3d, v1, input, coord.xywz, VXC_5BITOFFSET_XY(8, 0), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    VXC_OP4(img_load_3d, v2, input, coord.xywz, VXC_5BITOFFSET_XY(0, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+    VXC_OP4(img_load_3d, v3, input, coord.xywz, VXC_5BITOFFSET_XY(8, 1), VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0)); \
+ \
+    int4 coord_out; \
+ \
+    coord_out.xy = coord.xy >> 1; \
+    coord_out.z = coord.z + (coord.x & 1) * input_depth + (coord.y & 1) * dual_depth; \
+ \
+    int8 output_desc; \
+    _viv_asm(COPY, output_desc, output, sizeof(output_desc)); \
+    baseAddr = (int)coord_out.z * output_desc.s4 + output_desc.s0; \
+    _viv_asm(MOV, coord_out.w, baseAddr); \
+ \
+    VXC_DP2x8(v, v0, v1, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniPackEvenData_2x8); \
+    _viv_asm(COPY, src, v, 16); \
+    vxc_ushort8 multiplier; \
+    _viv_asm(COPY, multiplier, multAndoutZP, 16); \
+    VXC_DP2x8(dst0, src, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_2x8); \
+    save_type dst; \
+    _viv_asm(COPY, dst, dst0, cp_bytes); \
+ \
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+    coord_out.zw = coord_out.zw + (int2)(input_depth, output_desc.s4 * input_depth); \
+ \
+    VXC_DP2x8(v, v0, v1, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniPackOddData_2x8); \
+    _viv_asm(COPY, src, v, 16); \
+    VXC_DP2x8(dst0, src, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_2x8); \
+    _viv_asm(COPY, dst, dst0, cp_bytes); \
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+    coord_out.zw  = coord_out.zw + (int2)(input_depth, output_desc.s4 * input_depth); \
+ \
+    VXC_DP2x8(v, v2, v3, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniPackEvenData_2x8); \
+    _viv_asm(COPY, src, v, 16); \
+    VXC_DP2x8(dst0, src, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_2x8); \
+    _viv_asm(COPY, dst, dst0, cp_bytes); \
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0)); \
+    coord_out.zw  = coord_out.zw + (int2)(input_depth, output_desc.s4 * input_depth); \
+ \
+    VXC_DP2x8(v, v2, v3, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniPackOddData_2x8); \
+    _viv_asm(COPY, src, v, 16); \
+    VXC_DP2x8(dst0, src, multiplier, VXC_MODIFIER(0, 7, 0, VXC_RM_ToNearestEven, 1), uniU8MulAndPostShift_2x8); \
+    _viv_asm(COPY, dst, dst0, cp_bytes); \
+    VXC_OP4_NoDest(img_store_3d, output, coord_out.xywz, dst, VXC_MODIFIER(0, 7, 0,VXC_RM_TowardZero, 0));\
+}
+REORG_INPUT_16BITS(F16, F16, vxc_half8,  vxc_half8,  vxc_short8, 16)
+REORG_INPUT_16BITS(I16, I16, vxc_short8, vxc_short8, vxc_short8, 16)
+REORG_INPUT_16BITS(I16, F16, vxc_short8, vxc_half8,  vxc_short8, 16)
+REORG_INPUT_16BITS(F16, I16, vxc_half8,  vxc_short8, vxc_short8, 16)
+REORG_INPUT_16BITS(F16, I8,  vxc_half8,  vxc_char8,  vxc_char8,  8)
+REORG_INPUT_16BITS(F16, U8,  vxc_half8,  vxc_uchar8, vxc_uchar8, 8)

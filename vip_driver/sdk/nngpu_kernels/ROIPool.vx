@@ -1,0 +1,432 @@
+#define EPS        (0.000002f)
+
+__kernel void roiPooling_F32_F32toF32 (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       rois,
+    __write_only image2d_array_t output,
+                 int             pool_width,
+                 int             pool_height,
+                 float           spatial_scale,
+                 int             offset,
+                 float           q_pool_width,
+                 float           q_pool_height,
+                 int             input_width,
+                 int             input_height,
+                 int             enable_relu,
+                 int             channel_count
+    )
+{
+    int    depth = get_global_id(1);
+    int    idx   = get_global_id(0);
+    float2 poolWH = (float2)(pool_width, pool_height);
+    int2   roiWH;
+    float2 roi_size_scale;
+    int4   coord_roi = (int4)(0, idx, 0, 0);
+    float4 rect_coord_f;
+    int4   rect_coord;
+    float2 q_PoolWH = (float2)(q_pool_width, q_pool_height);
+    float4 pwh = (float4)(0, 0, 1, 1);
+    int2   inputSize = (int2)(input_width, input_height);
+
+    if (offset == 1)
+    {
+        int batch_idx = convert_int(read_imagef(rois, coord_roi.xy).x);
+        coord_roi.x = 1;
+        depth = depth + batch_idx * channel_count;
+    }
+    rect_coord_f.x = read_imagef(rois, coord_roi.xy).x;
+    coord_roi = coord_roi.xyxx + (int4)(1, 0, 2, 3);
+    rect_coord_f.y = read_imagef(rois, coord_roi.xy).x;
+    rect_coord_f.z = read_imagef(rois, coord_roi.zy).x;
+    rect_coord_f.w = read_imagef(rois, coord_roi.wy).x;
+    rect_coord_f = rect_coord_f * spatial_scale;
+    rect_coord = convert_int4_rte(rect_coord_f);
+
+    roiWH = rect_coord.zw - rect_coord.xy + 1;
+    roiWH = roiWH > 1 ? roiWH : 1;
+    roi_size_scale = convert_float2(roiWH) * q_PoolWH;
+    pwh.xy = 0;
+
+    for (int ph = 0; ph < pool_height; ph++)
+    {
+        pwh.xz = (float2)(0, 1);
+        for (int pw = 0; pw < pool_width; pw++)
+        {
+            float4 tmp = pwh;
+            tmp = tmp * roi_size_scale.xyxy;
+            tmp.xy = floor(tmp.xy);
+            int2 start = convert_int2_rtz(tmp.xy);
+            start += rect_coord.xy;
+            tmp.zw = ceil(tmp.zw - EPS);
+            int2 end = convert_int2_rtz(tmp.zw);
+            end += rect_coord.xy;
+
+            pwh.xz += 1;
+            int4 coord_out = (int4)(ph * pool_width + pw, get_global_id(1), idx, 0);
+            end.xy  = end.xy > 0 ? end.xy : 0;
+            start.xy = start.xy > 0 ?  start.xy : 0;
+            end.xy = min(end.xy, inputSize.xy);
+            start.xy = min(start.xy, inputSize.xy);
+            if(end.y <= start.y || end.x <= start.x)
+            {
+                float4 vec = 0;
+                write_imagef(output, coord_out, vec);
+                continue;
+            }
+
+            float4 output_data = 0;
+            int h = start.y;
+            int4 coord_in0 = (int4)(start.x, start.y, depth, 0);
+
+            output_data = read_imagef(input, coord_in0);
+            do
+            {
+                int w = start.x;
+                do
+                {
+                    int4 coord_in = (int4)(w, h, depth, 0);
+                    float4 vec0;
+                    vec0 = read_imagef(input, coord_in);
+                    w++;
+                    output_data.x = max(output_data.x, vec0.x);
+                } while (w < end.x);
+                h++;
+            } while (h < end.y);
+            if (enable_relu)
+            {
+                output_data = max(0.0f, output_data);
+            }
+            write_imagef(output, coord_out, output_data);
+        }
+        pwh.yw += 1;
+    }
+}
+
+__kernel void roiPooling_U8_F32toU8
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       rois,
+    __write_only image2d_array_t output,
+                 int             pool_width,
+                 int             pool_height,
+                 float           spatial_scale,
+                 int             offset,
+                 float           q_pool_width,
+                 float           q_pool_height,
+                 int             input_width,
+                 int             input_height,
+                 int             minVal,
+                 float           input_zp,
+                 float           output_zp,
+                 float           uint8Scale,
+                 int             channel_count
+    )
+{
+    int    depth = get_global_id(1);
+    int    idx   = get_global_id(0);
+    float2 poolWH = (float2)(pool_width, pool_height);
+    int2   roiWH;
+    float2 roi_size_scale;
+    int4   coord_roi = (int4)(0, idx, 0, 0);
+    float4 rect_coord_f;
+    int4   rect_coord;
+    float2 q_PoolWH = (float2)(q_pool_width, q_pool_height);
+    float4 pwh = (float4)(0, 0, 1, 1);
+    int2   inputSize = (int2)(input_width, input_height);
+
+    if (offset == 1)
+    {
+        int batch_idx = convert_int(as_float(read_imageui(rois, coord_roi.xy).x << 16));
+        coord_roi.x = 1;
+        depth = depth + batch_idx * channel_count;
+    }
+    rect_coord_f.x = read_imagef(rois, coord_roi.xy).x;
+    coord_roi = coord_roi.xyxx + (int4)(1, 0, 2, 3);
+    rect_coord_f.y = read_imagef(rois, coord_roi.xy).x;
+    rect_coord_f.z = read_imagef(rois, coord_roi.zy).x;
+    rect_coord_f.w = read_imagef(rois, coord_roi.wy).x;
+    rect_coord_f = rect_coord_f.xyzw * spatial_scale;
+    rect_coord = convert_int4_rte(rect_coord_f);
+
+    roiWH = rect_coord.zw - rect_coord.xy + 1;
+    roiWH = roiWH > 1 ? roiWH : 1;
+    roi_size_scale = convert_float2(roiWH) * q_PoolWH;
+    pwh.xy = 0;
+
+    for (int ph = 0; ph < pool_height; ph++)
+    {
+        pwh.xz = (float2)(0, 1);
+        for (int pw = 0; pw < pool_width; pw++)
+        {
+            float4 tmp = pwh;
+            tmp = tmp * roi_size_scale.xyxy;
+            tmp.xy = floor(tmp.xy);
+            int2 start = convert_int2_rtz(tmp.xy);
+            start += rect_coord.xy;
+            tmp.zw = ceil(tmp.zw - EPS);
+            int2 end = convert_int2_rtz(tmp.zw);
+            end += rect_coord.xy;
+
+            pwh.xz += 1;
+            int4 coord_out = (int4)(ph * pool_width + pw, get_global_id(1), idx, 0);
+            end.xy  = end.xy > 0 ? end.xy : 0;
+            start.xy = start.xy > 0 ?  start.xy : 0;
+            end.xy = min(end.xy, inputSize.xy);
+            start.xy = min(start.xy, inputSize.xy);
+            if(end.y <= start.y || end.x <= start.x)
+            {
+                uint4 vec = 0;
+                write_imageui(output, coord_out, vec);
+                continue;
+            }
+
+            uint4 output_data = 0;
+            int h = start.y;
+            int4 coord_in0 = (int4)(start.x, start.y, depth, 0);
+
+            output_data = read_imageui(input, coord_in0);
+            do
+            {
+                int w = start.x;
+                do
+                {
+                    int4 coord_in = (int4)(w, h, depth, 0);
+                    uint4 vec0;
+                    vec0 = read_imageui(input, coord_in);
+                    w++;
+                    output_data.x = max(output_data.x, vec0.x);
+                } while (w < end.x);
+                h++;
+            } while (h < end.y);
+
+            unsigned char tmp_output;
+            float temp = convert_float(output_data.x);
+            temp = temp - input_zp;
+            temp = temp * uint8Scale + output_zp;
+            tmp_output = convert_uchar_rte(temp);
+            output_data.x = tmp_output;
+            output_data.y = (unsigned int)minVal;
+            output_data.x = max(output_data.y, output_data.x);
+            write_imageui(output, coord_out, output_data);
+        }
+        pwh.yw += 1;
+    }
+}
+
+__kernel void roiPooling_I32_I32toI32
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       rois,
+    __write_only image2d_array_t output,
+                 int             pool_width,
+                 int             pool_height,
+                 float           spatial_scale,
+                 int             offset,
+                 float           q_pool_width,
+                 float           q_pool_height,
+                 int             input_width,
+                 int             input_height,
+                 int             minVal,
+                 float           uint8Scale,
+                 int             channel_count
+    )
+{
+    int    depth = get_global_id(1);
+    int    idx   = get_global_id(0);
+    float2 poolWH = (float2)(pool_width, pool_height);
+    int2   roiWH;
+    float2 roi_size_scale;
+    int4   coord_roi = (int4)(0, idx, 0, 0);
+    float4 rect_coord_f;
+    int4   rect_coord;
+    float2 q_PoolWH = (float2)(q_pool_width, q_pool_height);
+    float4 pwh = (float4)(0, 0, 1, 1);
+    int2   inputSize = (int2)(input_width, input_height);
+
+    if (offset == 1)
+    {
+        int batch_idx = read_imagei(rois, coord_roi.xy).x;
+        coord_roi.x = 1;
+        depth = depth + batch_idx * channel_count;
+    }
+    rect_coord.x = read_imagei(rois, coord_roi.xy).x;
+    coord_roi = coord_roi.xyxx + (int4)(1, 0, 2, 3);
+    rect_coord.y = read_imagei(rois, coord_roi.xy).x;
+    rect_coord.z = read_imagei(rois, coord_roi.zy).x;
+    rect_coord.w = read_imagei(rois, coord_roi.wy).x;
+    rect_coord_f = convert_float4(rect_coord.xyzw) * spatial_scale;
+    rect_coord = convert_int4_rte(rect_coord_f);
+
+    roiWH = rect_coord.zw - rect_coord.xy + 1;
+    roiWH = roiWH > 1 ? roiWH : 1;
+    roi_size_scale = convert_float2(roiWH) * q_PoolWH;
+    pwh.xy = 0;
+
+    for (int ph = 0; ph < pool_height; ph++)
+    {
+        pwh.xz = (float2)(0, 1);
+        for (int pw = 0; pw < pool_width; pw++)
+        {
+            float4 tmp = pwh;
+            tmp = tmp * roi_size_scale.xyxy;
+            tmp.xy = floor(tmp.xy);
+            int2 start = convert_int2_rtz(tmp.xy);
+            start += rect_coord.xy;
+            tmp.zw = ceil(tmp.zw - EPS);
+            int2 end = convert_int2_rtz(tmp.zw);
+            end += rect_coord.xy;
+
+            pwh.xz += 1;
+            int4 coord_out = (int4)(ph * pool_width + pw, get_global_id(1), idx, 0);
+            end.xy  = end.xy > 0 ? end.xy : 0;
+            start.xy = start.xy > 0 ?  start.xy : 0;
+            end.xy = min(end.xy, inputSize.xy);
+            start.xy = min(start.xy, inputSize.xy);
+            if(end.y <= start.y || end.x <= start.x)
+            {
+                int4 vec = 0;
+                write_imagei(output, coord_out, vec);
+                continue;
+            }
+
+            int4 output_data = 0;
+            int h = start.y;
+            int4 coord_in0 = (int4)(start.x, start.y, depth, 0);
+
+            output_data = read_imagei(input, coord_in0);
+            do
+            {
+                int w = start.x;
+                do
+                {
+                    int4 coord_in = (int4)(w, h, depth, 0);
+                    int4 vec0;
+                    vec0 = read_imagei(input, coord_in);
+                    w++;
+                    output_data.x = max(output_data.x, vec0.x);
+                } while (w < end.x);
+                h++;
+            } while (h < end.y);
+
+            float temp = convert_float(output_data.x);
+            temp = temp;
+            temp = temp * uint8Scale;
+            output_data.x = convert_int_rte(temp);
+            output_data.y = minVal;
+            output_data.x = max(output_data.y, output_data.x);
+            write_imagei(output, coord_out, output_data);
+        }
+        pwh.yw += 1;
+    }
+}
+
+__kernel void roiPooling_U8_U8toU8
+    (
+    __read_only  image2d_array_t input,
+    __read_only  image2d_t       rois,
+    __write_only image2d_array_t output,
+                 int             pool_width,
+                 int             pool_height,
+                 float           spatial_scale,
+                 int             offset,
+                 float           q_pool_width,
+                 float           q_pool_height,
+                 int             input_width,
+                 int             input_height,
+                 int             minVal,
+                 float           input_zp,
+                 float           output_zp,
+                 float           uint8Scale,
+                 int             channel_count
+    )
+{
+    int    depth = get_global_id(1);
+    int    idx   = get_global_id(0);
+    float2 poolWH = (float2)(pool_width, pool_height);
+    int2   roiWH;
+    float2 roi_size_scale;
+    int4   coord_roi = (int4)(0, idx, 0, 0);
+    float4 rect_coord_f;
+    int4   rect_coord;
+    float2 q_PoolWH = (float2)(q_pool_width, q_pool_height);
+    float4 pwh = (float4)(0, 0, 1, 1);
+    int2   inputSize = (int2)(input_width, input_height);
+
+    if (offset == 1)
+    {
+        int batch_idx = as_int(read_imageui(rois, coord_roi.xy).x);
+        coord_roi.x = 1;
+        depth = depth + batch_idx * channel_count;
+    }
+    rect_coord.x = as_int(read_imageui(rois, coord_roi.xy).x);
+    coord_roi = coord_roi.xyxx + (int4)(1, 0, 2, 3);
+    rect_coord.y = as_int(read_imageui(rois, coord_roi.xy).x);
+    rect_coord.z = as_int(read_imageui(rois, coord_roi.zy).x);
+    rect_coord.w = as_int(read_imageui(rois, coord_roi.wy).x);
+    rect_coord_f = convert_float4(rect_coord.xyzw) * spatial_scale;
+    rect_coord = convert_int4_rte(rect_coord_f);
+
+    roiWH = rect_coord.zw - rect_coord.xy + 1;
+    roiWH = roiWH > 1 ? roiWH : 1;
+    roi_size_scale = convert_float2(roiWH) * q_PoolWH;
+    pwh.xy = 0;
+
+    for (int ph = 0; ph < pool_height; ph++)
+    {
+        pwh.xz = (float2)(0, 1);
+        for (int pw = 0; pw < pool_width; pw++)
+        {
+            float4 tmp = pwh;
+            tmp = tmp * roi_size_scale.xyxy;
+            tmp.xy = floor(tmp.xy);
+            int2 start = convert_int2_rtz(tmp.xy);
+            start += rect_coord.xy;
+            tmp.zw = ceil(tmp.zw - EPS);
+            int2 end = convert_int2_rtz(tmp.zw);
+            end += rect_coord.xy;
+
+            pwh.xz += 1;
+            int4 coord_out = (int4)(ph * pool_width + pw, get_global_id(1), idx, 0);
+            end.xy  = end.xy > 0 ? end.xy : 0;
+            start.xy = start.xy > 0 ?  start.xy : 0;
+            end.xy = min(end.xy, inputSize.xy);
+            start.xy = min(start.xy, inputSize.xy);
+            if(end.y <= start.y || end.x <= start.x)
+            {
+                uint4 vec = 0;
+                write_imageui(output, coord_out, vec);
+                continue;
+            }
+
+            uint4 output_data = 0;
+            int h = start.y;
+            int4 coord_in0 = (int4)(start.x, start.y, depth, 0);
+
+            output_data = read_imageui(input, coord_in0);
+            do
+            {
+                int w = start.x;
+                do
+                {
+                    int4 coord_in = (int4)(w, h, depth, 0);
+                    uint4 vec0;
+                    vec0 = read_imageui(input, coord_in);
+                    w++;
+                    output_data.x = max(output_data.x, vec0.x);
+                } while (w < end.x);
+                h++;
+            } while (h < end.y);
+
+            unsigned char tmp_output;
+            float temp = convert_float(output_data.x);
+            temp = temp - input_zp;
+            temp = temp * uint8Scale + output_zp;
+            tmp_output = convert_uchar_rte(temp);
+            output_data.x = tmp_output;
+            output_data.y = (unsigned int)minVal;
+            output_data.x = max(output_data.y, output_data.x);
+            write_imageui(output, coord_out, output_data);
+        }
+        pwh.yw += 1;
+    }
+}

@@ -1,0 +1,157 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int height_minus1;
+_viv_uniform int width;
+_viv_uniform VXC_512Bits uniHysteresisCnt_16x1;
+_viv_uniform VXC_512Bits uniMulCenterMaxA_2x8;
+_viv_uniform VXC_512Bits uniMulCenterMaxB_2x8;
+
+#if (VX_VERSION==1)
+__kernel __attribute__((reqd_work_group_size(32, 1, 1))) void edgetrace_hysteresis
+(
+    image2d_t  mcInput,
+    __global int* count,
+    image2d_t  input,
+    image2d_t  output
+)
+{
+    vxc_uchar16 src0, src1, src2, src3, maxVal, tmpMax;
+    vxc_uchar16 val0, val1;
+    int4 sum = 0;
+    int updateFlg;
+
+    __local int lcl_flg[1];
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    do
+    {
+        if(get_local_id(0) == 0)
+            lcl_flg[0] = 0;
+        updateFlg = 0;
+        barrier(CLK_LOCAL_MEM_FENCE);
+        for(coord.y = 0, coord.x = get_global_id(0); coord.x < width; coord.x += 448)
+        {
+            VXC_ReadImage(src0, mcInput, coord.xy, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src1, mcInput, coord.xy, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src2, mcInput, coord.xy, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            maxVal ^= maxVal;
+            _viv_asm(COPY, src3, src1, 16);
+            VXC_Filter(maxVal, src0, src1, src2, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Max, 1));
+
+            VXC_DP2x8(src1, src3, maxVal, VXC_MODIFIER(1, 8, 0, VXC_RM_TowardZero, 1), uniMulCenterMaxA_2x8);
+            VXC_DP2x8(src1, src3, maxVal, VXC_MODIFIER(9, 14, 0, VXC_RM_TowardZero, 1), uniMulCenterMaxB_2x8);
+
+            val0 = src1 - src3;
+            VXC_DP16x1(sum, val0, val0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniHysteresisCnt_16x1);
+            if(sum.x > 0)
+            {
+                VXC_WriteImage(mcInput, coord.xy, src1, VXC_MODIFIER(1, 14, 0, VXC_RM_TowardZero, 0));
+                updateFlg |= 1;
+            }
+
+            for(coord.y = 1; coord.y <= height_minus1; coord.y++)
+            {
+                src0 = src1;
+                src1 = src2;
+                VXC_ReadImage(src2, mcInput, coord.xy, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+                maxVal ^= maxVal;
+                _viv_asm(COPY, src3, src1, 16);
+                VXC_Filter(maxVal, src0, src1, src2, VXC_MODIFIER_FILTER(0, 13, 0, VXC_FM_Max, 1));
+                VXC_DP2x8(src1, src3, maxVal, VXC_MODIFIER(1, 8, 0, VXC_RM_TowardZero, 1), uniMulCenterMaxA_2x8);
+                VXC_DP2x8(src1, src3, maxVal, VXC_MODIFIER(9, 14, 0, VXC_RM_TowardZero, 1), uniMulCenterMaxB_2x8);
+
+                val0 = src1 - src3;
+                VXC_DP16x1(sum, val0, val0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniHysteresisCnt_16x1);
+                if(sum.x > 0)
+                {
+                    VXC_WriteImage(mcInput, coord.xy, src1, VXC_MODIFIER(1, 14, 0, VXC_RM_TowardZero, 0));
+                    updateFlg |= 1;
+                }
+            }
+        }
+        atom_add(lcl_flg, updateFlg);
+        barrier(CLK_LOCAL_MEM_FENCE);
+        if(lcl_flg[0] == 0)
+            break;
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }while(1);
+}
+
+#else
+
+__kernel __attribute__((reqd_work_group_size(32, 1, 1))) void edgetrace_hysteresis
+(
+    image2d_t  mcInput,
+    __global int* count,
+    image2d_t  input,
+    image2d_t  output
+)
+{
+    vxc_uchar16 src0, src1, src2, src3, maxVal, tmpMax;
+    vxc_uchar16 val0, val1;
+    int4 sum = 0;
+    int updateFlg;
+
+    __local int lcl_flg[1];
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    do
+    {
+        if(get_local_id(0) == 0)
+            lcl_flg[0] = 0;
+        updateFlg = 0;
+        barrier(CLK_LOCAL_MEM_FENCE);
+        for(coord.y = 0, coord.x = get_global_id(0); coord.x < width; coord.x += 448)
+        {
+            VXC_ReadImage(src0, mcInput, coord.xy, VXC_5BITOFFSET_XY(-1, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src1, mcInput, coord.xy, VXC_5BITOFFSET_XY(-1, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(src2, mcInput, coord.xy, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            maxVal ^= maxVal;
+            _viv_asm(COPY, src3, src1, 16);
+            VXC_VertMax3(tmpMax, src0, src1, src2, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_HorzMax3(maxVal, tmpMax, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+
+            VXC_DP2x8(src1, src3, maxVal, VXC_MODIFIER(1, 8, 0, VXC_RM_TowardZero, 1), uniMulCenterMaxA_2x8);
+            VXC_DP2x8(src1, src3, maxVal, VXC_MODIFIER(9, 14, 0, VXC_RM_TowardZero, 1), uniMulCenterMaxB_2x8);
+
+            val0 = src1 - src3;
+            VXC_DP16x1(sum, val0, val0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniHysteresisCnt_16x1);
+            if(sum.x > 0)
+            {
+                VXC_WriteImage(mcInput, coord.xy, src1, VXC_MODIFIER(1, 14, 0, VXC_RM_TowardZero, 0));
+                updateFlg |= 1;
+            }
+
+            for(coord.y = 1; coord.y <= height_minus1; coord.y++)
+            {
+                src0 = src1;
+                src1 = src2;
+                VXC_ReadImage(src2, mcInput, coord.xy, VXC_5BITOFFSET_XY(-1, 1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+                maxVal ^= maxVal;
+                _viv_asm(COPY, src3, src1, 16);
+                VXC_VertMax3(tmpMax, src0, src1, src2, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+                VXC_HorzMax3(maxVal, tmpMax, VXC_MODIFIER(0, 13, 0, VXC_RM_TowardZero, 0));
+                VXC_DP2x8(src1, src3, maxVal, VXC_MODIFIER(1, 8, 0, VXC_RM_TowardZero, 1), uniMulCenterMaxA_2x8);
+                VXC_DP2x8(src1, src3, maxVal, VXC_MODIFIER(9, 14, 0, VXC_RM_TowardZero, 1), uniMulCenterMaxB_2x8);
+
+                val0 = src1 - src3;
+                VXC_DP16x1(sum, val0, val0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniHysteresisCnt_16x1);
+                if(sum.x > 0)
+                {
+                    VXC_WriteImage(mcInput, coord.xy, src1, VXC_MODIFIER(1, 14, 0, VXC_RM_TowardZero, 0));
+                    updateFlg |= 1;
+                }
+            }
+        }
+        atom_add(lcl_flg, updateFlg);
+        barrier(CLK_LOCAL_MEM_FENCE);
+        if(lcl_flg[0] == 0)
+            break;
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }while(1);
+}
+#endif

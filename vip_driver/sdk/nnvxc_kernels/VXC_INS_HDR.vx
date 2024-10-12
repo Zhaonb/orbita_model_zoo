@@ -1,0 +1,181 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+typedef struct Image
+{
+    __global uchar *ptr;
+    int             stride_x;
+    int             stride_y;
+} Image;
+
+inline uchar* get_image_ptr_from_coord(Image img, int2 coord)
+{
+    return img.ptr + coord.x * img.stride_x + coord.y * img.stride_y;
+}
+
+inline Image create_image_from_image2d(image2d_t input, int stride_x)
+{
+    int stride_y;
+    int8 desc;
+    _viv_asm(GET_IMAGE_STRIDE, stride_y, input);
+
+    _viv_asm(COPY, desc, input, sizeof(desc));
+    uint address = as_uint(desc.s0);
+
+    Image img =
+    {
+        .ptr                           = (uchar*)(uintptr_t)address,
+        .stride_x                      = stride_x,
+        .stride_y                      = stride_y
+    };
+
+    return img;
+}
+
+typedef struct Tensor
+{
+    __global uchar *ptr;
+    int             stride_x;
+    int             stride_y;
+    int             stride_z;
+} Tensor;
+
+inline uchar* get_tensor_ptr_from_coord(Tensor t, int4 coord)
+{
+    return t.ptr + coord.x * t.stride_x + coord.y * t.stride_y + coord.z * t.stride_z;
+}
+
+inline Tensor create_tensor_from_image2d_array(image2d_array_t input, int stride_x)
+{
+    int8 desc;
+    int2 strides;
+    _viv_asm(GET_IMAGE_STRIDE, strides, input);
+
+    _viv_asm(COPY, desc, input, sizeof(desc));
+    uint address = as_uint(desc.s0);
+
+    Tensor t =
+    {
+        .ptr                           = (uchar*)(uintptr_t)address,
+        .stride_x                      = stride_x,
+        .stride_y                      = strides.x,
+        .stride_z                      = strides.y
+    };
+
+    return t;
+}
+
+#if (VX_VERSION==1)
+#define VXC_VertMin3_Integer(dst, src0, src1, src2, info)\
+{\
+    dst = min(src0, src1);\
+    dst = min(src2, dst);\
+}
+
+#define VXC_VertMin3_Half(dst, src0, src1, src2, info)\
+{\
+    vxc_short8 val0, val1, val2, minVal, maxVal;\
+    _viv_asm(COPY, val0, src0, 16);\
+    _viv_asm(COPY, val1, src1, 16);\
+    _viv_asm(COPY, val2, src2, 16);\
+    maxVal = max(val0, val1);\
+    maxVal = max(val2, maxVal);\
+    minVal = min(val0, val1);\
+    minVal = min(val2, minVal);\
+    maxVal = maxVal >= 0 ? minVal : maxVal;\
+    _viv_asm(COPY, dst, maxVal, 16); \
+}
+
+#define VXC_VertMax3_Integer(dst, src0, src1, src2, info)\
+{\
+    int startBin     = (info & VXC_START_BIN_BITMASK) >> 12;\
+    int endBin         = (info & VXC_END_BIN_BITMASK) >> 8;\
+    int sourceBin     = (info & VXC_SOURCE_BIN_BITMASK) >> 4;\
+    int mod1 = VXC_MODIFIER_CLAMP(startBin, endBin, sourceBin, 0);\
+    typeof (dst) tmp;\
+    tmp = max(src0, src1);\
+    tmp = max(src2, tmp);\
+    VXC_Clamp(dst, tmp, tmp, tmp, mod1);\
+}
+
+#define VXC_VertMax3_Half(dst, src0, src1, src2, info)\
+ {\
+     vxc_short8 val0, val1, val2, minVal, maxVal;\
+     _viv_asm(COPY, val0, src0, 16);\
+     _viv_asm(COPY, val1, src1, 16);\
+     _viv_asm(COPY, val2, src2, 16);\
+     maxVal = max(val0, val1);\
+     maxVal = max(val2, maxVal);\
+     minVal = min(val0, val1);\
+     minVal = min(val2, minVal);\
+     maxVal = maxVal >= 0 ? maxVal : minVal;\
+     _viv_asm(COPY, dst, maxVal, 16); \
+ }
+
+#define VXC_HorzMax3_Integer(dst, src0, info)\
+{\
+    int startBin     = (info & VXC_START_BIN_BITMASK) >> 12;\
+    int endBin         = (info & VXC_END_BIN_BITMASK) >> 8;\
+    int sourceBin     = (info & VXC_SOURCE_BIN_BITMASK) >> 4;\
+    int clamp         = (info & VXC_CLAMP_BITMASK) >> 22;\
+    int mod1 = VXC_MODIFIER_FILTER(startBin, endBin, sourceBin, VXC_FM_Max, clamp);\
+    VXC_OP4(filter, dst, src0, src0, src0, mod1);\
+}
+
+#define VXC_HorzMax3_Half(dst, src0, info)\
+{\
+    int startBin     = (info & VXC_START_BIN_BITMASK) >> 12;\
+    int endBin         = (info & VXC_END_BIN_BITMASK) >> 8;\
+    int sourceBin     = (info & VXC_SOURCE_BIN_BITMASK) >> 4;\
+    int clamp         = (info & VXC_CLAMP_BITMASK) >> 22;\
+    int mod1 = VXC_MODIFIER_FILTER(startBin, endBin, sourceBin, VXC_FM_Max, clamp);\
+    int mod2 = VXC_MODIFIER_FILTER(startBin, endBin, sourceBin, VXC_FM_Min, clamp);\
+    vxc_short8 val0, minVal, maxVal;\
+    _viv_asm(COPY, val0, src0, 16);\
+    VXC_OP4(filter, maxVal, val0, val0, val0, mod1);\
+    VXC_OP4(filter, minVal, val0, val0, val0, mod2);\
+    maxVal = maxVal >= 0 ? maxVal : minVal;\
+    _viv_asm(COPY, dst, maxVal, 16);\
+}
+
+#define VXC_Clamp_Half(dst, src0, src1, src2, info)\
+{\
+    VXC_VertMax3_Half(dst, src0, src0, src1, info);\
+    VXC_VertMin3_Half(dst, dst, dst, src2, info);\
+}
+
+#else
+#define VXC_VertMin3_Integer(dst, src0, src1, src2, info)\
+ {\
+    VXC_VertMin3(dst, src0, src1, src2, info);\
+ }
+
+#define VXC_VertMin3_Half(dst, src0, src1, src2, info)\
+ {\
+    VXC_VertMin3(dst, src0, src1, src2, info);\
+ }
+
+#define VXC_VertMax3_Integer(dst, src0, src1, src2, info)\
+{\
+    VXC_VertMax3(dst, src0, src1, src2, info);\
+}
+
+#define VXC_VertMax3_Half(dst, src0, src1, src2, info)\
+{\
+    VXC_VertMax3(dst, src0, src1, src2, info);\
+}
+
+#define VXC_HorzMax3_Integer(dst, src0, info)\
+{\
+    VXC_HorzMax3(dst, src0, info);\
+}
+
+#define VXC_HorzMax3_Half(dst, src0, info)\
+{\
+    VXC_HorzMax3(dst, src0, info);\
+}
+
+#define VXC_Clamp_Half(dst, src0, src1, src2, info)\
+{\
+    VXC_Clamp(dst, src0, src1, src2, info);\
+}
+#endif

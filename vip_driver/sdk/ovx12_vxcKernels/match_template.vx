@@ -1,0 +1,508 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+__kernel void match_template_hamming
+(
+    __read_only   image2d_t      input_img,
+    __read_only   image2d_t      template_img,
+    __read_only   int            matchingMethod,
+    __write_only  image2d_t      out_img
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_tp = (int2)(0, 0);
+    int2 coord_src = (int2)(0, 0);
+    int sum = 0;
+    int i, j;
+    uint template_width = get_image_width(template_img);
+    uint template_height = get_image_height(template_img);
+    float result;
+    short result_s16;
+    uint winLen = template_width * template_height;
+    float FLT_EPSILSON1 = 1.192092896e-07F;
+    float winCoeff = (float)1. / ((float)winLen + FLT_EPSILSON1);
+    vxc_uchar16 reg0, reg1, reg2;
+    int dp_value;
+
+    for(i = 0; i < template_height; i++)
+    {
+        for(j = 0; j < (int)(template_width - 16); j += 16)
+        {
+            coord_tp.x = j;
+            coord_tp.y = i;
+            coord_src.x = coord.x + j;
+            coord_src.y = coord.y + i;
+
+            VXC_ReadImage(reg0, input_img, coord_src, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(reg1, template_img, coord_tp, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+            reg2 = reg0 ^ reg1;
+            const uint16 config_dp1 = (uint16)(
+                                      0x55555555, // TCfg
+                                      0x00000000, // ASelt
+                                      0x76543210, 0xfedcba98, // ABin
+                                      0xaaaaaaaa, // BSelt
+                                      0x00000000, 0x00000000, // BBin
+                                      0x00006600, // AccumType, ConstantType, and PostShift
+                                      0x00010001, 0x00010001, 0x00010001, 0x00010001, 0x00010001, 0x00010001, 0x00010001, 0x00010001 // Constant
+                                      );
+            VXC_DP16x1(dp_value, reg2, reg2, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), config_dp1);
+            sum += dp_value;
+         }
+
+         for(; j < template_width; j++)
+         {
+             coord_tp.x = j;
+             coord_tp.y = i;
+             coord_src.x = coord.x + j;
+             coord_src.y = coord.y + i;
+
+             uchar input_value;
+             uchar tp_value;
+             VXC_ReadImage(input_value, input_img, coord_src, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+             VXC_ReadImage(tp_value, template_img, coord_tp, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+             sum += input_value ^ tp_value;
+          }
+      }
+
+      result = (float)(winCoeff*((float)sum));
+      result_s16 = (short)result;
+      VXC_WriteImage(out_img, coord, result_s16, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void match_template_l1
+(
+    __read_only   image2d_t      input_img,
+    __read_only   image2d_t      template_img,
+    __read_only   int            matchingMethod,
+    __write_only  image2d_t      out_img
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_tp = (int2)(0, 0);
+    int2 coord_src = (int2)(0, 0);
+    int sum = 0;
+    int i, j;
+    uint template_width = get_image_width(template_img);
+    uint template_height = get_image_height(template_img);
+    float result;
+    short result_s16;
+    uint winLen = template_width * template_height;
+    float FLT_EPSILSON1 = 1.192092896e-07F;
+    float winCoeff = (float)1. / ((float)winLen + FLT_EPSILSON1);
+    vxc_uchar16 reg0, reg1, reg2;
+    int dp_value;
+
+    for(i = 0; i < template_height; i++)
+    {
+        for(j = 0; j < (int)(template_width - 16); j += 16)
+        {
+            coord_tp.x = j;
+            coord_tp.y = i;
+            coord_src.x = coord.x + j;
+            coord_src.y = coord.y + i;
+
+            VXC_ReadImage(reg0, input_img, coord_src, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(reg1, template_img, coord_tp, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+            VXC_AbsDiff(reg2, reg0, reg1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+            const uint16 config_dp1 = (uint16)(
+                                      0x55555555, // TCfg
+                                      0x00000000, // ASelt
+                                      0x76543210, 0xfedcba98, // ABin
+                                      0xaaaaaaaa, // BSelt
+                                      0x00000000, 0x00000000, // BBin
+                                      0x00006600, // AccumType, ConstantType, and PostShift
+                                      0x00010001, 0x00010001, 0x00010001, 0x00010001, 0x00010001, 0x00010001, 0x00010001, 0x00010001 // Constant
+                                      );
+            VXC_DP16x1(dp_value, reg2, reg2, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), config_dp1);
+            sum += dp_value;
+         }
+
+         for(; j < template_width; j++)
+         {
+             coord_tp.x = j;
+             coord_tp.y = i;
+             coord_src.x = coord.x + j;
+             coord_src.y = coord.y + i;
+
+             uchar input_value;
+             uchar tp_value;
+             int absdiff_value;
+             VXC_ReadImage(input_value, input_img, coord_src, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+             VXC_ReadImage(tp_value, template_img, coord_tp, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+             int in_v = convert_int_sat(input_value);
+             int tp_v = convert_int_sat(tp_value);
+             int diff = in_v - tp_v;
+             sum += abs(diff);
+          }
+      }
+
+      result = (float)(winCoeff*((float)sum));
+      result_s16 = (short)result;
+      VXC_WriteImage(out_img, coord, result_s16, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void match_template_l2
+(
+    __read_only   image2d_t      input_img,
+    __read_only   image2d_t      template_img,
+    __read_only   int            matchingMethod,
+    __write_only  image2d_t      out_img
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_tp = (int2)(0, 0);
+    int2 coord_src = (int2)(0, 0);
+    int sum = 0;
+    int i, j;
+    uint template_width = get_image_width(template_img);
+    uint template_height = get_image_height(template_img);
+    float result;
+    short result_s16;
+    uint winLen = template_width * template_height;
+    float FLT_EPSILSON1 = 1.192092896e-07F;
+    float winCoeff = (float)1. / ((float)winLen + FLT_EPSILSON1);
+    vxc_uchar16 reg0, reg1, reg2;
+    int dp_value;
+
+    for(i = 0; i < template_height; i++)
+    {
+        for(j = 0; j < (int)(template_width - 16); j += 16)
+        {
+            coord_tp.x = j;
+            coord_tp.y = i;
+            coord_src.x = coord.x + j;
+            coord_src.y = coord.y + i;
+
+            VXC_ReadImage(reg0, input_img, coord_src, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(reg1, template_img, coord_tp, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+            VXC_AbsDiff(reg2, reg0, reg1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+            const uint16 config_dp1 = (uint16)(
+                                      0x55555555, // TCfg
+                                      0x00000000, // ASelt
+                                      0x76543210, 0xfedcba98, // ABin
+                                      0x55555555, // BSelt
+                                      0x76543210, 0xfedcba98, // BBin
+                                      0x00006600, // AccumType, ConstantType, and PostShift
+                                      0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 // Constant
+                                      );
+            VXC_DP16x1(dp_value, reg2, reg2, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), config_dp1);
+            sum += dp_value;
+         }
+
+         for(; j < template_width; j++)
+         {
+             coord_tp.x = j;
+             coord_tp.y = i;
+             coord_src.x = coord.x + j;
+             coord_src.y = coord.y + i;
+
+             uchar input_value;
+             uchar tp_value;
+             int absdiff_value;
+             VXC_ReadImage(input_value, input_img, coord_src, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+             VXC_ReadImage(tp_value, template_img, coord_tp, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+             int in_v = convert_int_sat(input_value);
+             int tp_v = convert_int_sat(tp_value);
+             int diff = in_v - tp_v;
+             sum += diff * diff;
+          }
+      }
+
+      result = (float)(winCoeff*((float)sum));
+      result_s16 = (short)result;
+      VXC_WriteImage(out_img, coord, result_s16, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void match_template_ccorr_norm
+(
+    __read_only   image2d_t      input_img,
+    __read_only   image2d_t      template_img,
+    __read_only   int            matchingMethod,
+    __write_only  image2d_t      out_img
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_tp = (int2)(0, 0);
+    int2 coord_src = (int2)(0, 0);
+    int sum = 0;
+    float sum_in = 0;
+    float sum_tp = 0;
+    int i, j;
+    uint template_width = get_image_width(template_img);
+    uint template_height = get_image_height(template_img);
+    float result;
+    short result_s16;
+    float FLT_EPSILSON1 = 1.192092896e-07F;
+    vxc_uchar16 reg0, reg1, reg2;
+    int in_value, tp_value;
+    int dp_value;
+
+    for(i = 0; i < template_height; i++)
+    {
+        for(j = 0; j < (int)(template_width - 16); j += 16)
+        {
+            coord_tp.x = j;
+            coord_tp.y = i;
+            coord_src.x = coord.x + j;
+            coord_src.y = coord.y + i;
+
+            VXC_ReadImage(reg0, input_img, coord_src, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(reg1, template_img, coord_tp, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+            //VXC_AbsDiff(reg2, reg0, reg1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            const uint16 config_dp1 = (uint16)(
+                                      0x55555555, // TCfg
+                                      0x00000000, // ASelt
+                                      0x76543210, 0xfedcba98, // ABin
+                                      0x55555555, // BSelt
+                                      0x76543210, 0xfedcba98, // BBin
+                                      0x00006600, // AccumType, ConstantType, and PostShift
+                                      0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 // Constant
+                                      );
+            VXC_DP16x1(dp_value, reg0, reg1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), config_dp1);
+            sum += dp_value;
+
+            const uint16 config_dp2 = (uint16)(
+                                      0x55555555, // TCfg
+                                      0x00000000, // ASelt
+                                      0x76543210, 0xfedcba98, // ABin
+                                      0x55555555, // BSelt
+                                      0x76543210, 0xfedcba98, // BBin
+                                      0x00006600, // AccumType, ConstantType, and PostShift
+                                      0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 // Constant
+                                      );
+            VXC_DP16x1(in_value, reg0, reg0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), config_dp2);
+            sum_in += convert_float_rtp(in_value);
+
+            const uint16 config_dp3 = (uint16)(
+                                      0x55555555, // TCfg
+                                      0x00000000, // ASelt
+                                      0x76543210, 0xfedcba98, // ABin
+                                      0x55555555, // BSelt
+                                      0x76543210, 0xfedcba98, // BBin
+                                      0x00006600, // AccumType, ConstantType, and PostShift
+                                      0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 // Constant
+                                      );
+            VXC_DP16x1(tp_value, reg1, reg1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), config_dp3);
+            sum_tp += convert_float_rtp(tp_value);
+         }
+
+         for(; j < template_width; j++)
+         {
+             coord_tp.x = j;
+             coord_tp.y = i;
+             coord_src.x = coord.x + j;
+             coord_src.y = coord.y + i;
+
+             uchar input_value;
+             uchar templ_value;
+             VXC_ReadImage(input_value, input_img, coord_src, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+             VXC_ReadImage(templ_value, template_img, coord_tp, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+             int in_v = convert_int_sat(input_value);
+             int tp_v = convert_int_sat(templ_value);
+             sum += in_v * tp_v;
+
+             in_value = in_v * in_v;
+             sum_in += convert_float_rtp(in_value);
+
+             tp_value = tp_v * tp_v;
+             sum_tp += convert_float_rtp(tp_value);
+          }
+      }
+
+      float sqrtsum_v = sqrt(sum_in) * sqrt(sum_tp);
+      result = (float)(sum / (sqrtsum_v + FLT_EPSILON));
+      int temp = 2 << 13;
+      result_s16 = (short)(result * temp);
+      VXC_WriteImage(out_img, coord, result_s16, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void match_template_l2_norm
+(
+    __read_only   image2d_t      input_img,
+    __read_only   image2d_t      template_img,
+    __read_only   int            matchingMethod,
+    __write_only  image2d_t      out_img
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_tp = (int2)(0, 0);
+    int2 coord_src = (int2)(0, 0);
+    int sum = 0;
+    float sum_in = 0;
+    float sum_tp = 0;
+    int i, j;
+    uint template_width = get_image_width(template_img);
+    uint template_height = get_image_height(template_img);
+    float result;
+    short result_s16;
+    float FLT_EPSILSON1 = 1.192092896e-07F;
+    vxc_uchar16 reg0, reg1, reg2;
+    int dp_value, in_value, tp_value;
+
+    for(i = 0; i < template_height; i++)
+    {
+        for(j = 0; j < (int)(template_width - 16); j += 16)
+        {
+            coord_tp.x = j;
+            coord_tp.y = i;
+            coord_src.x = coord.x + j;
+            coord_src.y = coord.y + i;
+
+            VXC_ReadImage(reg0, input_img, coord_src, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(reg1, template_img, coord_tp, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+            VXC_AbsDiff(reg2, reg0, reg1, VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+            const uint16 config_dp1 = (uint16)(
+                                      0x55555555, // TCfg
+                                      0x00000000, // ASelt
+                                      0x76543210, 0xfedcba98, // ABin
+                                      0x55555555, // BSelt
+                                      0x76543210, 0xfedcba98, // BBin
+                                      0x00006600, // AccumType, ConstantType, and PostShift
+                                      0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 // Constant
+                                      );
+            VXC_DP16x1(dp_value, reg2, reg2, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), config_dp1);
+            sum += dp_value;
+
+            const uint16 config_dp2 = (uint16)(
+                                      0x55555555, // TCfg
+                                      0x00000000, // ASelt
+                                      0x76543210, 0xfedcba98, // ABin
+                                      0x55555555, // BSelt
+                                      0x76543210, 0xfedcba98, // BBin
+                                      0x00006600, // AccumType, ConstantType, and PostShift
+                                      0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 // Constant
+                                      );
+            VXC_DP16x1(in_value, reg0, reg0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), config_dp2);
+            sum_in += convert_float_rtp(in_value);
+
+            const uint16 config_dp3 = (uint16)(
+                                      0x55555555, // TCfg
+                                      0x00000000, // ASelt
+                                      0x76543210, 0xfedcba98, // ABin
+                                      0x55555555, // BSelt
+                                      0x76543210, 0xfedcba98, // BBin
+                                      0x00006600, // AccumType, ConstantType, and PostShift
+                                      0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 // Constant
+                                      );
+            VXC_DP16x1(tp_value, reg1, reg1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), config_dp3);
+            sum_tp += convert_float_rtp(tp_value);
+         }
+
+         for(; j < template_width; j++)
+         {
+             coord_tp.x = j;
+             coord_tp.y = i;
+             coord_src.x = coord.x + j;
+             coord_src.y = coord.y + i;
+
+             uchar input_value;
+             uchar templ_value;
+             int absdiff_value;
+             VXC_ReadImage(input_value, input_img, coord_src, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+             VXC_ReadImage(templ_value, template_img, coord_tp, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+             int in_v = convert_int_sat(input_value);
+             int tp_v = convert_int_sat(templ_value);
+             int diff = in_v - tp_v;
+             sum += diff * diff;
+
+             in_value = in_v * in_v;
+             sum_in += convert_float_rtp(in_value);
+
+             tp_value = tp_v * tp_v;
+             sum_tp += convert_float_rtp(tp_value);
+          }
+      }
+
+      float sqrtsum_v = sqrt(sum_in) * sqrt(sum_tp);
+      result = (float)(sum / (sqrtsum_v + FLT_EPSILON));
+      int temp = 2 << 7;
+      result_s16 = (short)(result * temp);
+      VXC_WriteImage(out_img, coord, result_s16, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+}
+
+__kernel void match_template_ccorr
+(
+    __read_only   image2d_t      input_img,
+    __read_only   image2d_t      template_img,
+    __read_only   int            matchingMethod,
+    __write_only  image2d_t      out_img
+)
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+    int2 coord_tp = (int2)(0, 0);
+    int2 coord_src = (int2)(0, 0);
+    int sum = 0;
+    int i, j;
+    uint template_width = get_image_width(template_img);
+    uint template_height = get_image_height(template_img);
+    float result;
+    short result_s16;
+    uint winLen = template_width * template_height;
+    float FLT_EPSILSON1 = 1.192092896e-07F;
+    float winCoeff = (float)1. / ((float)winLen + FLT_EPSILSON1);
+    vxc_uchar16 reg0, reg1, reg2;
+    int dp_value;
+
+    for(i = 0; i < template_height; i++)
+    {
+        for(j = 0; j < (int)(template_width - 16); j += 16)
+        {
+            coord_tp.x = j;
+            coord_tp.y = i;
+            coord_src.x = coord.x + j;
+            coord_src.y = coord.y + i;
+
+            VXC_ReadImage(reg0, input_img, coord_src, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+            VXC_ReadImage(reg1, template_img, coord_tp, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+            const uint16 config_dp1 = (uint16)(
+                                      0x55555555, // TCfg
+                                      0x00000000, // ASelt
+                                      0x76543210, 0xfedcba98, // ABin
+                                      0x55555555, // BSelt
+                                      0x76543210, 0xfedcba98, // BBin
+                                      0x00003300, // AccumType, ConstantType, and PostShift
+                                      0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 // Constant
+                                      );
+            VXC_DP16x1(dp_value, reg0, reg1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), config_dp1);
+            sum += dp_value;
+         }
+
+         for(; j < template_width; j++)
+         {
+             coord_tp.x = j;
+             coord_tp.y = i;
+             coord_src.x = coord.x + j;
+             coord_src.y = coord.y + i;
+
+             uchar input_value;
+             uchar tp_value;
+
+             VXC_ReadImage(input_value, input_img, coord_src, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+             VXC_ReadImage(tp_value, template_img, coord_tp, VXC_5BITOFFSET_XY(0, 0), VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+             int in_v = convert_int_sat(input_value);
+             int tp_v = convert_int_sat(tp_value);
+             sum += in_v * tp_v;
+          }
+      }
+
+      result = (float)(winCoeff*((float)sum));
+      result_s16 = (short)result;
+      VXC_WriteImage(out_img, coord, result_s16, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+}

@@ -1,0 +1,51 @@
+#pragma OPENCL EXTENSION cl_viv_bitfield_extension : enable
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+__kernel void remap_nearest_neighbor_U8toU8
+(
+    __read_only  image2d_t  input,
+                 vx_remap   map,
+                 int        type,
+    __write_only image2d_t output
+)
+{
+    int2   coord  = (int2)(get_global_id(0), get_global_id(1));
+    float  *base_ptr = (float*)map.ptr + coord.y * map.dst_width * 2 + coord.x * 2;
+    float2 data = vload2(0, base_ptr);
+    int2   coord_in = convert_int2(data);
+    uint4  dst = read_imageui(input, coord_in.xy);
+    write_imageui(output, coord, dst);
+
+}
+__kernel void remap_bilinear_U8toU8
+(
+    __read_only  image2d_t  input,
+                 vx_remap   map,
+                 int        type,
+    __write_only image2d_t output
+)
+{
+    int2   coord  = (int2)(get_global_id(0), get_global_id(1));
+    float  *base_ptr = (float*)map.ptr + coord.y * map.dst_width * 2 + coord.x * 2;
+    float2 data = vload2(0, base_ptr);
+
+    float xf = floor(data.x);
+    float yf = floor(data.y);
+    float dx = data.x - xf;
+    float dy = data.y - yf;
+    float4 a;
+    a.x = (1.0f - dx) * (1.0f - dy);
+    a.y = (1.0f - dx) * (dy);
+    a.z = (dx) * (1.0f - dy);
+    a.w = (dx) * (dy);
+    uint4 tl = read_imageui(input,(int2)(convert_int(xf), convert_int(yf)));
+    uint4 tr = read_imageui(input,(int2)(convert_int(xf + 1), convert_int(yf)));
+    uint4 bl = read_imageui(input,(int2)(convert_int(xf), convert_int(yf + 1)));
+    uint4 br = read_imageui(input,(int2)(convert_int(xf + 1), convert_int(yf + 1)));
+
+    uint dst = convert_uint(tl.x * a.x + tr.x * a.z + bl.x * a.y + br.x * a.w);
+    write_imageui(output, coord, (uint4)(dst,0,0,0));
+
+}

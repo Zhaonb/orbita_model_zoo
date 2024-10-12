@@ -1,0 +1,39 @@
+
+__constant int neighbor_offset[36] =
+{
+    -1,  0,  1,  0,
+    -1, -1,  1,  1,
+     0, -1,  0,  1,
+     1, -1, -1,  1,
+     1,  0, -1,  0,
+     1,  1, -1, -1,
+     0,  1,  0, -1,
+    -1,  1,  1, -1,
+    -1,  0,  1,  0
+};
+
+__kernel void nonmaximasuppressioncanny
+(
+    __read_only image2d_t  input_mag,
+    __read_only image2d_t  input_ang,
+    __write_only image2d_t output
+)
+{
+    int2  coord = (int2)(get_global_id(0), get_global_id(1));
+
+    uint4 src0 = read_imageui(input_mag, coord);
+    uint4 src1 = read_imageui(input_ang, coord);
+
+    uchar angle = (uchar)(127-src1.x);
+    uint idx = (angle + 16) >> 5;
+    int4 offset = vload4(idx, neighbor_offset);
+    int2 coord0 = coord + offset.xy;
+    int2 coord1 = coord + offset.zw;
+
+    uint4 data0 = read_imageui(input_mag, coord0);
+    uint4 data1 = read_imageui(input_mag, coord1);
+    uint4 dst;
+    dst.x = src0.x > data0.x && src0.x > data1.x ? src0.x : 0;
+
+    write_imageui(output, coord, dst);
+}

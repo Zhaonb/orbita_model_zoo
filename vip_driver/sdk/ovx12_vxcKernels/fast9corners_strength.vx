@@ -1,0 +1,329 @@
+#pragma OPENCL EXTENSION cl_viv_vx_extension : enable
+
+#include "cl_viv_vx_ext.h"
+
+_viv_uniform int height;
+_viv_uniform int4 tolerance;
+_viv_uniform int threshold;
+_viv_uniform VXC_512Bits uniPackU8to16Bits_16x1;
+_viv_uniform VXC_512Bits uniPlusBins_16x1;
+
+int _fast9corners_iscorner
+    (
+    vxc_uchar16 r8,
+    vxc_uchar16 r9,
+    vxc_uchar16 t
+    )
+{
+    int ret = 0;
+
+    vxc_uchar16 r10;
+    vxc_char16 r11;
+
+    r10 = sub_sat(r8, r9);
+
+    r11 = r10 > t;
+
+    uint4 _bits;
+    vxc_ushort8 bits, b0, b1;
+    vxc_short8 sb0, sb1;
+
+    r11 &= 1;
+    VXC_DP16x1(_bits, r11, r11, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniPackU8to16Bits_16x1);
+
+    _viv_asm(COPY, bits, _bits, 16);
+    bits = bits.s00000000;
+
+    vxc_uint4 cfg0 = {0x03020100, 0x07060504, 0x09090909, 0x09090909};
+    VXC_BitExtract(b0, bits, bits, cfg0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    vxc_uint4 cfg1 = {0x0b0a0908, 0x0f0e0d0c, 0x09090909, 0x09090909};
+    VXC_BitExtract(b1, bits, bits, cfg1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    sb0 = b0 == (vxc_ushort8)(0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff);
+    sb1 = b1 == (vxc_ushort8)(0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff);
+
+    uint r12;
+    VXC_DP16x1(r12, sb0, sb1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniPlusBins_16x1);
+
+    if (r12 != 0)
+    {
+        ret ++;
+    }
+
+    r10 = sub_sat(r9, r8);
+    r11 = r10 > t;
+    r11 &= 1;
+    VXC_DP16x1(_bits, r11, r11, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniPackU8to16Bits_16x1);
+
+    _viv_asm(COPY, bits, _bits, 16);
+    bits = bits.s00000000;
+
+    VXC_BitExtract(b0, bits, bits, cfg0, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+    VXC_BitExtract(b1, bits, bits, cfg1, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0));
+
+    sb0 = b0 == (vxc_ushort8)(0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff);
+    sb1 = b1 == (vxc_ushort8)(0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff, 0x1ff);
+
+    VXC_DP16x1(r12, sb0, sb1, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniPlusBins_16x1);
+
+    if (r12 != 0)
+    {
+        ret ++;
+    }
+
+    return ret;
+}
+
+__kernel void fast9corners_strength_U8toU8
+    (
+    __read_only    image2d_t     input,
+                   float         _threshold,
+                   int           do_nonmax,
+    __write_only   image2d_t     output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_uchar16 r1, r2, r3, r4, r5, r6, r7;
+
+    VXC_ReadImage(r1, input, coord, VXC_5BITOFFSET_XY(-3, -3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(r2, input, coord, VXC_5BITOFFSET_XY(-3, -2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(r3, input, coord, VXC_5BITOFFSET_XY(-3, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(r4, input, coord, VXC_5BITOFFSET_XY(-3,  0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(r5, input, coord, VXC_5BITOFFSET_XY(-3,  1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(r6, input, coord, VXC_5BITOFFSET_XY(-3,  2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    int ret;
+    do
+    {
+        vxc_uchar16 r8, r9, r15, t;
+        int r14;
+
+        VXC_ReadImage(r7, input, coord, VXC_5BITOFFSET_XY(-3,  3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+        _viv_asm(COPY, t, tolerance, 16);
+
+        //coord (0, 0)
+        _viv_asm(COPY, r14, threshold, 1);
+        vxc_uint4 config00 = {0x88201810, 0x000000a8, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r1, r2, config00, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+        vxc_uint4 config01 = {0xb0803000, 0x00000000, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r3, r4, config01, VXC_MODIFIER(5, 8, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r5, r5, config01, VXC_MODIFIER(9, 10, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r7, r6, config00, VXC_MODIFIER(11, 15, 0, VXC_RM_TowardZero, 0));
+
+        ret = _fast9corners_iscorner(r8, r4.s3333333333333333, t);
+
+        r14 = ret == 0 ? 0 : r14;
+
+        uchar strength;
+        _viv_asm(COPY, strength, r14, 1);
+        uchar one = 1;
+
+        VXC_MulShift(r15, strength, one, 0, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0));
+
+        //coord (1, 0)
+        _viv_asm(COPY, r14, threshold, 1);
+        vxc_uint4 config10 = {0x90282018, 0x000000b0, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r1, r2, config10, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+        vxc_uint4 config11 = {0xb8883808, 0x00000000, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r3, r4, config11, VXC_MODIFIER(5, 8, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r5, r5, config11, VXC_MODIFIER(9, 10, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r7, r6, config10, VXC_MODIFIER(11, 15, 0, VXC_RM_TowardZero, 0));
+
+        ret = _fast9corners_iscorner(r8, r4.s4444444444444444, t);
+
+        r14 = ret == 0 ? 0 : r14;
+
+        _viv_asm(COPY, strength, r14, 1);
+        VXC_MulShift(r15, strength, one, 0, VXC_MODIFIER(1, 1, 0, VXC_RM_TowardZero, 0));
+
+        //coord (2, 0)
+        _viv_asm(COPY, r14, threshold, 1);
+        vxc_uint4 config20 = {0x98302820, 0x000000b8, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r1, r2, config20, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+        vxc_uint4 config21 = {0xc0904010, 0x00000000, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r3, r4, config21, VXC_MODIFIER(5, 8, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r5, r5, config21, VXC_MODIFIER(9, 10, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r7, r6, config20, VXC_MODIFIER(11, 15, 0, VXC_RM_TowardZero, 0));
+
+        ret = _fast9corners_iscorner(r8, r4.s5555555555555555, t);
+        r14 = ret == 0 ? 0 : r14;
+        _viv_asm(COPY, strength, r14, 1);
+        VXC_MulShift(r15, strength, one, 0, VXC_MODIFIER(2, 2, 0, VXC_RM_TowardZero, 0));
+
+        //coord (3, 0)
+        _viv_asm(COPY, r14, threshold, 1);
+        vxc_uint4 config30 = {0xa0383028, 0x000000c0, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r1, r2, config30, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+        vxc_uint4 config31 = {0xc8984818, 0x00000000, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r3, r4, config31, VXC_MODIFIER(5, 8, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r5, r5, config31, VXC_MODIFIER(9, 10, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r7, r6, config30, VXC_MODIFIER(11, 15, 0, VXC_RM_TowardZero, 0));
+
+        ret = _fast9corners_iscorner(r8, r4.s6666666666666666, t);
+        r14 = ret == 0 ? 0 : r14;
+        _viv_asm(COPY, strength, r14, 1);
+        VXC_MulShift(r15, strength, one, 0, VXC_MODIFIER(3, 3, 0, VXC_RM_TowardZero, 0));
+
+
+        VXC_WriteImage(output, coord, r15, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+        r1 = r2;
+        r2 = r3;
+        r3 = r4;
+        r4 = r5;
+        r5 = r6;
+        r6 = r7;
+
+        coord.y ++;
+    } while (coord.y < height);
+}
+
+
+_viv_uniform VXC_512Bits uniAPlusB_postshift1_2x8;
+_viv_uniform VXC_512Bits uniBSubA_16x1;
+vxc_uchar16 _fast9corners_score
+    (
+    vxc_uchar16 r8,
+    vxc_uchar16 r9,
+    vxc_uchar16 t
+    )
+{
+    vxc_uchar16 a;
+    vxc_uchar16 b = (vxc_uchar16)(255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255);
+
+    _viv_asm(COPY, a, t, 16);
+    int diff;
+    do
+    {
+        VXC_DP2x8(t, a, b, VXC_MODIFIER(0, 7, 0, VXC_RM_TowardZero, 0), uniAPlusB_postshift1_2x8);
+        t.hi = t.lo;
+
+        int ret = _fast9corners_iscorner(r8, r9, t);
+        if (ret == 0)
+        {
+            b = t;
+        }
+        else
+        {
+            a = t;
+        }
+
+        VXC_DP16x1(diff, a, b, VXC_MODIFIER(0, 0, 0, VXC_RM_TowardZero, 0), uniBSubA_16x1);
+
+    } while (diff > 1);
+
+    return a;
+}
+
+__kernel void fast9corners_strength_U8toU8_nomax
+    (
+    __read_only    image2d_t     input,
+                   float         _threshold,
+                   int           do_nonmax,
+    __write_only   image2d_t     output
+    )
+{
+    int2 coord = (int2)(get_global_id(0), get_global_id(1));
+
+    vxc_uchar16 r1, r2, r3, r4, r5, r6, r7;
+
+    VXC_ReadImage(r1, input, coord, VXC_5BITOFFSET_XY(-3, -3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(r2, input, coord, VXC_5BITOFFSET_XY(-3, -2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(r3, input, coord, VXC_5BITOFFSET_XY(-3, -1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(r4, input, coord, VXC_5BITOFFSET_XY(-3,  0), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(r5, input, coord, VXC_5BITOFFSET_XY(-3,  1), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+    VXC_ReadImage(r6, input, coord, VXC_5BITOFFSET_XY(-3,  2), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+    int ret;
+    do
+    {
+        vxc_uchar16 r8, r9, t;
+        vxc_uchar16 r14;
+        vxc_uchar16 r15 = 0;
+
+        VXC_ReadImage(r7, input, coord, VXC_5BITOFFSET_XY(-3,  3), VXC_MODIFIER(0, 15, 0, VXC_RM_TowardZero, 0));
+
+        _viv_asm(COPY, t, tolerance, 16);
+
+        //coord (0, 0)
+        vxc_uint4 config00 = {0x88201810, 0x000000a8, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r1, r2, config00, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+        vxc_uint4 config01 = {0xb0803000, 0x00000000, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r3, r4, config01, VXC_MODIFIER(5, 8, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r5, r5, config01, VXC_MODIFIER(9, 10, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r7, r6, config00, VXC_MODIFIER(11, 15, 0, VXC_RM_TowardZero, 0));
+
+        vxc_uchar16 p;
+        p = r4.s3333333333333333;
+        ret = _fast9corners_iscorner(r8, p, t);
+
+        if (ret)
+        {
+            r14 = _fast9corners_score(r8, p, t);
+            r15.s0 = r14.s0;
+        }
+
+        //coord (1, 0)
+        vxc_uint4 config10 = {0x90282018, 0x000000b0, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r1, r2, config10, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+        vxc_uint4 config11 = {0xb8883808, 0x00000000, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r3, r4, config11, VXC_MODIFIER(5, 8, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r5, r5, config11, VXC_MODIFIER(9, 10, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r7, r6, config10, VXC_MODIFIER(11, 15, 0, VXC_RM_TowardZero, 0));
+
+        p = r4.s4444444444444444;
+        ret = _fast9corners_iscorner(r8, p, t);
+
+        if (ret)
+        {
+            r14 = _fast9corners_score(r8, p, t);
+            r15.s1 = r14.s1;
+        }
+
+        //coord (2, 0)
+        vxc_uint4 config20 = {0x98302820, 0x000000b8, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r1, r2, config20, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+        vxc_uint4 config21 = {0xc0904010, 0x00000000, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r3, r4, config21, VXC_MODIFIER(5, 8, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r5, r5, config21, VXC_MODIFIER(9, 10, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r7, r6, config20, VXC_MODIFIER(11, 15, 0, VXC_RM_TowardZero, 0));
+
+        p = r4.s5555555555555555;
+        ret = _fast9corners_iscorner(r8, p, t);
+        if (ret)
+        {
+            r14 = _fast9corners_score(r8, p, t);
+            r15.s2 = r14.s2;
+        }
+
+        //coord (3, 0)
+        _viv_asm(COPY, r14, threshold, 1);
+        vxc_uint4 config30 = {0xa0383028, 0x000000c0, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r1, r2, config30, VXC_MODIFIER(0, 4, 0, VXC_RM_TowardZero, 0));
+        vxc_uint4 config31 = {0xc8984818, 0x00000000, 0x08080808, 0x08080808};
+        VXC_BitExtract(r8, r3, r4, config31, VXC_MODIFIER(5, 8, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r5, r5, config31, VXC_MODIFIER(9, 10, 0, VXC_RM_TowardZero, 0));
+        VXC_BitExtract(r8, r7, r6, config30, VXC_MODIFIER(11, 15, 0, VXC_RM_TowardZero, 0));
+
+        p = r4.s6666666666666666;
+        ret = _fast9corners_iscorner(r8, p, t);
+        if (ret)
+        {
+            r14 = _fast9corners_score(r8, p, t);
+            r15.s3 = r14.s3;
+        }
+
+        VXC_WriteImage(output, coord, r15, VXC_MODIFIER(0, 3, 0, VXC_RM_TowardZero, 0));
+
+        r1 = r2;
+        r2 = r3;
+        r3 = r4;
+        r4 = r5;
+        r5 = r6;
+        r6 = r7;
+
+        coord.y ++;
+    } while (coord.y < height);
+}

@@ -1,0 +1,41 @@
+typedef struct _vx_keypoint_t
+{
+    int     x;
+    int     y;
+    float   strength;
+    float   scale;
+    float   orientation;
+    int     tracking_status;
+    float   error;
+}
+vx_keypoint_t;
+
+__kernel void packarrays
+    (
+                   image2d_t      srcImage,
+                   image2d_t      countImage,
+         global    unsigned char* tempArray,
+                   int            width,
+                   int            height,
+         global    unsigned char* outArray,
+         global    int*           numArray
+    )
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int index = 0;
+    vx_keypoint_t* temp_array = (vx_keypoint_t*)tempArray;
+    vx_keypoint_t* out_array = (vx_keypoint_t*)outArray;
+    if (temp_array[x + y * width].strength > 0)
+    {
+        index = atomic_add(numArray, 1);
+        out_array[index].x = temp_array[x + y * width].x;
+        out_array[index].y = temp_array[x + y * width].y;
+        out_array[index].strength = temp_array[x + y * width].strength;
+        out_array[index].scale = temp_array[x + y * width].scale;
+        out_array[index].orientation = temp_array[x + y * width].orientation;
+        out_array[index].tracking_status = temp_array[x + y * width].tracking_status;
+        out_array[index].error = temp_array[x + y * width].error;
+    }
+}
+

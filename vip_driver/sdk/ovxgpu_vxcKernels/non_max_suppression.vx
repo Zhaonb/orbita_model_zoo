@@ -1,0 +1,400 @@
+
+__kernel void non_max_suppression_mask_U8(
+    __read_only  image2d_t input_img,
+    __read_only  image2d_t mask_img,
+    __read_only  int       wsize,
+    __write_only image2d_t out_img
+    )
+{
+    int2   coord  = (int2)(get_global_id(0), get_global_id(1));
+    int    border = wsize >> 1;
+    int    i,j;
+    uint4  out;
+    uchar  flag;
+    uchar4 nmask_data;
+    uchar4 neighbor;
+    uchar4 mask_data;
+    uchar4 source;
+
+    mask_data = convert_uchar4(read_imageui(mask_img, coord));
+    source    = convert_uchar4(read_imageui(input_img, coord));
+
+    if (mask_data.x != 0)
+    {
+        out = convert_uint4(source);
+        write_imageui(out_img, coord, out);
+    }
+    else
+    {
+        flag = 1;
+        for (i = -border; i <= border; i++)
+        {
+            for (j = -border; j <= border; j++)
+            {
+                neighbor   = convert_uchar4(read_imageui(input_img, (int2)(coord.x+i, coord.y+j)));
+                nmask_data = convert_uchar4(read_imageui(mask_img, (int2)(coord.x+i, coord.y+j)));
+                if ((nmask_data.x == 0) && ((((j < 0 || (j == 0 && i <= 0)) && (source.x < neighbor.x)))
+                                      || ((j > 0 || (j == 0 && i > 0)) && (source.x <= neighbor.x))))
+                {
+                    flag = 0;
+                    break;
+                }
+            }
+            if (flag == 0)
+            {
+                break;
+            }
+        }
+        if (flag == 0)
+        {
+            source.x = 0;
+        }
+        out = convert_uint4(source);
+        write_imageui(out_img, coord, out);
+    }
+}
+
+__kernel void non_max_suppression_mask_S16(
+    __read_only  image2d_t input_img,
+    __read_only  image2d_t mask_img,
+    __read_only  int       wsize,
+    __write_only image2d_t out_img
+    )
+{
+    int2   coord = (int2)(get_global_id(0), get_global_id(1));
+    int    border = wsize >> 1;
+    int    i,j;
+    int4   out;
+    uchar  flag;
+    uchar4 nmask_data;
+    short4 neighbor;
+    uchar4 mask_data;
+    short4 source;
+
+    mask_data = convert_uchar4(read_imageui(mask_img, coord));
+    source    = convert_short4(read_imagei(input_img, coord));
+
+    if (mask_data.x != 0)
+    {
+        out = convert_int4(source);
+        write_imagei(out_img, coord, out);
+    }
+    else
+    {
+        flag = 1;
+        for (i = -border; i <= border; i++)
+        {
+            for (j = -border; j <= border; j++)
+            {
+                neighbor   = convert_short4(read_imagei(input_img, (int2)(coord.x+i, coord.y+j)));
+                nmask_data = convert_uchar4(read_imageui(mask_img, (int2)(coord.x+i, coord.y+j)));
+                if ((nmask_data.x == 0) && ((((j < 0 || (j == 0 && i <= 0)) && (source.x < neighbor.x)))
+                                      || ((j > 0 || (j == 0 && i > 0)) && (source.x <= neighbor.x))))
+                {
+                    flag = 0;
+                    break;
+                }
+            }
+            if (flag == 0)
+            {
+                break;
+            }
+        }
+        if (flag == 0)
+        {
+            source.x = -32768;
+        }
+        out = convert_int4(source);
+        write_imagei(out_img, coord, out);
+    }
+}
+
+__kernel void non_max_suppression_nomask_U8(
+    __read_only  image2d_t input_img,
+    __read_only  image2d_t mask_img,
+    __read_only  int       wsize,
+    __write_only image2d_t out_img
+    )
+{
+    int2   coord = (int2)(get_global_id(0), get_global_id(1));
+    int    border = wsize >> 1;
+    int    x,y;
+    int2   coord_nb;
+    uchar4 neighbor;
+    uchar4 source;
+    uint4  out;
+
+    source = convert_uchar4(read_imageui(input_img, coord));
+
+    for (y = -border; y < 0; y++)
+    {
+        for (x = -border; x <= border; x++)
+        {
+            neighbor = convert_uchar4(read_imageui(input_img, (int2)(coord.x+x, coord.y+y)));
+            if (source.x < neighbor.x)
+            {
+                source.x = 0;
+                out = convert_uint4(source);
+                write_imageui(out_img, coord, out);
+                return;
+            }
+        }
+    }
+    for (x = -border; x <= border; x++)
+    {
+        neighbor = convert_uchar4(read_imageui(input_img, (int2)(coord.x+x, coord.y)));
+        if ((x <= 0 && source.x < neighbor.x)
+            || (x > 0 && source.x <= neighbor.x))
+        {
+            source.x = 0;
+            out = convert_uint4(source);
+            write_imageui(out_img, coord, out);
+            return;
+        }
+    }
+    for (y = 1; y <= border; y++)
+    {
+        for (x = -border; x <= border; x++)
+        {
+            neighbor = convert_uchar4(read_imageui(input_img, (int2)(coord.x+x, coord.y+y)));
+            if (source.x <= neighbor.x)
+            {
+                source.x = 0;
+                out = convert_uint4(source);
+                write_imageui(out_img, coord, out);
+                return;
+            }
+        }
+    }
+
+    for (x = -border; x <= border; x++)
+    {
+        coord_nb = (int2)(coord.x + x, coord.y);
+        neighbor = convert_uchar4(read_imageui(input_img, coord_nb));
+
+        if ((x <= 0 && source.x < neighbor.x)
+         || (x > 0 && source.x <= neighbor.x))
+        {
+            source.x = 0;
+            out = convert_uint4(source);
+            write_imageui(out_img, coord, out);
+            return;
+        }
+    }
+
+    for (y = 1; y <= border; y++)
+    {
+        for (x = -border; x <= border; x++)
+        {
+            coord_nb = (int2)(coord.x + x, coord.y + y);
+            neighbor = convert_uchar4(read_imageui(input_img, coord_nb));
+            if (source.x <= neighbor.x)
+            {
+                source.x = 0;
+                out = convert_uint4(source);
+                write_imageui(out_img, coord, out);
+                return;
+            }
+        }
+    }
+    out = convert_uint4(source);
+    write_imageui(out_img, coord, out);
+}
+
+__kernel void non_max_suppression_nomask_S16
+    (
+    __read_only    image2d_t     input_img,
+    __read_only    image2d_t     mask_img,
+    __read_only    int           wsize,
+    __write_only   image2d_t     out_img
+    )
+{
+    int2   coord = (int2)(get_global_id(0), get_global_id(1));
+    int    border = wsize >> 1;
+    int4   out;
+    int    x, y;
+    short4 neighbor;
+    short4 source;
+
+    source = convert_short4(read_imagei(input_img, coord));
+
+    for (y = -border; y < 0; y++)
+    {
+        for (x = -border; x <= border; x++)
+        {
+            neighbor = convert_short4(read_imagei(input_img, (int2)(coord.x + x, coord.y + y)));
+            if (source.x < neighbor.x)
+            {
+                source.x = -32768;
+                out = convert_int4(source);
+                write_imagei(out_img, coord, out);
+                return;
+            }
+        }
+    }
+
+    for (x = -border; x <= border; x++)
+    {
+        neighbor = convert_short4(read_imagei(input_img, (int2)(coord.x + x, coord.y)));
+        if ((x <= 0 && source.x < neighbor.x)
+         || (x > 0 && source.x <= neighbor.x))
+        {
+            source.x = -32768;
+            out = convert_int4(source);
+            write_imagei(out_img, coord, out);
+            return;
+        }
+    }
+
+    for (y = 1; y <= border; y++)
+    {
+        for (x = -border; x <= border; x++)
+        {
+            neighbor = convert_short4(read_imagei(input_img, (int2)(coord.x + x, coord.y + y)));
+            if (source.x <= neighbor.x)
+            {
+                source = -32768;
+                out = convert_int4(source);
+                write_imagei(out_img, coord, out);
+                return;
+            }
+        }
+    }
+    out = convert_int4(source);
+    write_imagei(out_img, coord, out);
+}
+
+__kernel void non_max_suppression_maskU1_U8
+    (
+    __read_only    image2d_t     input_img,
+    __read_only    image2d_t     mask_img,
+    __read_only    int           wsize,
+    __write_only   image2d_t     out_img
+    )
+{
+    int    gidx   = get_global_id(0);
+    int2   coord  = (int2)(gidx, get_global_id(1));
+    int    border = wsize >> 1;
+    int    i, j;
+    uchar4 mask_data;
+    uchar4 nmask_data;
+    uchar4 neighbor;
+    uchar4 source;
+    uchar  flag;
+    int2   coord_nb;
+    uint4  out;
+    int2   coord_mask = (int2)(gidx >> 3, get_global_id(1));
+    int    resPos = gidx & 7;
+
+    mask_data   = convert_uchar4(read_imageui(mask_img, coord_mask));
+    mask_data.x = mask_data.x & (1 << resPos);
+    source      = convert_uchar4(read_imageui(input_img, coord));
+
+    if(mask_data.x != 0)
+    {
+        out = convert_uint4(source);
+        write_imageui(out_img, coord, out);
+    }
+    else
+    {
+        flag = 1;
+        for(i = -border; i <= border; i++)
+        {
+            for(j = -border; j <= border; j++)
+            {
+                coord_nb = (int2)(coord.x+i, coord.y+j);
+                neighbor   = convert_uchar4(read_imageui(input_img, coord_nb));
+                coord_mask = coord_nb;
+                coord_mask.x >>= 3;
+                resPos     = coord_nb.x & 7;
+                nmask_data = convert_uchar4(read_imageui(mask_img, coord_mask));
+                nmask_data.x = nmask_data.x & (1 << resPos);
+
+                if((nmask_data.x == 0)
+                    && ((((j < 0 || (j == 0 && i <= 0)) && (source.x < neighbor.x)))
+                    || ((j > 0 || (j == 0 && i > 0)) && (source.x <= neighbor.x))))
+                {
+                    flag = 0;
+                    break;
+                }
+            }
+
+            if(flag == 0)
+                break;
+        }
+
+        if(flag == 0)
+            source = 0;
+        out = convert_uint4(source);
+        write_imageui(out_img, coord, out);
+    }
+}
+
+__kernel void non_max_suppression_maskU1_S16
+    (
+    __read_only    image2d_t     input_img,
+    __read_only    image2d_t     mask_img,
+    __read_only    int           wsize,
+    __write_only   image2d_t     out_img
+    )
+{
+    int    gidx   = get_global_id(0);
+    int2   coord  = (int2)(gidx, get_global_id(1));
+    int    border = wsize >> 1;
+    int    i, j;
+    uchar4 mask_data;
+    uchar4 nmask_data;
+    short4 neighbor;
+    short4 source;
+    uchar  flag;
+    int2   coord_nb;
+    int2   coord_mask = (int2)(gidx >> 3, get_global_id(1));
+    int    resPos = gidx & 7;
+    int4   out;
+
+    mask_data = convert_uchar4(read_imageui(mask_img, coord_mask));
+    mask_data.x = mask_data.x & (1 << resPos);
+    source = convert_short4(read_imagei(input_img, coord));
+
+    if(mask_data.x != 0)
+    {
+        out = convert_int4(source);
+        write_imagei(out_img, coord, out);
+    }
+    else
+    {
+        flag = 1;
+        for(i = -border; i <= border; i++)
+        {
+            for(j = -border; j <= border; j++)
+            {
+                coord_nb = (int2)(coord.x+i, coord.y+j);
+                neighbor = convert_short4(read_imagei(input_img, coord_nb));
+
+                coord_mask = coord_nb;
+                coord_mask.x >>= 3;
+                resPos = coord_nb.x & 7;
+
+                nmask_data = convert_uchar4(read_imageui(mask_img, coord_mask));
+                nmask_data.x = nmask_data.x & (1 << resPos);
+
+                if ((nmask_data.x == 0)
+                    && (((j < 0 || (j == 0 && i <= 0)) && (source.x < neighbor.x))
+                    || ((j > 0 || (j == 0 && i > 0)) && (source.x <= neighbor.x))))
+                {
+                    flag = 0;
+                    break;
+                }
+            }
+
+            if(flag == 0)
+                break;
+        }
+
+        if(flag == 0)
+            source = -32768;
+        out = convert_int4(source);
+        write_imagei(out_img, coord, out);
+    }
+
+}

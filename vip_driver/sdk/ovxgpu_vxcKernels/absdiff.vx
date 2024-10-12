@@ -1,0 +1,97 @@
+
+__kernel void absdiff_U8_U8toU8
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+    )
+{
+    int offset = get_global_id(0);
+
+    Image in0 = create_image_from_image2d(input0, U8_ELEMENT_SIZE);
+    Image in1 = create_image_from_image2d(input1, U8_ELEMENT_SIZE);
+
+    uchar4 src0 = vload4(offset, in0.ptr);
+    uchar4 src1 = vload4(offset, in1.ptr);
+
+    uchar4 dst = abs_diff(src0, src1);
+
+    Image out = create_image_from_image2d(output, U8_ELEMENT_SIZE);
+
+    vstore4(dst, offset, out.ptr);
+}
+
+__kernel void absdiff_I16_I16toI16
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+    )
+{
+    int offset = get_global_id(0);
+
+    Image in0 = create_image_from_image2d(input0, I16_ELEMENT_SIZE);
+    Image in1 = create_image_from_image2d(input1, I16_ELEMENT_SIZE);
+
+    short4 src0 = vload4(offset, (short*)in0.ptr);
+    short4 src1 = vload4(offset, (short*)in1.ptr);
+    int4 val0, val1;
+
+    _viv_asm(COPY, val0, src0, 16);
+    _viv_asm(COPY, val1, src1, 16);
+
+    uint4 val = abs_diff(val0, val1);
+
+    val = (val > 32767) ? 32767 : val;
+
+    short4 dst;
+    _viv_asm(COPY, dst, val, 16);
+
+    Image out = create_image_from_image2d(output, I16_ELEMENT_SIZE);
+
+    vstore4(dst, offset, (short*)out.ptr);
+}
+
+__kernel void absdiff_I16_I16toU16
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+    )
+{
+    int offset = get_global_id(0);
+
+    Image in0 = create_image_from_image2d(input0, I16_ELEMENT_SIZE);
+    Image in1 = create_image_from_image2d(input1, I16_ELEMENT_SIZE);
+
+    short4 src0 = vload4(offset, (short*)in0.ptr);
+    short4 src1 = vload4(offset, (short*)in1.ptr);
+
+    ushort4 dst = abs_diff(src0, src1);
+
+    Image out = create_image_from_image2d(output, I16_ELEMENT_SIZE);
+
+    vstore4(dst, offset, (ushort*)out.ptr);
+}
+
+__kernel void absdiff_U16_U16toU16
+    (
+    __read_only  image2d_t input0,
+    __read_only  image2d_t input1,
+    __write_only image2d_t output
+    )
+{
+    int offset = get_global_id(0);
+
+    Image in0 = create_image_from_image2d(input0, I16_ELEMENT_SIZE);
+    Image in1 = create_image_from_image2d(input1, I16_ELEMENT_SIZE);
+
+    ushort4 src0 = vload4(offset, (ushort*)in0.ptr);
+    ushort4 src1 = vload4(offset, (ushort*)in1.ptr);
+
+    ushort4 dst = abs_diff(src0, src1);
+
+    Image out = create_image_from_image2d(output, I16_ELEMENT_SIZE);
+
+    vstore4(dst, offset, (ushort*)out.ptr);
+}

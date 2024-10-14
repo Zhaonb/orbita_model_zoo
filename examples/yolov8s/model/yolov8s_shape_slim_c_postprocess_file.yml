@@ -1,0 +1,68 @@
+# "acuity_postprocs" allowed types: "classification_validate, detection_validate, dump_results, print_topn, classification_classic, mute_built_in_actions"
+postprocess:
+  acuity_postprocs:
+    print_topn:
+      topn: 5
+    dump_results:
+      file_type: TENSOR
+    # mute_built_in_actions: true
+    # python:
+    #   file_path: postprocess.py
+    #   parameters:
+    #     output_tensors:
+    #     - '@xxxx:out0'
+  app_postprocs:
+  - lid: attach_Reshape_/model.22/Reshape_1/out0_0
+    postproc_params:
+      add_postproc_node: false
+      perm:
+      - 0
+      - 1
+      - 2
+      - 3
+      force_float32: true
+  - lid: attach_Conv_/model.22/cv3.0/cv3.0.2/Conv/out0_1
+    postproc_params:
+      add_postproc_node: false
+      perm:
+      - 0
+      - 1
+      - 2
+      - 3
+      force_float32: true
+  - lid: attach_Reshape_/model.22/Reshape_3/out0_2
+    postproc_params:
+      add_postproc_node: false
+      perm:
+      - 0
+      - 1
+      - 2
+      - 3
+      force_float32: true
+  - lid: attach_Conv_/model.22/cv3.1/cv3.1.2/Conv/out0_3
+    postproc_params:
+      add_postproc_node: false
+      perm:
+      - 0
+      - 1
+      - 2
+      - 3
+      force_float32: true
+  - lid: attach_Reshape_/model.22/Reshape_5/out0_4
+    postproc_params:
+      add_postproc_node: false
+      perm:
+      - 0
+      - 1
+      - 2
+      - 3
+      force_float32: true
+  - lid: attach_Conv_/model.22/cv3.2/cv3.2.2/Conv/out0_5
+    postproc_params:
+      add_postproc_node: false
+      perm:
+      - 0
+      - 1
+      - 2
+      - 3
+      force_float32: true

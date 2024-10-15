@@ -10,7 +10,7 @@ It`s needed to set up a cross-compilation environment before compiling the C/C++
 ### Compile C/C++ Demo
 The command reference for compiling C/C++ Demo is as follows：
 ```shell
-# go to the rknn_model_zoo root directory
+# go to the orbita_model_zoo root directory
 cd <orbita_model_zoo_root_path>
 
 # if GCC_COMPILER not found while building, please set GCC_COMPILER path

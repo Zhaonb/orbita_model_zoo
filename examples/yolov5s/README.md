@@ -27,3 +27,22 @@ Download link:
 <div align=center>
   <img src="./model_comparison/yolov5_graph_comparison.jpg" alt="Image">
 </div>
+
+
+## 4. Convert to YLANN
+
+*Usage:*
+
+```shell
+cd acuity_toolkits_shell_script
+sh go.sh <onnx_model>
+
+# such as: 
+sh go.sh yolov5s
+# output model will be saved as ./yolov5s/wksp
+```
+
+*Description:*
+
+- `<onnx_model>`: Specify ONNX model name.
+

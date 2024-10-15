@@ -24,6 +24,9 @@ The ACUITY Toolkit provides both binary and Python versions. Use the binary vers
 
 
 ### What to Do Next
-1. Switch to the ./acuity-toolkit-binary-`<version>`/bin directory.
-2. Set the environment variable ACUITY_PATH as follows: export ACUITY_PATH=<directory of acuity-toolkit-binary-version>/bin
-3. Execute the ACUITY binary tools to perform model translations, optimizations, and deployments.
+1. Switch to the acuity_toolkits_shell_script directory.
+2. Execute the ACUITY binary tools to perform model translations, optimizations, and deployments
+
+```bash
+$ sh go.sh yolov5s
+```

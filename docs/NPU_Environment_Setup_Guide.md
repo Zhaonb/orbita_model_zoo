@@ -14,8 +14,14 @@ The ACUITY Toolkit provides both binary and Python versions. Use the binary vers
   - For details about YLANNIDE, see YLANNIDE User Guide, provided in the release package.
 
 ### Procedure
-1. Extract the ACUITY package, Verisilicon_Tool_Acuity_Toolkit_<version>.tgz, to a destination directory.
+1. Extract the ACUITY package, Verisilicon_Tool_Acuity_Toolkit_`<version>`.tgz, to a destination directory.
 2. From this directory, locate and unpack the binary package acuity-toolkit-binary-`<version>`. When the unpacking completes, the installation finishes.
+3. Extract the shell package, acuity_toolkits_shell_script.tar.gz, to the same destination directory
+
+<div align=center>
+  <img src="../assets/img/install_acuity-toolkits.jpg" alt="Image">
+</div>
+
 
 ### What to Do Next
 1. Switch to the ./acuity-toolkit-binary-`<version>`/bin directory.

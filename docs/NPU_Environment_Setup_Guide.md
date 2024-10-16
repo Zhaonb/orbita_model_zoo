@@ -18,11 +18,6 @@ The ACUITY Toolkit provides both binary and Python versions. Use the binary vers
 2. From this directory, locate and unpack the binary package acuity-toolkit-binary-`<version>`. When the unpacking completes, the installation finishes.
 3. Extract the shell package, acuity_toolkits_shell_script.tar.gz, to the same destination directory
 
-<div align=center>
-  <img src="../assets/img/install_acuity-toolkits.jpg" alt="Image">
-</div>
-
-
 ### What to Do Next
 1. Switch to the acuity_toolkits_shell_script directory.
 2. Execute the ACUITY binary tools to perform model translations, optimizations, and deployments

@@ -19,6 +19,7 @@ In addition to exporting the model from the corresponding respository.
 | Object Detection |   yolov5s    | FP16/INT8 |      [yolov5s](https://github.com/Zhaonb/orbita_model_zoo/tree/main/examples/yolov5s/model)      |    Yulong810A    |
 | Object Detection |   yolov8s    | FP16/INT8 |               [yolov8s](https://pan.baidu.com/s/1ATmP4T9veiUCL_OG8nmnyA?pwd=r284)                |    Yulong810A    |
 | Object Detection |   yolov10s   | FP16/INT8 |               [yolov10s](https://pan.baidu.com/s/1ATmP4T9veiUCL_OG8nmnyA?pwd=r284)               |    Yulong810A    |
+| Object Detection |   yolov12n   | FP16/INT8 |               [yolov12n](https://pan.baidu.com/s/1ATmP4T9veiUCL_OG8nmnyA?pwd=r284)               |    Yulong810A    |
 
 ## Model performance benchmark(FPS)
 

@@ -37,6 +37,8 @@ In addition to exporting the model from the corresponding respository.
 | Object Detection |     yolov8s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |   20.83    |
 | Object Detection |    yolov10s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |   18.18    |
 | Object Detection |     yolo11s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |   18.18    |
+| Object Detection |     yolo12n     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |    8.69    |
+
 
 
 <ul>

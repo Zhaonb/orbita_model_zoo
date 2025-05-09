@@ -23,21 +23,21 @@ In addition to exporting the model from the corresponding respository.
 
 ## Model performance benchmark(FPS)
 
-|       demo       |   model_name    | inputs_shape     | inputs_shape | dtype | Yulong810A |
-|:----------------:|:---------------:|------------------|:------------:|:-----:|:----------:|
-|  Classification  |  resnet_v1_50   | [1, 3, 224, 224] |  FP16/INT8   | INT8  |   111.11   |
-|  Classification  | bvlc_googlenet  | [1, 3, 224, 224] |  FP16/INT8   | INT8  |    250     |
-| Object Detection | pva_faster_rcnn | [1, 3, 640, 640] |  FP16/INT8   | INT8  |   58.82    |
-| Object Detection |   faster_rcnn   | [1, 3, 640, 640] |  FP16/INT8   | INT8  |   10.98    |
-| Object Detection |   yolov3_relu   | [1, 3, 640, 640] |  FP16/INT8   | INT8  |   52.63    |
-| Object Detection |     yolov5s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |   35.71    |
-| Object Detection |     yolov6      | [1, 3, 640, 640] |  FP16/INT8   | INT8  |   35.71    |
-| Object Detection |     yolov7      | [1, 3, 640, 640] |  FP16/INT8   | INT8  |    9.01    |
-| Object Detection |     yolov8n     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |   38.46    |
-| Object Detection |     yolov8s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |   20.83    |
-| Object Detection |    yolov10s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |   18.18    |
-| Object Detection |     yolo11s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |   18.18    |
-| Object Detection |     yolo12n     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |    8.69    |
+|       demo       |   model_name    | inputs_shape     | inputs_shape | dtype |  FPS   |
+|:----------------:|:---------------:|------------------|:------------:|:-----:|:------:|
+|  Classification  |  resnet_v1_50   | [1, 3, 224, 224] |  FP16/INT8   | INT8  | 111.11 |
+|  Classification  | bvlc_googlenet  | [1, 3, 224, 224] |  FP16/INT8   | INT8  |  250   |
+| Object Detection | pva_faster_rcnn | [1, 3, 640, 640] |  FP16/INT8   | INT8  | 58.82  |
+| Object Detection |   faster_rcnn   | [1, 3, 640, 640] |  FP16/INT8   | INT8  | 10.98  |
+| Object Detection |   yolov3_relu   | [1, 3, 640, 640] |  FP16/INT8   | INT8  | 52.63  |
+| Object Detection |     yolov5s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  | 35.71  |
+| Object Detection |     yolov6      | [1, 3, 640, 640] |  FP16/INT8   | INT8  | 35.71  |
+| Object Detection |     yolov7      | [1, 3, 640, 640] |  FP16/INT8   | INT8  |  9.01  |
+| Object Detection |     yolov8n     | [1, 3, 640, 640] |  FP16/INT8   | INT8  | 38.46  |
+| Object Detection |     yolov8s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  | 20.83  |
+| Object Detection |    yolov10s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  | 18.18  |
+| Object Detection |     yolo11s     | [1, 3, 640, 640] |  FP16/INT8   | INT8  | 18.18  |
+| Object Detection |     yolo12n     | [1, 3, 640, 640] |  FP16/INT8   | INT8  |  8.69  |
 
 
 
